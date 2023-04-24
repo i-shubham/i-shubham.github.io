@@ -216,6 +216,26 @@ h6 {
   left: 0;
 }
 
+.linkedin{
+  background-image: url(../img/navbar/linkedin.png);
+  background-size: cover;
+  display: inline-block;
+  height: 40px;
+  width: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.instagram{
+  background-image: url(../img/navbar/instagram.png);
+  background-size: cover;
+  display: inline-block;
+  height: 40px;
+  width: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
 /*--------------------------------------------------------------
 # Home Section
 --------------------------------------------------------------*/
