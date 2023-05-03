@@ -55,24 +55,16 @@
 
         <nav id="navbar" class="nav-menu navbar">
             <ul>
-                <li><a href="#home" class="nav-link scrollto active"><i class="bx bx-home"></i> <span>Home</span></a>
-                </li>
+                <li><a href="#home" class="nav-link scrollto active"><i class="bx bx-home"></i> <span>Home</span></a></li>
                 <li><a href="#about" class="nav-link scrollto"><i class="bx bx-user"></i> <span>About</span></a></li>
                 <li><a href="#facts" class="nav-link scrollto"><i class="bi bi-star"></i><span>Facts</span></a></li>
-                <li><a href="#achievements" class="nav-link scrollto"><i
-                        class="bx bx-award"></i><span>Achievements</span></a>
-                </li>
+                <li><a href="#achievements" class="nav-link scrollto"><i class="bx bx-award"></i><span>Achievements</span></a></li>
                 <li><a href="#skills" class="nav-link scrollto"><i class="bx bx-brain"></i> <span>Skills</span></a></li>
-                <li><a href="#resume" class="nav-link scrollto"><i class="bx bx-file-blank"></i> <span>Resume</span></a>
-                </li>
-                <li><a href="#portfolio" class="nav-link scrollto"><i class="bx bx-book-content"></i>
-                    <span>Portfolio</span></a></li>
-                <li><a href="#technology" class="nav-link scrollto"><i class="bx bx-server"></i> <span>Technology</span></a>
-                </li>
-                <li><a href="#testimonials" class="nav-link scrollto"><i
-                        class="bi bi-megaphone"></i></i><span>Testimonials</span></a></li>
-                <li><a href="#contact" class="nav-link scrollto"><i class="bx bx-envelope"></i> <span>Contact</span></a>
-                </li>
+                <li><a href="#resume" class="nav-link scrollto"><i class="bx bx-file-blank"></i> <span>Resume</span></a></li>
+                <li><a href="#portfolio" class="nav-link scrollto"><i class="bx bx-book-content"></i><span>Portfolio</span></a></li>
+                <li><a href="#technology" class="nav-link scrollto"><i class="bx bx-server"></i> <span>Technology</span></a></li>
+                <li><a href="#testimonials" class="nav-link scrollto"><i class="bi bi-megaphone"></i></i><span>Testimonials</span></a></li>
+                <li><a href="#contact" class="nav-link scrollto"><i class="bx bx-envelope"></i> <span>Contact</span></a></li>
             </ul>
         </nav><!-- .nav-menu -->
     </div>
@@ -466,14 +458,10 @@
 
                 <div class="col-lg-4 col-md-6 portfolio-item filter-salesforce">
                     <div class="portfolio-wrap">
-                        <img src="assets/img/portfolio/sfdc_cop_hackathon.png" class="img-fluid" alt=""
-                             style='height: 250px; width: 100%;'>
+                        <img src="assets/img/portfolio/sfdc_cop_hackathon.png" class="img-fluid" alt="" style='height: 250px; width: 100%;'>
                         <div class="portfolio-links">
-                            <a href="assets/img/portfolio/sfdc_cop_hackathon.png" data-gallery="portfolioGallery"
-                               class="portfolio-lightbox" title="Salesforce CoP Hackathon"><i class="bx bx-plus"></i>
-                            </a>
-                            <a href="https://www.linkedin.com/in/i-shubham/details/experience/" target="_blank"
-                               title="More Details"><i class="bx bx-link"></i></a>
+                            <a href="assets/img/portfolio/sfdc_cop_hackathon.png" data-gallery="portfolioGallery" class="portfolio-lightbox" title="Salesforce CoP Hackathon"><i class="bx bx-plus"></i></a>
+                            <a onclick="return showPortfolioDetails('sfdc_cop_hackathon');" title="More Details"><i class="bx bx-link"></i></a>
                         </div>
                         <div style="font-size: 12px;">
                             Salesforce CoP Hackathon
@@ -483,13 +471,10 @@
 
                 <div class="col-lg-4 col-md-6 portfolio-item filter-apple">
                     <div class="portfolio-wrap">
-                        <img src="assets/img/portfolio/apple_award.jpeg" class="img-fluid" alt=""
-                             style='height: 250px; width: 100%;'>
+                        <img src="assets/img/portfolio/apple_award.jpeg" class="img-fluid" alt="" style='height: 250px; width: 100%;'>
                         <div class="portfolio-links">
-                            <a href="assets/img/portfolio/apple_award.jpeg" data-gallery="portfolioGallery"
-                               class="portfolio-lightbox" title="Apple Recognition"><i class="bx bx-plus"></i></a>
-                            <a href="https://www.linkedin.com/in/i-shubham/details/experience/" target="_blank"
-                               title="More Details"><i class="bx bx-link"></i></a>
+                            <a href="assets/img/portfolio/apple_award.jpeg" data-gallery="portfolioGallery" class="portfolio-lightbox" title="Apple Recognition"><i class="bx bx-plus"></i></a>
+                            <a onclick="return showPortfolioDetails('apple_recognition');" title="More Details"><i class="bx bx-link"></i></a>
                         </div>
                         <div style="font-size: 12px;">
                             Apple Recognition
@@ -966,14 +951,10 @@
 <script src="assets/js/main.js"></script>
 <script type="text/javascript">
     document.getElementById("submit").addEventListener("click", function (e) {
-      document.getElementById('error_message').style.visibility = 'visible';
-      document.getElementById("error_message").innerHTML = "Not implemented yet, reach out to him at <a href='https://www.linkedin.com/in/i-shubham/' target='_blank'>Linkedin</a>.";
-      e.preventDefault();
+        document.getElementById('error_message').style.visibility = 'visible';
+        document.getElementById("error_message").innerHTML = "Not implemented yet, reach out to him at <a href='https://www.linkedin.com/in/i-shubham/' target='_blank'>Linkedin</a>.";
+        e.preventDefault();
     });
-
-
-
-
 </script>
 
 <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>

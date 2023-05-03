@@ -255,3 +255,25 @@
   new PureCounter();
 
 })()
+
+
+  function showPortfolioDetails(src){
+    $.ajax({
+    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
+    dataType: "json",
+    success:
+        function (response) {
+            var project_image = response[src]['project_image'];
+            var project_category = response[src]['project_category'];
+            var project_client = response[src]['project_client'];
+            var project_date = response[src]['project_date'];
+            var project_description = response[src]['project_description'];
+            localStorage["project_image"] = project_image;
+            localStorage["project_category"] = project_category;
+            localStorage["project_client"] = project_client;
+            localStorage["project_date"] = project_date;
+            localStorage["project_description"] = project_description;
+            window.open('portfolio_details.html', '_blank').focus();
+        }
+    });
+  };

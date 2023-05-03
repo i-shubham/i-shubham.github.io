@@ -1,0 +1,16 @@
+{
+  "sfdc_cop_hackathon": {
+    "project_image": "assets/img/portfolio/sfdc_cop_hackathon.png",
+    "project_category": "AI/ML",
+    "project_client": "Hackathon Competition",
+    "project_date": "Oct-2022",
+    "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category."
+  },
+  "apple_recognition": {
+    "project_image": "assets/img/portfolio/apple_award.jpeg",
+    "project_category": "Big-Data [Supply-Chain]",
+    "project_client": "Apple",
+    "project_date": "Sep-2021",
+    "project_description": "The project was on Apple's Supply Chain domain based on Big-Data ecosystems. The application was built from scratch and breaking couple of monolith applications into microservices based architecture. This was recognised for significant contribution to the success."
+  }
+}
