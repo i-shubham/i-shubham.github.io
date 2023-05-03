@@ -1,5 +1,5 @@
 
-(function() {
+(function () {
   "use strict";
 
   /**
@@ -85,7 +85,7 @@
   /**
    * Mobile nav toggle
    */
-  on('click', '.mobile-nav-toggle', function(e) {
+  on('click', '.mobile-nav-toggle', function (e) {
     select('body').classList.toggle('mobile-nav-active')
     this.classList.toggle('bi-list')
     this.classList.toggle('bi-x')
@@ -94,7 +94,7 @@
   /**
    * Scrool with ofset on links with a class name .scrollto
    */
-  on('click', '.scrollto', function(e) {
+  on('click', '.scrollto', function (e) {
     if (select(this.hash)) {
       e.preventDefault()
 
@@ -145,7 +145,7 @@
     new Waypoint({
       element: skilsContent,
       offset: '80%',
-      handler: function(direction) {
+      handler: function (direction) {
         let progress = select('.progress .progress-bar', true);
         progress.forEach((el) => {
           el.style.width = el.getAttribute('aria-valuenow') + '%'
@@ -166,9 +166,9 @@
 
       let portfolioFilters = select('#portfolio-flters li', true);
 
-      on('click', '#portfolio-flters li', function(e) {
+      on('click', '#portfolio-flters li', function (e) {
         e.preventDefault();
-        portfolioFilters.forEach(function(el) {
+        portfolioFilters.forEach(function (el) {
           el.classList.remove('filter-active');
         });
         this.classList.add('filter-active');
@@ -176,7 +176,7 @@
         portfolioIsotope.arrange({
           filter: this.getAttribute('data-filter')
         });
-        portfolioIsotope.on('arrangeComplete', function() {
+        portfolioIsotope.on('arrangeComplete', function () {
           AOS.refresh()
         });
       }, true);
@@ -257,23 +257,61 @@
 })()
 
 
-  function showPortfolioDetails(src){
-    $.ajax({
-    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
-    dataType: "json",
-    success:
-        function (response) {
-            var project_image = response[src]['project_image'];
-            var project_category = response[src]['project_category'];
-            var project_client = response[src]['project_client'];
-            var project_date = response[src]['project_date'];
-            var project_description = response[src]['project_description'];
-            localStorage["project_image"] = project_image;
-            localStorage["project_category"] = project_category;
-            localStorage["project_client"] = project_client;
-            localStorage["project_date"] = project_date;
-            localStorage["project_description"] = project_description;
-            window.open('portfolio_details.html', '_blank').focus();
-        }
-    });
-  };
+function showPortfolioDetails(src) {
+  portfolio_data = {
+    "sfdc_cop_hackathon": {
+      "project_image": "assets/img/portfolio/sfdc_cop_hackathon.png",
+      "project_category": "AI/ML",
+      "project_client": "Hackathon Competition",
+      "project_date": "Oct-2022",
+      "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category."
+    },
+    "apple_recognition": {
+      "project_image": "assets/img/portfolio/apple_award.jpeg",
+      "project_category": "Big-Data [Supply-Chain]",
+      "project_client": "Apple",
+      "project_date": "Sep-2021",
+      "project_description": "The project was on Apple's Supply Chain domain based on Big-Data ecosystems. The application was built from scratch and breaking couple of monolith applications into microservices based architecture. This was recognised for significant contribution to the success."
+    },
+    "qualcomm_innovation_maestro": {
+      "project_image": "assets/img/portfolio/qcom_innovation_maestro.jpeg",
+      "project_category": "Innovation Maestro",
+      "project_client": "Qualcomm",
+      "project_date": "Jan-2020",
+      "project_description": "This was based on Innovation Maestro."
+    }
+  }
+  var project_image = portfolio_data[src]['project_image'];
+  var project_category = portfolio_data[src]['project_category'];
+  var project_client = portfolio_data[src]['project_client'];
+  var project_date = portfolio_data[src]['project_date'];
+  var project_description = portfolio_data[src]['project_description'];
+  localStorage["project_image"] = project_image;
+  localStorage["project_category"] = project_category;
+  localStorage["project_client"] = project_client;
+  localStorage["project_date"] = project_date;
+  localStorage["project_description"] = project_description;
+  window.open('portfolio_details.html', '_blank').focus();
+
+  //    $.ajax({
+  //    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
+  //    dataType: "json",
+  //    crossOrigin: null,
+  //    success:
+  //        function (response) {
+  //            var project_image = response[src]['project_image'];
+  //            var project_category = response[src]['project_category'];
+  //            var project_client = response[src]['project_client'];
+  //            var project_date = response[src]['project_date'];
+  //            var project_description = response[src]['project_description'];
+  //            localStorage["project_image"] = project_image;
+  //            localStorage["project_category"] = project_category;
+  //            localStorage["project_client"] = project_client;
+  //            localStorage["project_date"] = project_date;
+  //            localStorage["project_description"] = project_description;
+  //            window.open('portfolio_details.html', '_blank').focus();
+  //        }
+  //    });
+
+
+};
