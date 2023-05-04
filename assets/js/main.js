@@ -277,9 +277,65 @@ function showPortfolioDetails(src) {
       "project_image": "assets/img/portfolio/qcom_innovation_maestro.jpeg",
       "project_category": "Innovation Maestro",
       "project_client": "Qualcomm",
-      "project_date": "Jan-2020",
-      "project_description": "This was based on Innovation Maestro."
-    }
+      "project_date": "Jan-2019",
+      "project_description": "This was awarded for couple of innovations ideas & prototyping. And, projects were based on Computer Vision / Image Processing."
+    },
+    "qualcomm_super_qualstar": {
+      "project_image": "assets/img/portfolio/qcom_super_qualstar.png",
+      "project_category": "Super Qualstar",
+      "project_client": "Qualcomm",
+      "project_date": "Feb-2019",
+      "project_description": "This was awarded for couple of innovations ideas & prototyping, and winning of Innovation Maestro. And, projects were based on Computer Vision / Image Processing."
+    },
+    "qualcomm_hackathon": {
+      "project_image": "assets/img/portfolio/qcom_hackathon.jpeg",
+      "project_category": "Qualcomm HaQkathon",
+      "project_client": "Qualcomm",
+      "project_date": "Nov-2018",
+      "project_description": "Qualcomm HaQkathon was an event of 48 hours coding challenges, where participants had to submit innovative ideas along with MVP on the idea. Here, I was declared as winner of the event where projects were based on computer-vision / image-processing."
+    },
+    "qualcomm_qbuzz": {
+      "project_image": "assets/img/portfolio/qcom_qbuzz.jpeg",
+      "project_category": "Qualcomm QBuzz",
+      "project_client": "Qualcomm",
+      "project_date": "2019",
+      "project_description": "Qualcomm QBuzz is a platform where all participants project their innovative ideas to the larger & bigger audiences. I was one of the finalists."
+    },
+    "qualcomm_innovation_maestro_certificate": {
+      "project_image": "assets/img/portfolio/qcom_innovation_maestro_certificate.jpeg",
+      "project_category": "Qualcomm Innovation Maestro Certificate",
+      "project_client": "Qualcomm",
+      "project_date": "Jan-2019",
+      "project_description": "Certificate for winning the title of Qualcomm Innovation Maestro."
+    },
+    "qualcomm_qualstar": {
+      "project_image": "assets/img/portfolio/qcom_qualstar.png",
+      "project_category": "Qualcomm Qualstar",
+      "project_client": "Qualcomm",
+      "project_date": "Nov-2018",
+      "project_description": "Qualstar Certificate for rapid prototyping & execution on AI/ML category."
+    },
+    "pwc_star_performer": {
+      "project_image": "assets/img/portfolio/pwc_star_performer.jpeg",
+      "project_category": "PwC Star Performer",
+      "project_client": "PwC",
+      "project_date": "2015",
+      "project_description": "I was awarded as Star performer in the year for successful deliverable of the project."
+    },
+    "pwc_kudos": {
+      "project_image": "assets/img/portfolio/pwc_kudos.jpeg",
+      "project_category": "PwC Kudos",
+      "project_client": "PwC",
+      "project_date": "2016",
+      "project_description": "Awarded Kudos for successful deliverables."
+    },
+    "pwc_appreciation": {
+      "project_image": "assets/img/portfolio/pwc_award.jpeg",
+      "project_category": "PwC Appreciation",
+      "project_client": "PwC",
+      "project_date": "Aug-2015",
+      "project_description": "Appreciated for successful deliverables."
+    },
   }
   var project_image = portfolio_data[src]['project_image'];
   var project_category = portfolio_data[src]['project_category'];
