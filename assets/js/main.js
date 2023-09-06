@@ -264,14 +264,14 @@ function showPortfolioDetails(src) {
       "project_category": "AI/ML",
       "project_client": "Hackathon Competition",
       "project_date": "Oct-2022",
-      "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category."
+      "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category. The project was based on Computer-Vision / Image-Processing in real-time to solve a real-life use-case/issue."
     },
     "apple_recognition": {
       "project_image": "assets/img/portfolio/apple_award.jpeg",
       "project_category": "Big-Data [Supply-Chain]",
       "project_client": "Apple",
       "project_date": "Sep-2021",
-      "project_description": "The project was on Apple's Supply Chain domain based on Big-Data ecosystems. The application was built from scratch and breaking couple of monolith applications into microservices based architecture. This was recognised for significant contribution to the success."
+      "project_description": "The project was on Apple's Supply Chain domain based on Cloud and Big-Data ecosystems. Took the ownership to lead 12+ tech people, to do PoC and then redesign existing applications by adding niche technologies to reduce latency, and bring all the existing application under single umbrella. The application was built from scratch and breaking couple of monolith applications into microservices based architecture. This was recognised for significant contribution to the success."
     },
     "qualcomm_innovation_maestro": {
       "project_image": "assets/img/portfolio/qcom_innovation_maestro.jpeg",
