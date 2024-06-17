@@ -350,7 +350,7 @@ function showPortfolioDetails(src) {
   var link = 'portfolio_details.html';
   var newLink = link.split('.html')[0];
   window.history.replaceState(null, null, newLink);
-  window.open(newLink, '_blank').focus();
+  window.open(newLink, '_blank').focus();       // Locally it might not work, but it'll work from Server (i.e., github). To run locally use "window.open(link, '_blank').focus();"
 
   //    $.ajax({
   //    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
