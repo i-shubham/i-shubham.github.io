@@ -347,7 +347,10 @@ function showPortfolioDetails(src) {
   localStorage["project_client"] = project_client;
   localStorage["project_date"] = project_date;
   localStorage["project_description"] = project_description;
-  window.open('portfolio_details.html', '_blank').focus();
+  var link = 'portfolio_details.html';
+  var newLink = link.split('.html')[0];
+  window.history.replaceState(null, null, newLink);
+  window.open(newLink, '_blank').focus();
 
   //    $.ajax({
   //    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
