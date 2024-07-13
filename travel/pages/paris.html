@@ -16,65 +16,63 @@
     <link rel="stylesheet" href="../plugins/slider/css/owl.theme.default.css">
     <link rel="stylesheet" type="text/css" href="../css/style.css" />
     <link href="../css/template.css" rel="stylesheet" type="text/css"/>
-
+    <link rel="stylesheet" href="../css/style_page_gallery.css">
   </head>
 
   <body>
 
     <!-- ######## Body Starts Here ####### -->
     <header class="container-fluid">
-      <div class="header-top">
-        <div class="container">
-          <div class="row">
-            <div class="col-sm-4 d-none d-sm-block contacthd">
+       <div class="header-top">
+            <div class="container">
+              <div class="row">
+                <div class="col-sm-4 d-none d-sm-block contacthd">
+                </div>
+                <div class="col-sm-8">
+                  <ul class="social-login">
+                    <li>
+                      <i class="fab fa-instagram"></i>
+                    </li>
+                    <li>
+                      <i class="fab fa-linkedin"></i>
+                    </li>
+                    <li>
+                      <i class="fab fa-facebook-square"></i>
+                    </li>
+                    <li>
+                      <i class="fab fa-twitter-square"></i>
+                    </li>
+                  </ul>
+                  <ul class="email">
+                    <li><i class="fa fa-envelope"></i>my-email@gamil.com</li>
+                  </ul>
+                </div>
+              </div>
             </div>
-            <div class="col-sm-8">
-              <ul class="social-login">
-                <li>
-                  <i class="fab fa-instagram"></i>
-                </li>
-                <li>
-                  <i class="fab fa-linkedin"></i>
-                </li>
-                <li>
-                  <i class="fab fa-facebook-square"></i>
-                </li>
-                <li>
-                  <i class="fab fa-twitter-square"></i>
-                </li>
-              </ul>
-              <ul class="email">
-                <li><i class="fa fa-envelope"></i>my-email@gamil.com</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div id="menu-jk" class="header-bottom">
-        <div class="container">
-          <div class="row">
-            <div class="logo col-md-3">
-              <img src="../images/logo.png"
-                style="height: 92px; width: 144px; padding-bottom: 8px;" alt>
-              <a data-toggle="collapse" data-target="#menu" href="#menu"><i
-                  class="fas d-block d-md-none small-menu fa-bars"></i></a>
+       </div>
+       <div id="menu-jk" class="header-bottom">
+            <div class="container">
+                <div class="row">
+                    <div class="logo col-md-3">
+                        <img src="../images/logo.png" style="height: 85px; padding-bottom: 2px;" alt="">
+                        <a data-toggle="collapse" data-target="#menu" href="#menu"><i class="fas d-block d-md-none small-menu fa-bars"></i></a>
+                    </div>
+                    <div id="menu" class="navs d-none d-md-block col-md-9">
+                        <ul>
+                            <li><a href="index.html">Home</a></li>
+                            <li><a href="about_us.html">About Us</a></li>
+                            <li><a href="gallery.html">Gallery</a></li>
+                            <li><a href="blog.html">Blog</a></li>
+                            <li><a href="contact_us.html">Contact Us</a></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
-            <div id="menu" class="navs d-none d-md-block col-md-9">
-              <ul>
-                <li><a href="../index.html">Home</a></li>
-                <li><a href="about_us.html">About Us</a></li>
-                <li><a href="gallery.html">Gallery</a></li>
-                <li><a href="blog.html">Blog</a></li>
-                <li><a href="contact_us.html">Contact Us</a></li>
-              </ul>
-            </div>
-          </div>
         </div>
-      </div>
-    </header>
+  </header>
 
-    <br><br><br><br><br><br><br><br>
+    <br><br><br><br><br><br>
     <div class="content-wrapper">
       <div class="w-container">
         <div class="w-row">
@@ -229,6 +227,27 @@
                     Longe and Parole and dragged her into their agency, where
                     they abused her for their projects again and again.</p>
                 </div>
+                <h2>Photo Gallery:</h2>
+                    <div class="container" id="mainContainer">
+
+        <div class="gallery">
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7855.jpg" alt="As the plane descends and the <b>Eiffel Tower</b> comes into view, a wave of emotion sweeps over. The city, with its timeless charm and romantic allure, feels like a long-lost lover finally within reach. Stepping onto the cobblestone streets, the heart beats faster, and every sight and sound feels like a whisper of affection." onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/GrandHotelLeveque.jpeg" alt="Grand Hotel Leveque" onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7872.jpg" alt="Paris Street View" onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7887.jpg" alt="Cafe in Paris" onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7898.jpg" alt="Louvre Museum" onclick="openPopup(this)"></div>
+          <div class="gallery-item"><img src="../images/pages/paris/IMG_7872.jpg" alt="Paris Street View" onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7887.jpg" alt="Cafe in Paris" onclick="openPopup(this)"></div>
+            <div class="gallery-item"><img src="../images/pages/paris/IMG_7898.jpg" alt="Louvre Museum" onclick="openPopup(this)"></div>
+        </div>
+    </div>
+    <div class="popup" id="popup">
+        <div class="popup-content">
+            <img src="" alt="Popup Image" id="popupImage">
+            <button class="close" onclick="closePopup()">X</button>
+            <div class="alt-text" id="popupAltText"></div>
+        </div>
+    </div>
               </div>
             </div>
             <div class="button-wrapper"><a href="../index.html"

@@ -12,6 +12,8 @@ $( document ).ready(function() {
 })
 
 
+
+
 $( document ).ready(function() {
 
     $('.owl-carousel').owlCarousel({
@@ -34,6 +36,21 @@ $( document ).ready(function() {
             }
         }
     })
-
-
 });
+
+function openPopup(imageElement) {
+        const imageSrc = imageElement.src;
+        const imageAlt = imageElement.alt;
+
+        document.getElementById('popup').style.display = 'flex';
+        document.getElementById('popupImage').src = imageSrc;
+        document.getElementById('popupAltText').innerText = imageAlt;
+        document.getElementById('mainContainer').classList.add('blurred');
+    }
+
+function closePopup() {
+    document.getElementById('popup').style.display = 'none';
+    document.getElementById('popupImage').src = '';
+    document.getElementById('popupAltText').innerText = '';
+    document.getElementById('mainContainer').classList.remove('blurred');
+}
