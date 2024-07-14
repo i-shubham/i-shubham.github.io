@@ -33,6 +33,16 @@ $(document).ready(function () {
       },
     },
   });
+
+  var urlPath = window.location.pathname;
+  var currentPage = urlPath.split("/").pop();
+  if (currentPage.includes("html")) {
+    console.log("Current Page:" + currentPage);
+    var newLink = currentPage.split('.html')[0];
+    window.history.replaceState(null, null, newLink);
+    window.location(newLink).focus();
+  }
+
 });
 
 function openPopup(imageElement) {
