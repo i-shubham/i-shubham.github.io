@@ -323,7 +323,7 @@ body {
 }
 
 .container {
-  max-width: 1170px;
+  max-width: 90%;
 }
 
 @media screen and (max-width: 575px) {
@@ -753,7 +753,7 @@ header .header-bottom .navs ul li a {
 
 .blog .blog-singe {
   box-shadow: 0 2px 6px 0 rgba(218, 218, 253, 0.65), 0 2px 6px 0 rgba(206, 206, 238, 0.54);
-  border-radius: 2px;
+  border-radius: 10px;
   background-color: #FFF;
   margin-bottom: 30px;
 }
@@ -809,12 +809,13 @@ header .header-bottom .navs ul li a {
 .footer-cont {
   background-color: #212121;
   color: #FFF;
-  padding: 50px;
+  padding: 5px;
+  padding-bottom: 10px;
 }
 
 @media screen and (max-width: 940px) {
   .footer-cont {
-    padding: 30px 10px;
+    padding: 15px 8px;
   }
 }
 
@@ -840,16 +841,16 @@ header .header-bottom .navs ul li a {
 .footer-cont .foot-botom .fotter-coo h5 {
   color: #f78d15;
   font-size: 1rem;
-  margin-bottom: 20px;
+  margin-bottom: 2px;
 }
 
 .footer-cont .foot-botom .fotter-coo ul li {
   font-size: .9rem;
-  padding: 10px 3px;
+  padding: 0px 0px;
 }
 
 .footer-cont .foot-botom .fotter-coo ul li i {
-  margin-right: 5px;
+  margin-right: 2px;
 }
 
 .footer-cont .foot-botom .fotter-coo .gallery-row {
@@ -874,7 +875,7 @@ header .header-bottom .navs ul li a {
 
 /* =================== Copyroght Starts Here =================== */
 .copy {
-  padding: 20px;
+  padding: 5px;
   background-color: #191616;
   color: #FFF;
 }

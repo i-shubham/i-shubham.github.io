@@ -2353,7 +2353,7 @@ a {
 
 ul {
   margin-top: 0px;
-  margin-bottom: 20px;
+  margin-bottom: 0px;
   padding-left: 40px;
 }
 
@@ -2552,7 +2552,7 @@ figcaption {
 }
 
 .site-description {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   line-height: 145%;
   text-align: left;
 }
@@ -2697,7 +2697,7 @@ figcaption {
 }
 
 .content-wrapper {
-  padding-top: 30px;
+  padding-top: 0px;
   padding-bottom: 50px;
 }
 
@@ -2709,10 +2709,17 @@ figcaption {
 }
 
 .white-wrapper {
-  padding: 20px;
-  border-radius: 5px;
+  padding: 10px;
+  border-radius: 10px;
   background-color: #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+#floating-white-wrapper {
+  position: fixed;
+  z-index: 1000;
+  width: 20%;
+  /* top: auto; */
 }
 
 .circle-profile {
@@ -2726,7 +2733,7 @@ figcaption {
 
 .small-heading {
   margin-top: 0px;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
   font-size: 14px;
   line-height: 135%;
   text-align: left;

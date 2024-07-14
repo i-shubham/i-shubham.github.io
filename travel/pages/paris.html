@@ -23,7 +23,7 @@
 
     <!-- ######## Body Starts Here ####### -->
     <header class="container-fluid">
-      <div class="header-top">
+      <div class="header-top" id="header-top">
         <div class="container">
           <div class="row">
             <div class="col-sm-4 d-none d-sm-block contacthd">
@@ -79,7 +79,7 @@
       <div class="w-container">
         <div class="w-row">
           <div class="w-hidden-small w-hidden-tiny w-col w-col-3">
-            <div class="white-wrapper">
+            <div class="white-wrapper" id="floating-white-wrapper">
               <img src="../images/admin/admin_2.jpg" alt
                 class="circle-profile" />
               <p class="site-description">Denali is a simple responsive blog
@@ -91,12 +91,10 @@
                 <div role="list" class="w-dyn-items">
                   <div role="listitem" class="w-dyn-item"><a
                       href="/posts/half-and-half-variety-milk-viennese-body-cappuccino"
-                      class="small-post-link">According a funnily until pre-set
-                      or arrogant well cheerful</a></div>
+                      class="small-post-link">According a funnily until pre-set</a></div>
                   <div role="listitem" class="w-dyn-item"><a
                       href="/posts/steamed-siphon-froth-mazagran-cafe-au-lait"
-                      class="small-post-link">Overlaid the jeepers uselessly
-                      much excluding</a></div>
+                      class="small-post-link">Overlaid the jeepers uselessly</a></div>
                 </div>
               </div>
               <div class="grey-rule"></div>
@@ -279,6 +277,11 @@
                         src="../images/pages/paris/IMG_7898.jpg"
                         alt="Louvre Museum" onclick="openPopup(this)"></div>
                   </div>
+                  <br>
+                  <br>
+                  <blockquote>
+                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen.</div>
+                    </blockquote>
                 </div>
                 <div class="popup" id="popup">
                   <div class="popup-content">
@@ -304,12 +307,10 @@
                   <div role="list" class="w-dyn-items">
                     <div role="listitem" class="w-dyn-item"><a
                         href="/posts/half-and-half-variety-milk-viennese-body-cappuccino"
-                        class="small-post-link">According a funnily until
-                        pre-set or arrogant well cheerful</a></div>
+                        class="small-post-link">According a funnily until</a></div>
                     <div role="listitem" class="w-dyn-item"><a
                         href="/posts/steamed-siphon-froth-mazagran-cafe-au-lait"
-                        class="small-post-link">Overlaid the jeepers uselessly
-                        much excluding</a></div>
+                        class="small-post-link">Overlaid the jeepers uselessly</a></div>
                   </div>
                 </div>
                 <div class="grey-rule"></div>
@@ -339,47 +340,51 @@
     <!-- ######## Footer Starts Here ####### -->
 
     <footer class="container-fluid footer-cont">
-      <div class="container">
-        <div class="foot-botom row">
-          <div class="col-md-3">
-            <div class="fotter-coo">
-              <h5>IMPORTANT LINKS</h5>
-              <ul>
-                <li><i class="fas fa-caret-right"></i> ABOUT US</li>
-                <li><i class="fas fa-caret-right"></i> COMPANY PROFILE</li>
-                <li><i class="fas fa-caret-right"></i> OUR SERVICES</li>
-                <li><i class="fas fa-caret-right"></i> CONTACT US</li>
-                <li><i class="fas fa-caret-right"></i> READ BLOG</li>
-              </ul>
-            </div>
+            <div class="container">
+                <div class="foot-botom row">
+                    <div class="col-md-3">
+                        <div class="fotter-coo">
+                            <h5>IMPORTANT LINKS</h5>
+                            <ul>
+                                <li><i class="fas fa-caret-right"></i> ABOUT
+                                    US</li>
+                                <li><i class="fas fa-caret-right"></i> COMPANY
+                                    PROFILE</li>
+                                <li><i class="fas fa-caret-right"></i> OUR
+                                    SERVICES</li>
+                                <li><i class="fas fa-caret-right"></i> CONTACT
+                                    US</li>
+                                <li><i class="fas fa-caret-right"></i> READ
+                                    BLOG</li>
+                            </ul>
+                        </div>
 
-          </div>
-          <div class="col-md-4">
-            <div class="fotter-coo">
-              <h5>GLOBAL UPDATE NEWS</h5>
-              <ul>
-                <li><i class="fas fa-caret-right"></i> 100 CHILDREN RESCUE FROM
-                  WAR ZONE</li>
-                <li><i class="fas fa-caret-right"></i> THR FRESH HOUSE
-                  CHILD</li>
-                <li><i class="fas fa-caret-right"></i> CREATE AWARENESS IN
-                  EDUCATON</li>
-                <li><i class="fas fa-caret-right"></i> WHAT HAPPEN WHEN WE
-                  LIVE!</li>
-                <li><i class="fas fa-caret-right"></i> READ BLOG</li>
-              </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="fotter-coo">
+                            <h5>GLOBAL UPDATE NEWS</h5>
+                            <ul>
+                                <li><i class="fas fa-caret-right"></i> 100
+                                    CHILDREN RESCUE FROM WAR ZONE</li>
+                                <li><i class="fas fa-caret-right"></i> THR FRESH
+                                    HOUSE CHILD</li>
+                                <li><i class="fas fa-caret-right"></i> CREATE
+                                    AWARENESS IN EDUCATON</li>
+                                <li><i class="fas fa-caret-right"></i> WHAT
+                                    HAPPEN WHEN WE LIVE!</li>
+                                <li><i class="fas fa-caret-right"></i> READ
+                                    BLOG</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </footer>
+        </footer>
 
     <div class="copy">
       <div class="container">
-        <a href="#">Developed and Maintained by Shubham</a>
+        Developed & Maintained by <a href="#">Shubham</a>
         <span>
-          <a><i class="fab fa-github"></i></a>
-          <a><i class="fab fa-google-plus-g"></i></a>
           <a><i class="fab fa-pinterest-p"></i></a>
           <a><i class="fab fa-twitter"></i></a>
           <a><i class="fab fa-facebook-f"></i></a>

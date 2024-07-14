@@ -3,6 +3,7 @@ $(document).ready(function () {
 
   if (w > 767) {
     $("#menu-jk").scrollToFixed();
+    $("#floating-white-wrapper").scrollToFixed();
   } else {
     // $('#menu-jk').scrollToFixed();
   }
