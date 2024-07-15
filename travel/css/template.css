@@ -2715,12 +2715,12 @@ figcaption {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
-#floating-white-wrapper {
-  position: fixed;
+/* #floating-white-wrapper {
+  position: relative;
   z-index: 1000;
   width: 20%;
-  /* top: auto; */
-}
+  top: auto;
+} */
 
 .circle-profile {
   display: block;
