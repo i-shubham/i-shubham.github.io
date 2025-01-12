@@ -343,6 +343,10 @@ header {
 header .header-top {
   padding-top: 1px;
   background-color: #343a40;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap; /* Prevent wrapping */
 }
 
 header .header-top .contacthd p {
@@ -363,9 +367,13 @@ header .header-top .contacthd p span {
   text-align: center;
 }
 
+/*
 header .header-top .email {
   float: right;
   border-right: 1px solid #CCC;
+  display: flex;
+  align-items: center;
+  border-right: none;
 }
 
 header .header-top .email li {
@@ -374,6 +382,7 @@ header .header-top .email li {
   padding: 0px 10px;
   font-size: .95rem;
 }
+*/
 
 header .header-top .email li i {
   margin-right: 10px;
@@ -387,12 +396,14 @@ header .header-top .email li i {
 
 header .header-top .social-login {
   float: right;
+  display: flex;
+  gap: 5px;
 }
 
 header .header-top .social-login li {
   color: #FFF;
   float: left;
-  padding: 0px 10px;
+  padding: 0px 5px;
 }
 
 header .header-bottom .logo {
