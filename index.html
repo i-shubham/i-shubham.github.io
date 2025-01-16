@@ -34,24 +34,84 @@
 
     <!-- Template Main CSS File -->
     <link href="assets/css/style.css" rel="stylesheet">
+
+
+      <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    /* Center navigation menu */
+    .navbar-nav {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
 </head>
 
 <body>
+<div>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid" id="mainDivNavBar">
+      <!-- Brand/Logo -->
+      <a class="navbar-brand" href="#"><h2 style="font-weight: bolder;">Shubham Mallick</h2></a>
+      
 
-<!-- ======= Mobile nav toggle button ======= -->
-<i class="bi bi-list mobile-nav-toggle d-xl-none"></i>
+      <!-- Toggle Button for Mobile -->
+      <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <!-- Navbar Content -->
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <!-- Centered Menu -->
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="#">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">YouTube</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Tech-Blog</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Travel-Blog</a>
+          </li>
+        </ul>
+        <!-- Social Media Icons -->
+        <div class="d-flex">
+          <a href="#" class="btn btn-outline-primary me-2" title="LinkedIn">
+            <i class="fab fa-linkedin"></i>
+          </a>
+          <a href="#" class="btn btn-outline-primary me-2" title="YouTube">
+            <i class="fab fa-youtube"></i>
+          </a>
+          <a href="#" class="btn btn-outline-primary me-2" title="Instagram">
+            <i class="fab fa-instagram"></i>
+          </a>
+          <a href="#" class="btn btn-outline-info" title="Twitter">
+            <i class="fab fa-twitter"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+    </div>
+
+<!-- ======= Mobile Side nav toggle button ======= -->
+<!--<i class="bi bi-list mobile-nav-toggle d-xl-none"></i>-->
 
 <!-- ======= Header ======= -->
 <header id="header">
     <div class="d-flex flex-column">
-
         <div class="profile">
             <img src="assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
-            <h1 class="text-light"><a href="index.html">Shubham Mallick</a></h1>
-            <div class="text-center">
+            <!-- <h1 class="text-light"><a href="index.html">Shubham Mallick</a></h1> -->
+            <!-- <div class="text-center">
                 <a href="https://www.linkedin.com/in/i-shubham/" target="_blank"><i class="linkedin"></i></a>
                 <a href="https://www.instagram.com/i.shubham.01/" target="_blank"><i class="instagram"></i></a>
-            </div>
+            </div> -->
         </div>
 
         <nav id="navbar" class="nav-menu navbar">
@@ -76,8 +136,7 @@
 <section id="home" class="d-flex flex-column justify-content-center align-items-center">
     <div class="home-container" data-aos="fade-in">
         <h1>Shubham Mallick</h1>
-        <p><span class="typed"
-                 data-typed-items="Software Engineering, Avid Reader, Passionate Technologist, Forever Learner"></span></p>
+        <p><span class="typed" data-typed-items="Software Engineering, Avid Reader, Passionate Technologist, Forever Learner"></span></p>
     </div>
 </section>
 <!-- End Home -->
