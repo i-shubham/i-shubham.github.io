@@ -508,7 +508,7 @@ header .header-bottom .navs ul li a {
 
 /* ===================================== Slider Style Starts Here ===================================== */
 .slider-detail {
-  padding-top: 88px;
+  padding-top: 55px;
   z-index: -9;
 }
 
@@ -520,7 +520,7 @@ header .header-bottom .navs ul li a {
 
 @media screen and (max-width: 767px) {
   .slider-detail {
-    padding-top: 100px;
+    padding-top: 40px;
   }
 }
 
