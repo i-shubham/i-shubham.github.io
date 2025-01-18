@@ -508,7 +508,7 @@ header .header-bottom .navs ul li a {
 
 /* ===================================== Slider Style Starts Here ===================================== */
 .slider-detail {
-  padding-top: 55px;
+  padding-top: 45px;
   z-index: -9;
 }
 
@@ -1131,7 +1131,7 @@ header .header-bottom .navs ul li a {
   font-family: 'Nunito', sans-serif;
   position: relative;
   margin-right: 25px;
-  padding: 35px 0;
+  /* padding: 35px 0; */
   color: #FFFFFF !important;
   font-size: 18px;
   font-weight: 600;

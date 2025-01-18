@@ -69,6 +69,12 @@ h6 {
   z-index: 1000;
   width: 100%;
   background: #d1d82f;
+  height: 55px;
+}
+@media screen and (max-width: 767px) {
+  #mainDivNavBar {
+    height: auto;
+  }
 }
 #navbarNav {
   padding-bottom: 2px;
