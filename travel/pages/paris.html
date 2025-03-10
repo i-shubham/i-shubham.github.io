@@ -22,64 +22,108 @@
         margin-top: -20px;
       }
     </style>
+
+    <link href="../../assets/img/profile-img.jpg" rel="icon">
+
+    <!-- Template Main CSS File -->
+    <link href="../css/style_travel.css" rel="stylesheet">
+
+    <link rel="shortcut icon" href="../images/logo.ico">
+        <link rel="stylesheet" href="../css/bootstrap.min.css">
+        <link rel="stylesheet" href="../css/all.min.css">
+        <link rel="stylesheet" href="../css/fontawsom-all.min.css">
+        <link rel="stylesheet" href="../css/animate.css">
+        <link rel="stylesheet" href="../plugins/slider/css/owl.carousel.min.css">
+        <link rel="stylesheet" href="../plugins/slider/css/owl.theme.default.css">
+<!--        <link rel="stylesheet" type="text/css" href="css/style.css" />-->
+        <link href="../css/template.css" rel="stylesheet" type="text/css" />
+
+    <!--            <link rel="shortcut icon" href="images/logo.ico">-->
+<!--        <link rel="stylesheet" href="css/all.min.css">-->
+<!--        <link rel="stylesheet" href="css/fontawsom-all.min.css">-->
+        <link rel="stylesheet" href="../css/animate.css">
+<!--        <link rel="stylesheet" href="plugins/slider/css/owl.carousel.min.css">-->
+<!--        <link rel="stylesheet" href="plugins/slider/css/owl.theme.default.css">-->
+        <link rel="stylesheet" type="text/css" href="../css/style.css" />
+        <link href="../css/template.css" rel="stylesheet" type="text/css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+      <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* Center navigation menu */
+    .navbar-nav {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #navbarImg {
+      height: 50px;
+<!--      padding-left: 10px;-->
+    }
+    #navbarNav {
+      padding-left: 10px;
+    }
+
+  </style>
+
   </head>
 
   <body>
 
-    <!-- ######## Body Starts Here ####### -->
-    <header class="container-fluid">
-      <div class="header-top" id="header-top">
-        <div class="container">
-          <div class="row">
-            <div class="col-sm-4 d-none d-sm-block contacthd">
-            </div>
-            <div class="col-sm-8">
-              <ul class="social-login">
-                <li>
-                  <i class="fab fa-instagram"></i>
-                </li>
-                <li>
-                  <i class="fab fa-linkedin"></i>
-                </li>
-                <li>
-                  <i class="fab fa-facebook-square"></i>
-                </li>
-                <li>
-                  <i class="fab fa-twitter-square"></i>
-                </li>
-              </ul>
-              <ul class="email">
-                <li><i class="fa fa-envelope"></i>my-email@gamil.com</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid" id="mainDivNavBar">
+        <img id="navbarImg" src="../../assets/img/profile-img.jpg" style="width: 50px;" alt="" class="img-fluid rounded-circle">
+      <!-- Brand/Logo -->
+      <a class="navbar-brand" href="#">
+        &nbsp;&nbsp;Shubham Mallick
+      </a>
 
-      </div>
-      <div id="menu-jk" class="header-bottom">
-        <div class="container">
-          <div class="row">
-            <div class="logo col-md-3">
-              <img src="../images/logo.png"
-                style="height: 85px; padding-bottom: 2px;" alt>
-              <a data-toggle="collapse" data-target="#menu" href="#menu"><i
-                  class="fas d-block d-md-none small-menu fa-bars"></i></a>
-            </div>
-            <div id="menu" class="navs d-none d-md-block col-md-9">
-              <ul>
-                <li><a href="../">Home</a></li>
-                <li><a href="about_us.html">About Us</a></li>
-                <li><a href="gallery.html">Gallery</a></li>
-                <li><a href="blog.html">Blog</a></li>
-                <li><a href="contact_us.html">Contact Us</a></li>
-              </ul>
-            </div>
-          </div>
+      <!-- Toggle Button for Mobile -->
+      <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <!-- Navbar Content -->
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <!-- Centered Menu -->
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="#">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">YouTube</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Tech-Blog</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Travel-Blog</a>
+          </li>
+        </ul>
+        <!-- Social Media Icons -->
+        <div class="d-flex">
+          <a href="https://www.linkedin.com/in/i-shubham/" class="btn btn-outline-primary me-2" title="LinkedIn">
+            <i class="fab fa-linkedin"></i>
+          </a>
+          <a href="#" class="btn btn-outline-primary me-2" title="YouTube">
+            <i class="fab fa-youtube"></i>
+          </a>
+          <a href="https://www.instagram.com/i.shubham.01/" class="btn btn-outline-primary me-2" title="Instagram">
+            <i class="fab fa-instagram"></i>
+          </a>
+          <a href="#" class="btn btn-outline-info" title="Twitter">
+            <i class="fab fa-twitter"></i>
+          </a>
         </div>
       </div>
-    </header>
+    </div>
+  </nav>
 
-    <br><br><br><br><br><br>
+    <br><br>
     <div class="content-wrapper">
       <div class="w-container">
         <div class="w-row">
@@ -216,7 +260,6 @@
                     <div class="gallery-item"><img src="../images/pages/paris/GrandHotelLeveque.jpeg" alt="Grand Hotel Leveque" onclick="openPopup(this)"></div>
                     <div class="gallery-item"><img src="../images/pages/paris/IMG_7872.jpg" alt="Paris Street View" onclick="openPopup(this)"></div>
                     <div class="gallery-item"><img src="../images/pages/paris/IMG_7898.jpg" alt="Louvre Museum" onclick="openPopup(this)"></div>
-                    <div class="gallery-item"><img src="../images/pages/paris/IMG_7872.jpg" alt="Paris Street View" onclick="openPopup(this)"></div>
                   </div>
                   <br>
                   <br>
@@ -352,5 +395,20 @@
   <script src="../plugins/scroll-fixed/jquery-scrolltofixed-min.js"></script>
   <script src="../plugins/slider/js/owl.carousel.min.js"></script>
   <script src="../js/script.js"></script>
+
+<!-- Vendor JS Files  -->
+<script src="../assets/vendor/purecounter/purecounter_vanilla.js"></script>
+<script src="../assets/vendor/aos/aos.js"></script>
+<script src="../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/vendor/glightbox/js/glightbox.min.js"></script>
+<script src="../assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
+<script src="../assets/vendor/swiper/swiper-bundle.min.js"></script>
+<script src="../assets/vendor/typed.js/typed.min.js"></script>
+<script src="../assets/vendor/waypoints/noframework.waypoints.js"></script>
+
+<!-- Template Main JS File -->
+<script src="../assets/js/main.js"></script>
+
+<script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
 
 </html>
