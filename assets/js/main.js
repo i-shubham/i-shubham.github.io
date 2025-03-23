@@ -264,7 +264,7 @@ function showPortfolioDetails(src) {
       "project_category": "AI/ML",
       "project_client": "Hackathon Competition",
       "project_date": "Oct-2022",
-      "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category. The project was based on Computer-Vision / Image-Processing in real-time to solve a real-life use-case/issue."
+      "project_description": "This is a 96 hours coding challenge based on different categories like: AI/ML, Front-End, Back-End, Data Engineering etc. We're the winner in AI/ML category. The project was based on Computer-Vision / Image-Processing in real-time to solve a real-life use-case/issue. Algorithms used LSTM [Long Short Term Memory], LBPH [Large Binary Pattern Histogram], RNN [Recurrent Neural Network]."
     },
     "apple_recognition": {
       "project_image": "assets/img/portfolio/apple_award.jpeg",
