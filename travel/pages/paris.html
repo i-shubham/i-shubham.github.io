@@ -69,6 +69,20 @@
     }
 
   </style>
+  <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+  <script>
+    $(document).ready(function () {
+      var urlPath = window.location.pathname;
+      var currentPage = urlPath.split("/").pop();
+      if (currentPage.includes(".html")) {
+        console.log("Current Page:" + currentPage);
+        var newLink = currentPage.split('.html')[0];
+        var newPath = urlPath.replace(currentPage, newLink);
+        window.history.replaceState(null, null, newPath);
+      }
+    });
+  </script>
+
 
   </head>
 
@@ -399,5 +413,6 @@
 <script src="../assets/js/main.js"></script>
 
 <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+
 
 </html>
