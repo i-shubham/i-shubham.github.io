@@ -49,6 +49,43 @@
     #navbarImg {
       height: 50px;
     }
+    /* Match travel blog navbar look */
+    .navbar-light .navbar-nav .nav-link {
+      font-family: 'Nunito', sans-serif;
+      position: relative;
+      margin-right: 25px;
+      color: #FFFFFF !important;
+      font-size: 18px;
+      font-weight: 600;
+      outline: none;
+      transition: .5s;
+    }
+    .navbar-light .navbar-nav .nav-link:hover,
+    .navbar-light .navbar-nav .nav-link.active {
+      color: #86B817 !important; /* var(--primary) from travel site */
+    }
+    #mainDivNavBar {
+      background: #d1d82f;
+    }
+    /* Underline effect for active and hovered nav links */
+    .navbar-light .navbar-nav .nav-link {
+      position: relative;
+    }
+    .navbar-light .navbar-nav .nav-link::before {
+      position: absolute;
+      content: "";
+      width: 0;
+      height: 2px;
+      bottom: -2px;
+      left: 50%;
+      background: #86B817;
+      transition: .5s;
+    }
+    .navbar-light .navbar-nav .nav-link:hover::before,
+    .navbar-light .navbar-nav .nav-link.active::before {
+      width: calc(100% - 2px);
+      left: 1px;
+    }
   </style>
 </head>
 
