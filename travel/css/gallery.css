@@ -16,9 +16,8 @@
     background: #fff;
   }
   .beautiful-gallery .gallery-item img {
-    width: 100%;
-    height: 180px;
-    object-fit: cover;
+    width: auto;
+    height: 100%;
     transition: transform 0.2s;
   }
   .beautiful-gallery .gallery-item:hover {
