@@ -17,6 +17,9 @@
     <link rel="stylesheet" type="text/css" href="../css/style.css" />
     <link href="../css/template.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="../css/style_page_gallery.css">
+
+    <link rel="stylesheet" href="../css/gallery.css">
+    
     <style>
       p + ul {
         margin-top: -20px;
@@ -230,55 +233,49 @@
                   <br>
                   <b>Conclusion:</b>
                   <br>
-                  <p>A trip to the Palace of Versailles is a journey through time. It’s not just about the grand halls or the breathtaking gardens—it’s about stepping into a world where history, art, and beauty intertwine. Whether you're an art enthusiast, a history lover, or simply someone captivated by architectural splendor, Versailles offers an unforgettable experience. As you leave its golden gates, the echoes of the past will stay with you, a reminder of a time when royalty reigned supreme.</p>
+                  <p>A trip to the Palace of Versailles is a journey through time. It's not just about the grand halls or the breathtaking gardens—it’s about stepping into a world where history, art, and beauty intertwine. Whether you're an art enthusiast, a history lover, or simply someone captivated by architectural splendor, Versailles offers an unforgettable experience. As you leave its golden gates, the echoes of the past will stay with you, a reminder of a time when royalty reigned supreme.</p>
                   <br><br>
 
                 </div>
                 <h2>Photo Gallery:</h2>
                 <div class="container" id="mainContainer">
-                  <div class="gallery">
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8037.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8043.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8042.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8081.jpg' alt='' onclick='openPopup(this)'></div>
-
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8070.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8039.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8085.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8083.jpg' alt='' onclick='openPopup(this)'></div>
-
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8048.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8040.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8064.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8061.jpg' alt='' onclick='openPopup(this)'></div>
-
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8047.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8065.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8058.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8057.jpg' alt='' onclick='openPopup(this)'></div>
-
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8076.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8052.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8045.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8080.jpg' alt='' onclick='openPopup(this)'></div>
-
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8069.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8059.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8067.JPG' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8042.jpg' alt='' onclick='openPopup(this)'></div>
+                  <div class="gallery beautiful-gallery" id="photoGallery">
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8037.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8043.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8042.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8081.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8070.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8039.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8085.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8083.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8048.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8040.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8064.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8061.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8047.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8065.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8058.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8057.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8076.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8052.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8045.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8080.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8069.jpg' alt='' /></div>
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8059.jpg' alt='' /></div>
+                    <!-- <div class='gallery-item'><img src='../images/pages/versailles/IMG_8067.JPG' alt='' /></div> -->
+                    <div class='gallery-item'><img src='../images/pages/versailles/IMG_8042.jpg' alt='' /></div>
                   </div>
-                  <br>
                   <br>
                   <blockquote>
-                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen.</div>
+                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen and navigation.</div>
                   </blockquote>
                 </div>
-                <div class="popup" id="popup">
-                  <div class="popup-content">
-                    <img src alt="Popup Image" id="popupImage">
-                    <button class="close" onclick="closePopup()">X</button>
-                    <div class="alt-text" id="popupAltText"></div>
-                  </div>
+                <!-- Popup Modal for Gallery -->
+                <div class="gallery-popup" id="galleryPopup" style="display:none;">
+                  <span class="gallery-popup-close" id="galleryPopupClose">&times;</span>
+                  <img class="gallery-popup-img" id="galleryPopupImg" src="" alt="Popup Image">
+                  <button class="gallery-popup-prev" id="galleryPopupPrev">&#10094;</button>
+                  <button class="gallery-popup-next" id="galleryPopupNext">&#10095;</button>
                 </div>
               </div>
             </div>
@@ -387,6 +384,58 @@
 
   </body>
 
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const gallery = document.getElementById('photoGallery');
+    const popup = document.getElementById('galleryPopup');
+    const popupImg = document.getElementById('galleryPopupImg');
+    const closeBtn = document.getElementById('galleryPopupClose');
+    const prevBtn = document.getElementById('galleryPopupPrev');
+    const nextBtn = document.getElementById('galleryPopupNext');
+    const images = Array.from(gallery.querySelectorAll('img'));
+    let currentIndex = 0;
+
+    function showPopup(index) {
+      currentIndex = index;
+      popupImg.src = images[index].src;
+      popup.style.display = 'flex';
+    }
+    images.forEach((img, idx) => {
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => showPopup(idx));
+    });
+    closeBtn.addEventListener('click', () => {
+      popup.style.display = 'none';
+      popupImg.src = '';
+    });
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex + 1) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    // Close popup on background click
+    popup.addEventListener('click', (e) => {
+      if (e.target === popup) {
+        popup.style.display = 'none';
+        popupImg.src = '';
+      }
+    });
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (popup.style.display === 'flex') {
+        if (e.key === 'ArrowLeft') prevBtn.click();
+        if (e.key === 'ArrowRight') nextBtn.click();
+        if (e.key === 'Escape') closeBtn.click();
+      }
+    });
+  });
+</script>
   <script src="../js/jquery-3.2.1.min.js"></script>
   <script src="../js/popper.min.js"></script>
   <script src="../js/bootstrap.min.js"></script>
