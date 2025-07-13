@@ -17,6 +17,10 @@
     <link rel="stylesheet" type="text/css" href="../css/style.css" />
     <link href="../css/template.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="../css/style_page_gallery.css">
+
+    <link rel="stylesheet" href="../css/gallery.css">
+
+
     <style>
       p + ul {
         margin-top: -20px;
@@ -227,39 +231,39 @@
                 </div>
                 <h2>Photo Gallery:</h2>
                 <div class="container" id="mainContainer">
-                  <div class="gallery">
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7925.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7927.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7937.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7938.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7935.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7940.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7942.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7943.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7950.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7945.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7946.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7949.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7953.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7951.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7956.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7959.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7963.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7967.jpg' alt='' onclick='openPopup(this)'></div>
-                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7973.jpg' alt='' onclick='openPopup(this)'></div>
+                  <div class="gallery beautiful-gallery" id="photoGallery">
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7925.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7927.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7937.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7938.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7935.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7940.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7942.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7943.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7950.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7945.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7946.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7949.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7953.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7951.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7956.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7959.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7963.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7967.jpg' alt=''></div>
+                    <div class='gallery-item'><img src='../images/pages/montemarte/IMG_7973.jpg' alt=''></div>
                   </div>
                   <br>
                   <br>
                   <blockquote>
-                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen.</div>
+                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen and navigation.</div>
                   </blockquote>
                 </div>
-                <div class="popup" id="popup">
-                  <div class="popup-content">
-                    <img src alt="Popup Image" id="popupImage">
-                    <button class="close" onclick="closePopup()">X</button>
-                    <div class="alt-text" id="popupAltText"></div>
-                  </div>
+                <!-- Popup Modal for Gallery -->
+                <div class="gallery-popup" id="galleryPopup" style="display:none;">
+                  <span class="gallery-popup-close" id="galleryPopupClose">&times;</span>
+                  <img class="gallery-popup-img" id="galleryPopupImg" src="" alt="Popup Image">
+                  <button class="gallery-popup-prev" id="galleryPopupPrev">&#10094;</button>
+                  <button class="gallery-popup-next" id="galleryPopupNext">&#10095;</button>
                 </div>
               </div>
             </div>
@@ -366,7 +370,57 @@
   </script>
 
   </body>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const gallery = document.getElementById('photoGallery');
+    const popup = document.getElementById('galleryPopup');
+    const popupImg = document.getElementById('galleryPopupImg');
+    const closeBtn = document.getElementById('galleryPopupClose');
+    const prevBtn = document.getElementById('galleryPopupPrev');
+    const nextBtn = document.getElementById('galleryPopupNext');
+    const images = Array.from(gallery.querySelectorAll('img'));
+    let currentIndex = 0;
 
+    function showPopup(index) {
+      currentIndex = index;
+      popupImg.src = images[index].src;
+      popup.style.display = 'flex';
+    }
+    images.forEach((img, idx) => {
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => showPopup(idx));
+    });
+    closeBtn.addEventListener('click', () => {
+      popup.style.display = 'none';
+      popupImg.src = '';
+    });
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex + 1) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    // Close popup on background click
+    popup.addEventListener('click', (e) => {
+      if (e.target === popup) {
+        popup.style.display = 'none';
+        popupImg.src = '';
+      }
+    });
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (popup.style.display === 'flex') {
+        if (e.key === 'ArrowLeft') prevBtn.click();
+        if (e.key === 'ArrowRight') nextBtn.click();
+        if (e.key === 'Escape') closeBtn.click();
+      }
+    });
+  });
+</script>
   <script src="../js/jquery-3.2.1.min.js"></script>
   <script src="../js/popper.min.js"></script>
   <script src="../js/bootstrap.min.js"></script>

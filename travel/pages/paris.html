@@ -17,6 +17,10 @@
     <link rel="stylesheet" type="text/css" href="../css/style.css" />
     <link href="../css/template.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="../css/style_page_gallery.css">
+
+    <link rel="stylesheet" href="../css/gallery.css">
+
+
     <style>
       p + ul {
         margin-top: -20px;
@@ -274,24 +278,24 @@
                 </div>
                 <h2>Photo Gallery:</h2>
                 <div class="container" id="mainContainer">
-                  <div class="gallery">
-                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower.jpg" alt="As the plane descends and the <b>Eiffel Tower</b> comes into view, a wave of emotion sweeps over. The city, with its timeless charm and romantic allure, feels like a long-lost lover finally within reach. Stepping onto the cobblestone streets, the heart beats faster, and every sight and sound feels like a whisper of affection." onclick="openPopup(this)"></div>
-                    <div class="gallery-item"><img src="../images/pages/paris/GrandHotelLeveque.jpeg" alt="Grand Hotel Leveque" onclick="openPopup(this)"></div>
-                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower_View.jpg" alt="Eiffel Tower Street View" onclick="openPopup(this)"></div>
-                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower_MySelf.jpg" alt="Eiffel Tower" onclick="openPopup(this)"></div>
+                  <div class="gallery beautiful-gallery" id="photoGallery">
+                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower.jpg" alt="As the plane descends and the <b>Eiffel Tower</b> comes into view, a wave of emotion sweeps over. The city, with its timeless charm and romantic allure, feels like a long-lost lover finally within reach. Stepping onto the cobblestone streets, the heart beats faster, and every sight and sound feels like a whisper of affection."></div>
+                    <div class="gallery-item"><img src="../images/pages/paris/GrandHotelLeveque.jpeg" alt="Grand Hotel Leveque"></div>
+                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower_View.jpg" alt="Eiffel Tower Street View"></div>
+                    <div class="gallery-item"><img src="../images/pages/paris/Eiffel_Tower_MySelf.jpg" alt="Eiffel Tower"></div>
                   </div>
                   <br>
                   <br>
                   <blockquote>
-                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen.</div>
+                    <div style="font-size: 10px; font-style: italic;">Click on the images for full screen and navigation.</div>
                   </blockquote>
                 </div>
-                <div class="popup" id="popup">
-                  <div class="popup-content">
-                    <img src alt="Popup Image" id="popupImage">
-                    <button class="close" onclick="closePopup()">X</button>
-                    <div class="alt-text" id="popupAltText"></div>
-                  </div>
+                <!-- Popup Modal for Gallery -->
+                <div class="gallery-popup" id="galleryPopup" style="display:none;">
+                  <span class="gallery-popup-close" id="galleryPopupClose">&times;</span>
+                  <img class="gallery-popup-img" id="galleryPopupImg" src="" alt="Popup Image">
+                  <button class="gallery-popup-prev" id="galleryPopupPrev">&#10094;</button>
+                  <button class="gallery-popup-next" id="galleryPopupNext">&#10095;</button>
                 </div>
               </div>
             </div>
@@ -421,7 +425,57 @@
 <!-- Template Main JS File -->
 <script src="../assets/js/main.js"></script>
 
-<script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const gallery = document.getElementById('photoGallery');
+    const popup = document.getElementById('galleryPopup');
+    const popupImg = document.getElementById('galleryPopupImg');
+    const closeBtn = document.getElementById('galleryPopupClose');
+    const prevBtn = document.getElementById('galleryPopupPrev');
+    const nextBtn = document.getElementById('galleryPopupNext');
+    const images = Array.from(gallery.querySelectorAll('img'));
+    let currentIndex = 0;
+
+    function showPopup(index) {
+      currentIndex = index;
+      popupImg.src = images[index].src;
+      popup.style.display = 'flex';
+    }
+    images.forEach((img, idx) => {
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => showPopup(idx));
+    });
+    closeBtn.addEventListener('click', () => {
+      popup.style.display = 'none';
+      popupImg.src = '';
+    });
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex + 1) % images.length;
+      popupImg.src = images[currentIndex].src;
+    });
+    // Close popup on background click
+    popup.addEventListener('click', (e) => {
+      if (e.target === popup) {
+        popup.style.display = 'none';
+        popupImg.src = '';
+      }
+    });
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (popup.style.display === 'flex') {
+        if (e.key === 'ArrowLeft') prevBtn.click();
+        if (e.key === 'ArrowRight') nextBtn.click();
+        if (e.key === 'Escape') closeBtn.click();
+      }
+    });
+  });
+</script>
 
 
 </html>
