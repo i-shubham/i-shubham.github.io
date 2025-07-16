@@ -91,10 +91,15 @@
   </head>
 
   <body>
-  <audio id="myAudio" autoplay>
-        <source src="/Users/shubham.mallick/Desktop/CP/PC_n_D/Github.io/shubham.github.io/travel/audio/The_Palace_Of_Versailles.mp3" type="audio/mp3">
-        Your browser does not support the audio element.
-    </audio>
+  <audio id="myAudio" src="../audio/Do_Lafzon_Ki.mp3"></audio>
+  <script>
+    window.addEventListener('load', function() {
+      var audio = document.getElementById('myAudio');
+      audio.play().catch(function(error){
+        console.log('Autoplay blocked:', error);
+      });
+    });
+  </script>
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
     <div class="container-fluid" id="mainDivNavBar">
         <img id="navbarImg" src="../../assets/img/profile-img.jpg" style="width: 50px;" alt="" class="img-fluid rounded-circle">
