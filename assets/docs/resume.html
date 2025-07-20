@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shubham Mallick - Data & Application Architect</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.2;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-size: 11px;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: 15px auto;
+            background: white;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 20px 25px 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20px;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .name-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .name-left {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .name-right {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        .name {
+            font-size: 2.2em;
+            font-weight: 800;
+            letter-spacing: -1px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .visa-badge {
+            background: #27ae60;
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 0.7em;
+            font-weight: 600;
+        }
+
+        .title {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .contact-column {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-size: 0.8em;
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .awards-ribbon {
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            color: white;
+            padding: 8px 25px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.75em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            margin: 0 25px 5px 25px;
+            border-radius: 6px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            padding: 20px 25px;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .section-title {
+            color: #2c3e50;
+            font-size: 1.1em;
+            font-weight: 800;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary {
+            font-size: 0.9em;
+            line-height: 1.4;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .metric {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        }
+
+        .metric-number {
+            font-size: 1.4em;
+            font-weight: 800;
+            display: block;
+            line-height: 1;
+        }
+
+        .metric-label {
+            font-size: 0.65em;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .experience-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 8px;
+            border-left: 4px solid #27ae60;
+            position: relative;
+        }
+        
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 6px;
+        }
+        
+        .job-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .company-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            object-fit: contain;
+            background: white;
+            padding: 2px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 6px;
+        }
+
+        .job-title {
+            font-size: 1em;
+            font-weight: 700;
+            color: #2c3e50;
+            line-height: 1.1;
+        }
+
+        .company {
+            font-size: 0.9em;
+            color: #3498db;
+            font-weight: 600;
+        }
+
+        .duration {
+            color: #7f8c8d;
+            font-size: 0.75em;
+            font-weight: 600;
+            background: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        .tech-stack {
+            background: #ecf0f1;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            color: #34495e;
+            margin: 4px 0;
+            font-style: italic;
+        }
+
+        .achievements {
+            list-style: none;
+            margin-top: 6px;
+        }
+
+        .achievements li {
+            padding: 2px 0;
+            position: relative;
+            padding-left: 12px;
+            font-size: 0.8em;
+            line-height: 1.3;
+        }
+
+        .achievements li::before {
+            content: '▸';
+            color: #27ae60;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+            font-size: 1.1em;
+        }
+
+        .highlight {
+            background: linear-gradient(120deg, #ffecd2 0%, #fcb69f 100%);
+            padding: 1px 3px;
+            border-radius: 3px;
+            font-weight: 700;
+            color: #d35400;
+        }
+
+        .skills-container {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .skill-category {
+            margin-bottom: 10px;
+        }
+
+        .skill-category h4 {
+            color: #2c3e50;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+
+        .skill-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        .skill-tag {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            padding: 2px 5px;
+            border-radius: 8px;
+            font-size: 0.65em;
+            font-weight: 600;
+        }
+
+        .education-item {
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            margin-bottom: 6px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 3px solid #e74c3c;
+        }
+
+        .degree {
+            font-weight: 700;
+            color: #2c3e50;
+            font-size: 0.8em;
+            line-height: 1.2;
+        }
+
+        .institution {
+            color: #7f8c8d;
+            font-size: 0.7em;
+        }
+
+        .grade {
+            font-weight: 700;
+            color: #27ae60;
+            font-size: 0.75em;
+        }
+
+        .awards-grid {
+            display: grid;
+            gap: 4px;
+        }
+
+        .award-item {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            padding: 6px 8px;
+            border-radius: 5px;
+            border-left: 3px solid #fdcb6e;
+            font-size: 0.7em;
+        }
+
+        .award-title {
+            font-weight: 700;
+            color: #d35400;
+            font-size: 1.1em;
+        }
+
+        @media print {
+            body {
+                background: white !important;
+            }
+            .container {
+                margin: 0;
+                box-shadow: none;
+                border-radius: 0;
+                background: white !important;
+            }
+            .header {
+                background: #2c3e50 !important;
+                color: white !important;
+            }
+            .awards-ribbon {
+                background: #ff6b35 !important;
+                color: white !important;
+                box-shadow: none;
+            }
+            .summary {
+                background: #f8f9fa !important;
+                border-left: 4px solid #3498db !important;
+            }
+            .metric {
+                background: #667eea !important;
+                color: white !important;
+                box-shadow: none;
+            }
+            .experience-item {
+                background: #f8f9fa !important;
+                border-left: 4px solid #27ae60 !important;
+            }
+            .skills-container {
+                background: #f8f9fa !important;
+            }
+            .skill-tag {
+                background: #3498db !important;
+                color: white !important;
+            }
+            .education-item {
+                background: #f8f9fa !important;
+                border-left: 3px solid #e74c3c !important;
+            }
+            .award-item {
+                background: #fff3cd !important;
+                border-left: 3px solid #fdcb6e !important;
+            }
+            a {
+                color: inherit !important;
+                text-decoration: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div class="name-section">
+                    <div class="name-left">
+                        <h1 class="name">Shubham Mallick</h1>
+                        <p class="title">Senior Data & Application Architect | ML Engineering Leader | 13+ Years Experience</p>
+                    </div>
+                    <div class="name-right">
+                        <div class="contact-column">
+                            <div class="contact-item">📧 <a href="mailto:shubham.kolkata@gmail.com" target="_blank" style="color: white; text-decoration: none;">shubham.kolkata@gmail.com</a></div>
+                            <div class="contact-item">📱 +91-9734389354</div>
+                            <div class="contact-item">🌐 <a href="https://www.i-shubham.in/" target="_blank" style="color: white; text-decoration: none;">www.i-shubham.in</a></div>
+                            <div class="contact-item">💼 <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" style="color: white; text-decoration: none;">www.linkedin.com/in/i-shubham</a></div>
+                            <div class="contact-item">📍 Hyderabad, India</div>
+                        </div>
+                        <div class="visa-badge">🇺🇸 US B1/B2 Visa</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="awards-ribbon">
+            🏆 Qualcomm Hackathon Winner • Innovation Maestro • Super-Qualstar • Apple/PwC Awardee • Microsoft/IBM Certified • Top 3 ML Contest
+        </div>
+
+        <div class="content">
+            <div class="main-content">
+                <section>
+                    <h2 class="section-title">Executive Summary</h2>
+                    <div class="summary">
+                        <strong>13+ years</strong> seasoned Engineering Leader specializing in scalable data platforms, ML/AI solutions, and high-performing team leadership. Delivered systems processing <strong>50M+ records daily</strong> with <strong>70% latency reduction</strong>. Expert in cloud migration, microservices architecture, and real-time analytics across Apple, Salesforce, Qualcomm ecosystems.
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-number">13+</span>
+                            <span class="metric-label">Years Exp</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-number">50M+</span>
+                            <span class="metric-label">Records/Day</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-number">70%</span>
+                            <span class="metric-label">Latency ↓</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-number">12+</span>
+                            <span class="metric-label">Team Led</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="section-title">Professional Experience</h2>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div class="job-info">
+                                <img src="../../assets/img/org/salesforce.png" alt="Salesforce" class="company-logo">
+                                <div>
+                                    <div class="job-title">Sr. Data Architect & Engineering Lead</div>
+                                    <div class="company">Salesforce</div>
+                                </div>
+                            </div>
+                            <div class="duration">Jul 2022 - Present</div>
+                        </div>
+                        <div class="tech-stack">AWS • PySpark • Kafka • Redis • Python • Go • Airflow • GenAI • LLM • MySQL • NoSQL</div>
+                        <ul class="achievements">
+                            <li>Architected high-volume AWS applications processing <span class="highlight">10M+ transactions/day</span> with 99.9% uptime</li>
+                            <li>Enhanced performance by <span class="highlight">60%</span> through GenAI integration and Agentforce prompt engineering</li>
+                            <li>Built distributed microservices ticketing system, reducing response time by <span class="highlight">45%</span></li>
+                            <li>Redesigned data pipelines achieving <span class="highlight">70% latency reduction</span> with Spark/Kafka</li>
+                            <li>Implemented CI/CD automation (EKS/Terraform/Jenkins), cutting deployment time by <span class="highlight">80%</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div class="job-info">
+                                <img src="../../assets/img/org/apple.png" alt="Apple" class="company-logo">
+                                <div>
+                                    <div class="job-title">Technical Lead & Module Owner</div>
+                                    <div class="company">Apple Inc.</div>
+                                </div>
+                            </div>
+                            <div class="duration">Jun 2020 - Jul 2022</div>
+                        </div>
+                        <div class="tech-stack">Apple Cloud • AWS • Django • Kafka • Redis • PySpark • Snowflake • Docker • Kubernetes</div>
+                        <ul class="achievements">
+                            <li>Led <span class="highlight">12-member team</span> in Supply-Chain CPT/MDAT projects, awarded for go-live success</li>
+                            <li>Architected backend pipeline processing <span class="highlight">100GB+ daily</span> from Oracle to AWS</li>
+                            <li>Built Kafka queues handling <span class="highlight">1M+ messages/hour</span> for real-time streaming</li>
+                            <li>Migrated data-lake to AWS, reducing storage costs by <span class="highlight">50%</span></li>
+                            <li>Transformed monolith to microservices, improving scalability by <span class="highlight">300%</span></li>
+                        </ul>
+                    </div>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div class="job-info">
+                                <img src="../../assets/img/org/qualcomm.png" alt="Qualcomm" class="company-logo">
+                                <div>
+                                    <div class="job-title">Team Lead & ML Engineer</div>
+                                    <div class="company">Qualcomm</div>
+                                </div>
+                            </div>
+                            <div class="duration">Nov 2017 - May 2020</div>
+                        </div>
+                        <div class="tech-stack">ML • NLP • Hadoop • Spark • Python • HIVE • Kafka • TensorFlow • Keras</div>
+                        <ul class="achievements">
+                            <li>Developed ML models for chipset forecasting with <span class="highlight">95% accuracy</span> using XGBoost</li>
+                            <li>Built GAN-based image models improving quality by <span class="highlight">35%</span></li>
+                            <li>Optimized CPU/RAM utilization by <span class="highlight">25%</span> using ML algorithms</li>
+                            <li>Built Big-Data pipelines processing <span class="highlight">10TB+ daily</span> in Hadoop ecosystem</li>
+                            <li>Won Innovation Maestro 2018-19 & HaQkathon 2018, presented to CxO leadership</li>
+                        </ul>
+                    </div>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div class="job-info">
+                                <img src="../../assets/img/org/ibm.png" alt="IBM" class="company-logo">
+                                <div>
+                                    <div class="job-title">Team Lead & Cloud SME</div>
+                                    <div class="company">IBM</div>
+                                </div>
+                            </div>
+                            <div class="duration">Dec 2016 - Nov 2017</div>
+                        </div>
+                        <div class="tech-stack">Azure • Data Factory • Service Bus • WCF • MongoDB</div>
+                        <ul class="achievements">
+                            <li>Led <span class="highlight">6-member team</span> Azure migration, completed 3 weeks early</li>
+                            <li>Migrated <span class="highlight">500GB+ data</span> with 99.9% integrity</li>
+                        </ul>
+                    </div>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div class="job-info">
+                                <img src="../../assets/img/org/pwc.png" alt="PwC" class="company-logo">
+                                <div>
+                                    <div class="job-title">Senior Developer</div>
+                                    <div class="company">PwC</div>
+                                </div>
+                            </div>
+                            <div class="duration">Oct 2014 - Dec 2016</div>
+                        </div>
+                        <div class="tech-stack">SQL • SSIS • ETL • C# • JavaScript • MongoDB • Python</div>
+                        <ul class="achievements">
+                            <li>Built predictive search from <span class="highlight">billion+ rows</span> in 2-3 seconds</li>
+                            <li>Performance tuned SSIS to load <span class="highlight">50M rows</span> within SLA</li>
+                            <li>Won STAR Performer & multiple client appreciation awards</li>
+                        </ul>
+                    </div>
+
+                    <div class="experience-item">
+                        <div class="job-header">
+                            <div>
+                                <div class="job-title">Application Developer</div>
+                                <div class="company">Cognizant (MetLife)</div>
+                            </div>
+                            <div class="duration">Apr 2012 - Oct 2014</div>
+                        </div>
+                        <div class="tech-stack">SQL Server • SSIS • C# • ADO.NET • JavaScript</div>
+                        <ul class="achievements">
+                            <li>Managed <span class="highlight">24x7</span> production support for MetLife bulk data processing</li>
+                            <li>Automated processes reducing manual effort by <span class="highlight">60%</span></li>
+                        </ul>
+                    </div>
+                </section>
+            </div>
+
+            <div class="sidebar">
+                <section>
+                    <h2 class="section-title">Core Skills</h2>
+                    <div class="skills-container">
+                        <div class="skill-category">
+                            <h4>Big Data & Analytics</h4>
+                            <div class="skill-tags">
+                                <span class="skill-tag">Hadoop</span>
+                                <span class="skill-tag">Spark</span>
+                                <span class="skill-tag">HIVE</span>
+                                <span class="skill-tag">Kafka</span>
+                                <span class="skill-tag">Snowflake</span>
+                                <span class="skill-tag">Delta Lake</span>
+                            </div>
+                        </div>
+                        <div class="skill-category">
+                            <h4>ML & AI</h4>
+                            <div class="skill-tags">
+                                <span class="skill-tag">TensorFlow</span>
+                                <span class="skill-tag">Scikit-Learn</span>
+                                <span class="skill-tag">NLP</span>
+                                <span class="skill-tag">LLM</span>
+                                <span class="skill-tag">GenAI</span>
+                                <span class="skill-tag">Neural Networks</span>
+                            </div>
+                        </div>
+                        <div class="skill-category">
+                            <h4>Cloud Platforms</h4>
+                            <div class="skill-tags">
+                                <span class="skill-tag">AWS</span>
+                                <span class="skill-tag">Azure</span>
+                                <span class="skill-tag">Apple Cloud</span>
+                                <span class="skill-tag">Docker</span>
+                                <span class="skill-tag">Kubernetes</span>
+                            </div>
+                        </div>
+                        <div class="skill-category">
+                            <h4>Programming</h4>
+                            <div class="skill-tags">
+                                <span class="skill-tag">Python</span>
+                                <span class="skill-tag">JavaScript</span>
+                                <span class="skill-tag">Rust</span>
+                                <span class="skill-tag">C#</span>
+                                <span class="skill-tag">Java</span>
+                                <span class="skill-tag">Go</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="section-title">Education</h2>
+                    <div class="education-item">
+                        <div class="degree">M.Tech Data Science & Engineering</div>
+                        <div class="institution">BITS Pilani</div>
+                        <div class="grade">7.67 CGPA</div>
+                    </div>
+                    <div class="education-item">
+                        <div class="degree">B.Tech Computer Science</div>
+                        <div class="institution">WBUT</div>
+                        <div class="grade">7.86 CGPA</div>
+                    </div>
+                    <div class="education-item">
+                        <div class="degree">Microsoft Certified DW Professional</div>
+                        <div class="institution">SQL Server (70-463)</div>
+                        <div class="grade">✓ Certified</div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="section-title">Key Awards</h2>
+                    <div class="awards-grid">
+                        <div class="award-item">
+                            <div class="award-title">Salesforce Winner</div>
+                            Hackathon & Best CoP Team
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">Apple Recognition</div>
+                            Supply-Chain Project Success
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">Qualcomm Top 3</div>
+                            Worldwide ML Contest 2019
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">Innovation Maestro</div>
+                            Qualcomm Winner 2018-19
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">HaQkathon Winner</div>
+                            CxO Presentation 2018
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">Microsoft AI</div>
+                            Challenge India Finalist
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">Super-Qualstar</div>
+                            Multiple Innovation Awards
+                        </div>
+                        <div class="award-item">
+                            <div class="award-title">PwC STAR</div>
+                            Outstanding Performance
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="section-title">Leadership</h2>
+                    <div class="skills-container">
+                        <div style="font-size: 0.75em; line-height: 1.3;">
+                            • <strong>Mentor:</strong> 50+ professionals across Apple, Qualcomm, PwC<br>
+                            • <strong>Interviewer:</strong> Core technical panel for lateral hiring<br>
+                            • <strong>Trainer:</strong> Campus graduates on Analytics & Data Engineering<br>
+                            • <strong>Team Builder:</strong> Hired & scaled teams across organizations
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
