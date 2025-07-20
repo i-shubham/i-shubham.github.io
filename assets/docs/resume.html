@@ -119,7 +119,7 @@
         .awards-ribbon {
             background: linear-gradient(45deg, #ff6b35, #f7931e);
             color: white;
-            padding: 8px 25px;
+            padding: 3px 20px;
             text-align: center;
             font-weight: 700;
             font-size: 0.75em;
@@ -171,13 +171,13 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 8px;
-            margin: 10px 0;
+            margin: 5px 0;
         }
 
         .metric {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 8px;
+            padding: 2px;
             border-radius: 6px;
             text-align: center;
             box-shadow: 0 3px 6px rgba(0,0,0,0.1);
@@ -304,7 +304,7 @@
         }
 
         .skill-category {
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
 
         .skill-category h4 {
@@ -445,6 +445,19 @@
             }
         }
     </style>
+  <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+  <script>
+    $(document).ready(function () {
+      var urlPath = window.location.pathname;
+      var currentPage = urlPath.split("/").pop();
+      if (currentPage.includes(".html")) {
+        console.log("Current Page:" + currentPage);
+        var newLink = currentPage.split('.html')[0];
+        var newPath = urlPath.replace(currentPage, newLink);
+        window.history.replaceState(null, null, newPath);
+      }
+    });
+  </script>
 </head>
 <body>
     <div class="container">
@@ -549,7 +562,7 @@
                     <div class="experience-item">
                         <div class="job-header">
                             <div class="job-info">
-                                <img src="../../assets/img/org/qualcomm.png" alt="Qualcomm" class="company-logo">
+                                <img src="../../assets/img/org/qualcomm.jpeg" alt="Qualcomm" class="company-logo">
                                 <div>
                                     <div class="company">Qualcomm</div>
                                     <div class="job-title">Senior Big-Data / ML Engineer</div>
@@ -609,7 +622,7 @@
                             <div class="job-info">
                                 <img src="../../assets/img/org/cognizant.png" alt="Cognizant" class="company-logo">
                                 <div>
-                                    <div class="company">Cognizant (MetLife)</div>
+                                    <div class="company">Cognizant</div>
                                     <div class="job-title">Application Developer</div>
                                 </div>
                             </div>
@@ -617,7 +630,7 @@
                         </div>
                         <div class="tech-stack">SQL Server • SSIS • C# • ADO.NET • JavaScript • Angular </div>
                         <ul class="achievements">
-                            <li>Managed <span class="highlight">24x7</span> production support for MetLife bulk data processing</li>
+                            <li>Managed <span class="highlight">24x7</span> production support for MetLife bulk data processing, and application support</li>
                             <li>Automated processes reducing manual effort by <span class="highlight">60%</span></li>
                         </ul>
                     </div>
