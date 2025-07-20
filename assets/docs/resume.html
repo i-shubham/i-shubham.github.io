@@ -107,7 +107,7 @@
             display: flex;
             flex-direction: column;
             gap: 3px;
-            font-size: 0.8em;
+            font-size: 0.82em;
         }
 
         .contact-item {
@@ -132,7 +132,7 @@
             display: grid;
             grid-template-columns: 2fr 1fr;
             gap: 10px;
-            padding: 5px 12px 5px 12px;
+            padding: 5px 12px 2px 12px;
         }
 
         .main-content {
@@ -303,6 +303,12 @@
             border-radius: 8px;
         }
 
+        .leadership-container {
+            background: #f8f9fa;
+            padding: 2px;
+            border-radius: 8px;
+        }
+
         .skill-category {
             margin-bottom: 15px;
         }
@@ -331,12 +337,23 @@
 
         .education-item {
             display: flex;
-            flex-direction: column;
-            padding: 8px;
+            align-items: center;
+            gap: 5px;
+            padding: 2px;
             margin-bottom: 6px;
             background: #f8f9fa;
             border-radius: 6px;
             border-left: 3px solid #e74c3c;
+        }
+        
+        .institute-logo {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            object-fit: contain;
+            background: white;
+            padding: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         .degree {
@@ -563,7 +580,7 @@
                         <div class="tech-stack">AWS • PySpark • Kafka • Redis • Python • Go • Airflow • GenAI • LLM • Agentforce • MySQL • NoSQL • RDS Redshift • EKS • S3 • Lambda • Docker • Kubernetes</div>
                         <ul class="achievements">
                             <li>Re-architected high-volume AWS applications to process <span class="highlight">10M+ transactions/day</span> with 99.9% uptime</li>
-                            <li>Enhanced performance by <span class="highlight">60%</span> through GenAI integration and Agentforce prompt engineering</li>
+                            <li>Enhanced application/database performance by <span class="highlight">50-60%</span> through GenAI integration and Agentforce prompt engineering</li>
                             <li>Built distributed microservices ticketing system, reducing response time by <span class="highlight">45%</span></li>
                             <li>Redesigned data pipelines achieving <span class="highlight">70% latency reduction</span> with Spark/EKS/Kafka</li>
                             <li>Worked on CI/CD automation (EKS/Terraform/Jenkins), cutting deployment time by <span class="highlight">80%</span></li>
@@ -737,19 +754,28 @@
                 <section>
                     <h2 class="section-title">Education</h2>
                     <div class="education-item">
-                        <div class="degree">M.Tech in Data Science & Engineering</div>
-                        <div class="institution">BITS, Pilani, Hyderabad</div>
-                        <div class="grade">7.67 CGPA</div>
+                        <img src="../../assets/img/org/bits-pilani.png" alt="BITS Pilani" class="institute-logo">
+                        <div>
+                            <div class="degree">M.Tech in Data Science & Engineering</div>
+                            <div class="institution">BITS, Pilani, Hyderabad</div>
+                            <div class="grade">7.67 CGPA</div>
+                        </div>
                     </div>
                     <div class="education-item">
-                        <div class="degree">B.Tech in Computer Science & Engineering</div>
-                        <div class="institution">WBUT, Kolkata</div>
-                        <div class="grade">7.86 CGPA</div>
+                        <img src="../../assets/img/org/wbut.jpeg" alt="WBUT" class="institute-logo">
+                        <div>
+                            <div class="degree">B.Tech in Computer Science & Engineering</div>
+                            <div class="institution">WBUT, Kolkata</div>
+                            <div class="grade">7.86 CGPA</div>
+                        </div>
                     </div>
                     <div class="education-item">
-                        <div class="degree">Microsoft Certified Data-Warehouse Professional</div>
-                        <div class="institution">SQL Server (70-463)</div>
-                        <div class="grade">✓ Certified</div>
+                        <img src="../../assets/img/org/microsoft.jpeg" alt="Microsoft" class="institute-logo">
+                        <div>
+                            <div class="degree">Microsoft Certified Data-Warehouse Professional</div>
+                            <div class="institution">SQL Server (70-463)</div>
+                            <div class="grade">✓ Certified</div>
+                        </div>
                     </div>
                 </section>
 
@@ -791,7 +817,7 @@
 
                 <section>
                     <h2 class="section-title">Leadership</h2>
-                    <div class="skills-container">
+                    <div class="leadership-container">
                         <div style="font-size: 0.75em; line-height: 1.3;">
                             • <strong>Mentor:</strong> 50+ professionals across Apple, Qualcomm, IBM, PwC<br>
                             • <strong>Interviewer:</strong> Core technical panel for lateral hiring<br>
