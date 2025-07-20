@@ -5,316 +5,648 @@
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
 
-    <title>Shubham Mallick</title>
-    <meta content="" name="description">
-    <meta content="" name="keywords">
+    <title>Open GPT - Coming Soon | Shubham Mallick</title>
+    <meta content="Open GPT coming soon - Shubham Mallick's AI and Language Model innovations" name="description">
+    <meta content="GPT, AI, LLM, Open Source, Language Models" name="keywords">
 
     <!-- Favicons -->
-    <!--<link href="assets/img/s.svg" rel="icon">-->
-    <link href="assets/img/profile-img.jpg" rel="icon">
+    <link href="../../assets/img/profile-img.jpg" rel="icon">
 
     <!-- Google Fonts -->
-    <link
-            href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i"
-            rel="stylesheet">
-
-    <script src="https://smtpjs.com/v3/smtp.js"></script>
-
-
-    <script src="../../assets/js/round_slide.js"></script>
-    <link href="../../assets/css/round_slide_style.css" rel="stylesheet">
-
-    <!-- Vendor CSS Files -->
-    <link href="../../assets/vendor/aos/aos.css" rel="stylesheet">
-    <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-    <link href="../../assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-    <link href="../../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
-    <link href="../../assets/vendor/glightbox/css/glightbox.min.css" rel="stylesheet">
-    <link href="../../assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500&display=swap" rel="stylesheet">
 
     <!-- Template Main CSS File -->
-    <link href="../../assets/css/style.css" rel="stylesheet">
+    <link href="../travel/css/style_travel.css" rel="stylesheet">
 
+    <link rel="shortcut icon" href="../travel/images/logo.ico">
+    <link rel="stylesheet" href="../travel/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../travel/css/all.min.css">
+    <link rel="stylesheet" href="../travel/css/fontawsom-all.min.css">
+    <link rel="stylesheet" href="../travel/css/animate.css">
+    <link rel="stylesheet" href="../travel/plugins/slider/css/owl.carousel.min.css">
+    <link rel="stylesheet" href="../travel/plugins/slider/css/owl.theme.default.css">
+    <link rel="stylesheet" type="text/css" href="../travel/css/style.css"/>
+    <link href="../travel/css/template.css" rel="stylesheet" type="text/css" />
 
-  <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- Font Awesome -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <style>
-    /* Center navigation menu */
-    .navbar-nav {
-      margin-left: auto;
-      margin-right: auto;
-    }
-    #navbarImg {
-      height: 50px;
-    }
-  </style>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
     <style>
-        body {
-            background: #202020;
+        /* Center navigation menu */
+        .navbar-nav {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #navbarImg {
+            height: 50px;
+            padding-left: 10px;
+        }
+        #navbarNav {
+            padding-left: 10px;
+        }
+        
+        /* GPT Navigation Animation */
+        .gpt-icon {
+            display: inline-block;
+            animation: pulse-gpt 2s infinite;
+            margin-right: 5px;
+            font-size: 1.1em;
+        }
+        
+        .gpt-text {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradient-shift 3s ease-in-out infinite;
+            font-weight: 600;
+        }
+        
+        @keyframes pulse-gpt {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+        
+        @keyframes gradient-shift {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+        
+        /* Hover effects */
+        .nav-link:hover .gpt-icon {
+            animation: bounce-gpt 0.6s ease-in-out;
+        }
+        
+        .nav-link:hover .gpt-text {
+            animation: gradient-shift 1s ease-in-out infinite;
+        }
+        
+        @keyframes bounce-gpt {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateY(0) scale(1);
+            }
+            40% {
+                transform: translateY(-3px) scale(1.1);
+            }
+            60% {
+                transform: translateY(-1px) scale(1.05);
+            }
+        }
+
+        /* Coming Soon Styles */
+        .coming-soon-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             color: white;
-            font-family: Arial, sans-serif;
+            position: relative;
+            overflow: hidden;
         }
-
-        .chat-container {
-            width: 90%;
-            max-width: 600px;
-            display: flex;
-            flex-direction: column;
-            gap: 1em;
-            overflow-y: auto;
-            max-height: 75vh;
-            padding: 1em;
-            border-radius: 10px;
+        
+        /* Footer Styles - matching travel/index.html */
+        .footer-cont {
+            background-color: #212121;
+            color: #FFF;
+            padding: 5px;
+            padding-bottom: 10px;
+        }
+        
+        .footer-cont .foot-botom .fotter-coo h5 {
+            color: #f78d15;
+            font-size: 1rem;
+            margin-bottom: 2px;
+        }
+        
+        .footer-cont .foot-botom .fotter-coo ul li {
+            font-size: .9rem;
+            padding: 0px 0px;
+        }
+        
+        .footer-cont .foot-botom .fotter-coo ul li i {
+            margin-right: 2px;
+        }
+        
+        .copy {
+            padding: 5px;
+            background-color: #191616;
+            color: #FFF;
+        }
+        
+        .copy a {
+            color: #FFF;
+        }
+        
+        .copy span {
+            float: right;
+        }
+        
+        .copy span i {
+            margin-right: 20px;
+        }
+        
+        .coming-soon-hero::before {
+            content: '';
             position: absolute;
-            top: 25px;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%); /* Center horizontally */
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
         }
-
-        .message {
-            padding: 10px;
-            border-radius: 10px;
-            max-width: 80%;
-            word-wrap: break-word;
-            white-space: pre-wrap;
+        
+        .coming-soon-content {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 700px;
+            margin: 2rem;
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
-
-        .user-message {
-            background: #1A1A1A;
-            align-self: flex-end;
-            text-align: right;
+        
+        .coming-soon-icon {
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: float 3s ease-in-out infinite;
+            color: #fff;
         }
-
-        .bot-message {
-            background: #333;
-            align-self: flex-start;
-            text-align: left;
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
         }
+        
+        .coming-soon-title {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .coming-soon-subtitle {
+            font-size: 1.3rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+        
 
-        .input-container {
-            position: fixed;
-            bottom: 10px;
-            width: 90%;
-            height: 120px;
-            max-width: 600px;
+        
+        /* Cooking Animation Styles */
+        .cooking-animation {
             display: flex;
-            justify-content: center; /* Center align */
+            justify-content: center;
+            align-items: center;
+            margin: 3rem 0;
+            position: relative;
+        }
+
+        .cooking-pot {
+            position: relative;
+            width: 120px;
+            height: 100px;
+            margin: 0 auto;
+        }
+
+        .pot-body {
+            width: 100px;
+            height: 80px;
+            background: linear-gradient(145deg, #8B4513, #A0522D, #CD853F);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            position: relative;
+            animation: pot-bubble 2s ease-in-out infinite;
+            box-shadow: 
+                inset 0 5px 15px rgba(0,0,0,0.3),
+                0 8px 25px rgba(0,0,0,0.2);
+        }
+
+        .pot-lid {
+            width: 80px;
+            height: 15px;
+            background: linear-gradient(145deg, #654321, #8B4513);
+            border-radius: 50%;
+            position: absolute;
+            top: -8px;
+            left: 10px;
+            animation: lid-bounce 1.5s ease-in-out infinite;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .steam {
+            position: absolute;
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(to top, rgba(255,255,255,0.8), rgba(255,255,255,0.2));
+            border-radius: 50%;
+            top: -25px;
+            animation: steam-rise 2s ease-out infinite;
+        }
+
+        .steam-1 {
+            left: 45%;
+            animation-delay: 0s;
+        }
+
+        .steam-2 {
+            left: 50%;
+            animation-delay: 0.5s;
+        }
+
+        .steam-3 {
+            left: 55%;
+            animation-delay: 1s;
+        }
+
+        .bubbles {
+            position: absolute;
+            bottom: 10px;
             left: 50%;
             transform: translateX(-50%);
         }
 
-        textarea {
-            flex: 1;
-            background: #1A1A1A;
-            color: white;
-            font-size: 1.1em;
-            padding: 10px;
+        .bubble {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: rgba(255,255,255,0.6);
+            border-radius: 50%;
+            animation: bubble-rise 1.5s ease-out infinite;
+        }
+
+        .bubble-1 {
+            left: -15px;
+            animation-delay: 0s;
+        }
+
+        .bubble-2 {
+            left: 0px;
+            animation-delay: 0.3s;
+        }
+
+        .bubble-3 {
+            left: 15px;
+            animation-delay: 0.6s;
+        }
+
+        @keyframes pot-bubble {
+            0%, 100% { 
+                transform: scale(1) translateY(0);
+            }
+            50% { 
+                transform: scale(1.05) translateY(-2px);
+            }
+        }
+
+        @keyframes lid-bounce {
+            0%, 100% { 
+                transform: translateY(0) rotate(0deg);
+            }
+            50% { 
+                transform: translateY(-3px) rotate(2deg);
+            }
+        }
+
+        @keyframes steam-rise {
+            0% {
+                opacity: 0;
+                transform: translateY(0) scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: translateY(-5px) scale(1);
+            }
+            80% {
+                opacity: 1;
+                transform: translateY(-20px) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-35px) scale(0.8);
+            }
+        }
+
+        @keyframes bubble-rise {
+            0% {
+                opacity: 0;
+                transform: translateY(0) scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: translateY(-5px) scale(1);
+            }
+            80% {
+                opacity: 1;
+                transform: translateY(-15px) scale(1.1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-25px) scale(0.6);
+            }
+        }
+        
+        .coming-soon-status {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1rem 2rem;
             border-radius: 20px;
-            border: none;
-            outline: none;
-            resize: none;
-            height: 120px;
-            overflow-y: auto;
-            white-space: pre-wrap;
+            margin: 2rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .back-button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 1rem 2.5rem;
+            border-radius: 30px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin-top: 1.5rem;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+        }
+        
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            color: white;
+            text-decoration: none;
+        }
+
+        /* Rust Code Animation */
+        .code-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            text-align: center; /* Center text inside textarea */
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
         }
 
-        /* Code block styling */
-        pre {
-            background: #282C34;
-            color: #ccc;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
-            font-size: 0.95em;
+        .code-particle {
+            position: absolute;
+            color: rgba(255,255,255,0.4);
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            font-weight: 500;
+            animation: code-fall 8s linear infinite;
+            white-space: nowrap;
+            text-shadow: 0 0 5px rgba(255,255,255,0.2);
         }
 
-        code {
-            font-family: "Courier New", monospace;
+        @keyframes code-fall {
+            0% {
+                opacity: 0;
+                transform: translateY(-100px) rotate(0deg);
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(100vh) rotate(45deg);
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .coming-soon-title {
+                font-size: 2.5rem;
+            }
+            .coming-soon-subtitle {
+                font-size: 1.1rem;
+            }
+            .cooking-pot {
+                width: 100px;
+                height: 80px;
+            }
+            .pot-body {
+                width: 80px;
+                height: 65px;
+            }
+            .pot-lid {
+                width: 65px;
+                height: 12px;
+            }
+            .coming-soon-content {
+                margin: 1rem;
+                padding: 2rem 1rem;
+            }
         }
     </style>
 </head>
 
 <body>
-  <nav class="navbar navbar-expand-lg navbar-light bg-light">
-    <div class="container-fluid" id="mainDivNavBar">
-        <img id="navbarImg" src="../../assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
-      <!-- Brand/Logo -->
-      <a class="navbar-brand" href="#">
-        &nbsp;&nbsp;Shubham Mallick
-      </a>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid" id="mainDivNavBar">
+            <img id="navbarImg" src="../../assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
+            <!-- Brand/Logo -->
+            <a class="navbar-brand" href="#">
+                &nbsp;&nbsp;Shubham Mallick
+            </a>
 
-      <!-- Toggle Button for Mobile -->
-      <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
+            <!-- Toggle Button for Mobile -->
+            <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-      <!-- Navbar Content -->
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <!-- Centered Menu -->
-        <ul class="navbar-nav">
-          <!-- <li class="nav-item">
-            <a class="nav-link active" aria-current="page" href="#">Home</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#">YouTube</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#">Tech-Blog</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="#">Travel-Blog</a>
-          </li> -->
-        </ul>
-        <!-- Social Media Icons -->
-        <div class="d-flex">
-          <a href="#" class="btn btn-outline-primary me-2" title="LinkedIn">
-            GPT
-          </a>
-          <a href="https://www.linkedin.com/in/i-shubham/" class="btn btn-outline-primary me-2" title="LinkedIn">
-            <i class="fab fa-linkedin"></i>
-          </a>
-          <a href="#" class="btn btn-outline-primary me-2" title="YouTube">
-            <i class="fab fa-youtube"></i>
-          </a>
-          <a href="#" class="btn btn-outline-primary me-2" title="Instagram">
-            <i class="fab fa-instagram"></i>
-          </a>
-          <a href="#" class="btn btn-outline-info" title="Twitter">
-            <i class="fab fa-twitter"></i>
-          </a>
+            <!-- Navbar Content -->
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <!-- Centered Menu -->
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="../index.html">Portfolio</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../travel/index.html">Travel-Blog</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="https://www.youtube.com/@i-shubham-mallick" target="_blank">YouTube</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="../tech/tech-index.html">Tech-Blog</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="../gpt/index.html">
+                            <span class="gpt-icon">🤖</span>
+                            <span class="gpt-text">Open GPT</span>
+                        </a>
+                    </li>
+                </ul>
+                <!-- Social Media Icons -->
+                <div class="d-flex">
+                    <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" class="btn btn-outline-primary me-2" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
+                    <a href="https://www.youtube.com/@i-shubham-mallick" target="_blank" class="btn btn-outline-primary me-2" title="YouTube"><i class="fab fa-youtube"></i></a>
+                    <a href="https://www.instagram.com/i.shubham.01/" target="_blank" class="btn btn-outline-primary me-2" title="Instagram"><i class="fab fa-instagram"></i></a>
+                    <a href="#" class="btn btn-outline-info" title="Twitter"><i class="fab fa-twitter"></i></a>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  </nav>
+    </nav>
 
-<!-- ======= Mobile Side nav toggle button ======= -->
-<!--<i class="bi bi-list mobile-nav-toggle d-xl-none"></i>-->
-
-<!-- ======= Header ======= -->
-<header id="header">
-    <div class="d-flex flex-column">
-        <div class="profile">
-            <!-- <img src="assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle"> -->
-            <!-- <h1 class="text-light"><a href="index_old.html">Shubham Mallick</a></h1> -->
-            <!-- <div class="text-center">
-                <a href="https://www.linkedin.com/in/i-shubham/" target="_blank"><i class="linkedin"></i></a>
-                <a href="https://www.instagram.com/i.shubham.01/" target="_blank"><i class="instagram"></i></a>
-            </div> -->
+    <!-- Coming Soon Hero Section -->
+    <div class="coming-soon-hero">
+        <div class="code-particles">
+            <!-- Code particles will be generated by JavaScript -->
         </div>
-
-        <nav id="navbar" class="nav-menu navbar">
-            <ul>
-                <li><a href="#home" class="nav-link scrollto active"><i class="bx bx-home"></i> <span>Home</span></a></li>
-                <li><a href="#about" class="nav-link scrollto"><i class="bx bx-user"></i> <span>About</span></a></li>
-                <li><a href="#facts" class="nav-link scrollto"><i class="bi bi-star"></i><span>Facts</span></a></li>
-                <li><a href="#achievements" class="nav-link scrollto"><i class="bx bx-award"></i><span>Achievements</span></a></li>
-                <li><a href="#skills" class="nav-link scrollto"><i class="bx bx-brain"></i> <span>Skills</span></a></li>
-                <li><a href="#resume" class="nav-link scrollto"><i class="bx bx-file-blank"></i> <span>Resume</span></a></li>
-                <li><a href="#portfolio" class="nav-link scrollto"><i class="bx bx-book-content"></i><span>Portfolio</span></a></li>
-                <li><a href="#technology" class="nav-link scrollto"><i class="bx bx-server"></i> <span>Technology</span></a></li>
-                <li><a href="#testimonials" class="nav-link scrollto"><i class="bi bi-megaphone"></i></i><span>Testimonials</span></a></li>
-                <li><a href="#contact" class="nav-link scrollto"><i class="bx bx-envelope"></i> <span>Contact</span></a></li>
-            </ul>
-        </nav><!-- .nav-menu -->
-    </div>
-</header>
-<!-- End Header -->
-
-
-    <div class="chat-container" id="chatContainer"></div>
-
-    <div class="input-container">
-        <textarea id="chatInput" placeholder="Type your message..."></textarea>
-    </div>
-
-<!-- ======= Footer ======= -->
-<footer id="footer">
-    <div class="container">
-        <div class="copyright">
-            © Copyright
-        </div>
-        <div class="credits">
-            Developed by <a href="https://www.linkedin.com/in/i-shubham/" target="_blank">Shubham</a>
+        
+        <div class="coming-soon-content">
+            <div class="coming-soon-icon">🤖</div>
+            <h1 class="coming-soon-title">Something is being cooked for Open LLM</h1>
+            <p class="coming-soon-subtitle">Stay tuned...</p>
+            
+            <div class="cooking-animation">
+                <div class="cooking-pot">
+                    <div class="pot-body"></div>
+                    <div class="pot-lid"></div>
+                    <div class="steam steam-1"></div>
+                    <div class="steam steam-2"></div>
+                    <div class="steam steam-3"></div>
+                    <div class="bubbles">
+                        <div class="bubble bubble-1"></div>
+                        <div class="bubble bubble-2"></div>
+                        <div class="bubble bubble-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="coming-soon-status">
+                <i class="fas fa-cog fa-spin"></i> Cooking in progress...
+            </div>
+            
+            <!-- <a href="../travel/index.html" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Travel Blog
+            </a> -->
         </div>
     </div>
-</footer>
-<!-- End  Footer -->
 
+    <!-- Footer -->
+    <footer class="container-fluid footer-cont">
+        <div class="container">
+            <div class="foot-botom row">
+                <div class="col-md-3">
+                    <div class="fotter-coo">
+                        <h5>Important Links</h5>
+                        <ul>
+                            <li><i class="fas fa-caret-right"></i> <a href="#">About Us</a></li>
+                            <li><i class="fas fa-caret-right"></i> <a href="#">Contact Us</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
 
-  <!-- Vendor JS Files  -->
-<script src="../../assets/vendor/purecounter/purecounter_vanilla.js"></script>
-<script src="../../assets/vendor/aos/aos.js"></script>
-<script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-<script src="../../assets/vendor/glightbox/js/glightbox.min.js"></script>
-<script src="../../assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
-<script src="../../assets/vendor/swiper/swiper-bundle.min.js"></script>
-<script src="../../assets/vendor/typed.js/typed.min.js"></script>
-<script src="../../assets/vendor/waypoints/noframework.waypoints.js"></script>
+    <div class="copy">
+        <div class="container">
+            Developed & Maintained by <a href="#">Shubham</a>
+            <span>
+                <a><i class="fab fa-pinterest-p"></i></a>
+                <a><i class="fab fa-twitter"></i></a>
+                <a><i class="fab fa-facebook-f"></i></a>
+            </span>
+        </div>
+    </div>
 
-<!-- Template Main JS File -->
-<script src="../../assets/js/main.js"></script>
-
-<script>
-        const chatContainer = document.getElementById("chatContainer");
-        const chatInput = document.getElementById("chatInput");
-
-        chatInput.addEventListener("input", function () {
-            this.style.height = "auto";
-            // this.style.height = Math.min(this.scrollHeight, 120) + "px";
-            this.style.height = "120px";
-        });
-
-        chatInput.addEventListener("keypress", function (event) {
-            if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                const userMessage = chatInput.value.trim();
-                if (userMessage === "") return;
-
-                addMessage(userMessage, "user-message");
-                chatInput.value = "";
-                chatInput.style.height = "120px";
-
-                fetchResponse(userMessage);
-            }
-        });
-
-        function addMessage(text, className) {
-            const messageElement = document.createElement("div");
-            messageElement.classList.add("message", className);
-            messageElement.innerHTML = formatMessage(text);
-            chatContainer.appendChild(messageElement);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            // Highlight code if present
-            Prism.highlightAll();
+    <script>
+        // Generate falling Rust code particles
+        function createCodeParticle() {
+            const rustCodeLines = [
+                'let mut vector = Vec::new();',
+                'fn main() { println!("Hello, world!"); }',
+                'match value { Some(x) => x, None => 0 }',
+                'impl MyStruct { fn new() -> Self { Self {} } }',
+                'for item in iter { process(item); }',
+                'if let Some(value) = option { use_value(value); }',
+                'use std::collections::HashMap;',
+                'pub struct Config { pub host: String }',
+                'async fn fetch_data() -> Result<Data, Error> {',
+                'trait MyTrait { fn method(&self) -> String; }',
+                'let result = vec.iter().map(|x| x * 2).collect();',
+                'unsafe { raw_pointer.as_ref() }',
+                'Box::new(MyStruct::new())',
+                'Arc::new(Mutex::new(data))',
+                'Rc::new(RefCell::new(value))',
+                'let closure = |x| x + 1;',
+                'type MyType = Result<String, Box<dyn Error>>;',
+                'const MAX_SIZE: usize = 1024;',
+                'static GLOBAL: &str = "Hello";',
+                'macro_rules! my_macro { ($x:expr) => { $x * 2 }; }'
+            ];
+            
+            const particle = document.createElement('div');
+            particle.className = 'code-particle';
+            particle.textContent = rustCodeLines[Math.floor(Math.random() * rustCodeLines.length)];
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 6 + 's';
+            
+            document.querySelector('.code-particles').appendChild(particle);
+            
+            // Remove particle after animation
+            setTimeout(() => {
+                particle.remove();
+            }, 8000);
         }
 
-        function formatMessage(text) {
-            const codeBlockRegex = /```([\s\S]*?)```/g;
-            return text.replace(codeBlockRegex, function(match, code) {
-                return `<pre><code class="language-javascript">${code}</code></pre>`;
-            });
-        }
+        // Create particles periodically
+        setInterval(createCodeParticle, 300);
 
-        function fetchResponse(userMessage) {
-            fetch("http://127.0.0.1:5000/process", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ input_text: userMessage })
-            })
-            .then(response => response.json())
-            .then(data => addMessage(data.reply, "bot-message"))
-            .catch(error => console.error("Error:", error));
+        // Create initial particles
+        for (let i = 0; i < 10; i++) {
+            setTimeout(() => {
+                createCodeParticle();
+            }, i * 300);
         }
     </script>
-</body>
 
+    <!-- Vendor JS Files -->
+    <script src="../travel/assets/vendor/purecounter/purecounter_vanilla.js"></script>
+    <script src="../travel/assets/vendor/aos/aos.js"></script>
+    <script src="../travel/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="../travel/assets/vendor/glightbox/js/glightbox.min.js"></script>
+    <script src="../travel/assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
+    <script src="../travel/assets/vendor/swiper/swiper-bundle.min.js"></script>
+    <script src="../travel/assets/vendor/typed.js/typed.min.js"></script>
+    <script src="../travel/assets/vendor/waypoints/noframework.waypoints.js"></script>
+
+    <!-- Template Main JS File -->
+    <script src="../travel/assets/js/main.js"></script>
+
+    <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+
+    <script src="../travel/js/jquery-3.2.1.min.js"></script>
+    <script src="../travel/js/popper.min.js"></script>
+    <script src="../travel/js/bootstrap.min.js"></script>
+    <script src="../travel/plugins/scroll-fixed/jquery-scrolltofixed-min.js"></script>
+    <script src="../travel/plugins/slider/js/owl.carousel.min.js"></script>
+    <script src="../travel/js/script.js"></script>
+</body>
 </html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+    <title>Shubham Mallick</title>
+    <meta content="" name="description">
+    <meta content="" name="keywords">
+
+    <!-- Favicons -->
+    <!--<link href="assets/img/s.svg" rel="icon">-->
+    <link href="assets/img/profile-img.jpg" rel="icon">
+
+    <!-- Google Fonts -->
+    <link
+            href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Raleway:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i"
+            rel="stylesheet">
+
+    <script src="https://smtpjs.com/v3/smtp.js"></script>
+
+
+    <script src="../../assets/js/round_slide.js"></script>
+    <link href="../../assets/css/round_slide_style.css" rel="stylesheet">
+
+    <!-- Vendor CSS Files -->
+    <link href="../../assets/vendor/aos/aos.css" rel="stylesheet">
+    <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="../../assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="../../assets/vendor/boxicons/css/boxicons.min.css" rel="stylesheet">
+    <link href="../../assets/vendor/glightbox/css/glightbox.min.css" rel="stylesheet">
+    <link href="../../assets/vendor/swiper/swiper-bundle.min.css" rel="stylesheet">
+
+    <!-- Template Main CSS File -->
+    <link href="../../assets/css/style.css" rel="stylesheet">
+
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    /* Center navigation menu */
+    .navbar-nav {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #navbarImg {
+      height: 50px;
+    }
+  </style>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <style>
+        body {
+            background: #202020;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 1em;
+            overflow-y: auto;
+            max-height: 75vh;
+            padding: 1em;
+            border-radius: 10px;
+            position: absolute;
+            top: 25px;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%); /* Center horizontally */
+        }
+
+        .message {
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .user-message {
+            background: #1A1A1A;
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .bot-message {
+            background: #333;
+            align-self: flex-start;
+            text-align: left;
+        }
+
+        .input-container {
+            position: fixed;
+            bottom: 10px;
+            width: 90%;
+            height: 120px;
+            max-width: 600px;
+            display: flex;
+            justify-content: center; /* Center align */
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        textarea {
+            flex: 1;
+            background: #1A1A1A;
+            color: white;
+            font-size: 1.1em;
+            padding: 10px;
+            border-radius: 20px;
+            border: none;
+            outline: none;
+            resize: none;
+            height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            width: 100%;
+            text-align: center; /* Center text inside textarea */
+        }
+
+        /* Code block styling */
+        pre {
+            background: #282C34;
+            color: #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 0.95em;
+        }
+
+        code {
+            font-family: "Courier New", monospace;
+        }
+    </style>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid" id="mainDivNavBar">
+        <img id="navbarImg" src="../../assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
+      <!-- Brand/Logo -->
+      <a class="navbar-brand" href="#">
+        &nbsp;&nbsp;Shubham Mallick
+      </a>
+
+      <!-- Toggle Button for Mobile -->
+      <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <!-- Navbar Content -->
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <!-- Centered Menu -->
+        <ul class="navbar-nav">
+          <!-- <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="#">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">YouTube</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Tech-Blog</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">Travel-Blog</a>
+          </li> -->
+        </ul>
+        <!-- Social Media Icons -->
+        <div class="d-flex">
+          <a href="#" class="btn btn-outline-primary me-2" title="LinkedIn">
+            GPT
+          </a>
+          <a href="https://www.linkedin.com/in/i-shubham/" class="btn btn-outline-primary me-2" title="LinkedIn">
+            <i class="fab fa-linkedin"></i>
+          </a>
+          <a href="#" class="btn btn-outline-primary me-2" title="YouTube">
+            <i class="fab fa-youtube"></i>
+          </a>
+          <a href="#" class="btn btn-outline-primary me-2" title="Instagram">
+            <i class="fab fa-instagram"></i>
+          </a>
+          <a href="#" class="btn btn-outline-info" title="Twitter">
+            <i class="fab fa-twitter"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+<!-- ======= Mobile Side nav toggle button ======= -->
+<!--<i class="bi bi-list mobile-nav-toggle d-xl-none"></i>-->
+
+<!-- ======= Header ======= -->
+<header id="header">
+    <div class="d-flex flex-column">
+        <div class="profile">
+            <!-- <img src="assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle"> -->
+            <!-- <h1 class="text-light"><a href="index_old.html">Shubham Mallick</a></h1> -->
+            <!-- <div class="text-center">
+                <a href="https://www.linkedin.com/in/i-shubham/" target="_blank"><i class="linkedin"></i></a>
+                <a href="https://www.instagram.com/i.shubham.01/" target="_blank"><i class="instagram"></i></a>
+            </div> -->
+        </div>
+
+        <nav id="navbar" class="nav-menu navbar">
+            <ul>
+                <li><a href="#home" class="nav-link scrollto active"><i class="bx bx-home"></i> <span>Home</span></a></li>
+                <li><a href="#about" class="nav-link scrollto"><i class="bx bx-user"></i> <span>About</span></a></li>
+                <li><a href="#facts" class="nav-link scrollto"><i class="bi bi-star"></i><span>Facts</span></a></li>
+                <li><a href="#achievements" class="nav-link scrollto"><i class="bx bx-award"></i><span>Achievements</span></a></li>
+                <li><a href="#skills" class="nav-link scrollto"><i class="bx bx-brain"></i> <span>Skills</span></a></li>
+                <li><a href="#resume" class="nav-link scrollto"><i class="bx bx-file-blank"></i> <span>Resume</span></a></li>
+                <li><a href="#portfolio" class="nav-link scrollto"><i class="bx bx-book-content"></i><span>Portfolio</span></a></li>
+                <li><a href="#technology" class="nav-link scrollto"><i class="bx bx-server"></i> <span>Technology</span></a></li>
+                <li><a href="#testimonials" class="nav-link scrollto"><i class="bi bi-megaphone"></i></i><span>Testimonials</span></a></li>
+                <li><a href="#contact" class="nav-link scrollto"><i class="bx bx-envelope"></i> <span>Contact</span></a></li>
+            </ul>
+        </nav><!-- .nav-menu -->
+    </div>
+</header>
+<!-- End Header -->
+
+
+    <div class="chat-container" id="chatContainer"></div>
+
+    <div class="input-container">
+        <textarea id="chatInput" placeholder="Type your message..."></textarea>
+    </div>
+
+<!-- ======= Footer ======= -->
+<footer id="footer">
+    <div class="container">
+        <div class="copyright">
+            © Copyright
+        </div>
+        <div class="credits">
+            Developed by <a href="https://www.linkedin.com/in/i-shubham/" target="_blank">Shubham</a>
+        </div>
+    </div>
+</footer>
+<!-- End  Footer -->
+
+
+  <!-- Vendor JS Files  -->
+<script src="../../assets/vendor/purecounter/purecounter_vanilla.js"></script>
+<script src="../../assets/vendor/aos/aos.js"></script>
+<script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../../assets/vendor/glightbox/js/glightbox.min.js"></script>
+<script src="../../assets/vendor/isotope-layout/isotope.pkgd.min.js"></script>
+<script src="../../assets/vendor/swiper/swiper-bundle.min.js"></script>
+<script src="../../assets/vendor/typed.js/typed.min.js"></script>
+<script src="../../assets/vendor/waypoints/noframework.waypoints.js"></script>
+
+<!-- Template Main JS File -->
+<script src="../../assets/js/main.js"></script>
+
+<script>
+        const chatContainer = document.getElementById("chatContainer");
+        const chatInput = document.getElementById("chatInput");
+
+        chatInput.addEventListener("input", function () {
+            this.style.height = "auto";
+            // this.style.height = Math.min(this.scrollHeight, 120) + "px";
+            this.style.height = "120px";
+        });
+
+        chatInput.addEventListener("keypress", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                const userMessage = chatInput.value.trim();
+                if (userMessage === "") return;
+
+                addMessage(userMessage, "user-message");
+                chatInput.value = "";
+                chatInput.style.height = "120px";
+
+                fetchResponse(userMessage);
+            }
+        });
+
+        function addMessage(text, className) {
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("message", className);
+            messageElement.innerHTML = formatMessage(text);
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // Highlight code if present
+            Prism.highlightAll();
+        }
+
+        function formatMessage(text) {
+            const codeBlockRegex = /```([\s\S]*?)```/g;
+            return text.replace(codeBlockRegex, function(match, code) {
+                return `<pre><code class="language-javascript">${code}</code></pre>`;
+            });
+        }
+
+        function fetchResponse(userMessage) {
+            fetch("http://127.0.0.1:5000/process", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ input_text: userMessage })
+            })
+            .then(response => response.json())
+            .then(data => addMessage(data.reply, "bot-message"))
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+
+</html>
