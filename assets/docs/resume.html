@@ -53,6 +53,76 @@
 
         /* PDF Generation Styles */
         @media print {
+            /* Ensure profile image stays round in print */
+            .profile-image {
+                border-radius: 50% !important;
+                width: 65px !important;
+                height: 70px !important;
+                object-fit: cover !important;
+                border: 3px solid rgba(255,255,255,0.3) !important;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Fix awards ribbon for CMD+P printing */
+            .awards-ribbon {
+                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
+                color: white !important;
+                padding: 3px 18px !important;
+                text-align: center !important;
+                font-weight: 700 !important;
+                font-size: 0.7em !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                margin: 0 25px 1px 25px !important;
+                border-radius: 8px !important;
+                position: relative !important;
+                overflow: hidden !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Fix skill tags for CMD+P printing */
+            .skill-tag {
+                background: rgba(52, 152, 219, 0.1) !important;
+                color: #2c3e50 !important;
+                padding: 2px 8px !important;
+                border-radius: 12px !important;
+                font-size: 0.65em !important;
+                font-weight: 500 !important;
+                border: 1px solid rgba(52, 152, 219, 0.2) !important;
+                display: inline-block !important;
+                margin: 1px !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Fix visa badge for CMD+P printing */
+            .visa-badge {
+                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
+                color: white !important;
+                padding: 5px 10px !important;
+                border-radius: 20px !important;
+                font-size: 0.65em !important;
+                font-weight: 600 !important;
+                box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3) !important;
+                position: relative !important;
+                overflow: hidden !important;
+                display: inline-block !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Fix company and education images for CMD+P printing */
+            .experience-item img,
+            .education-item img {
+                border-radius: 8px !important;
+                object-fit: contain !important;
+                max-width: 100% !important;
+                height: auto !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
             body {
                 margin: 0 !important;
                 padding: 0 !important;
@@ -82,6 +152,67 @@
                 border-radius: 0 !important;
                 border: none !important;
                 overflow: visible !important;
+            }
+            
+            /* Preserve profile image round shape in PDF */
+            .profile-image {
+                border-radius: 50% !important;
+                width: 65px !important;
+                height: 70px !important;
+                object-fit: cover !important;
+                border: 3px solid rgba(255,255,255,0.3) !important;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+            }
+            
+            /* Fix awards ribbon for PDF printing */
+            .awards-ribbon {
+                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
+                color: white !important;
+                padding: 3px 18px !important;
+                text-align: center !important;
+                font-weight: 700 !important;
+                font-size: 0.7em !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                margin: 0 25px 1px 25px !important;
+                border-radius: 8px !important;
+                position: relative !important;
+                overflow: hidden !important;
+            }
+            
+            /* Fix skill tags for PDF printing */
+            .skill-tag {
+                background: rgba(52, 152, 219, 0.1) !important;
+                color: #2c3e50 !important;
+                padding: 2px 8px !important;
+                border-radius: 12px !important;
+                font-size: 0.65em !important;
+                font-weight: 500 !important;
+                border: 1px solid rgba(52, 152, 219, 0.2) !important;
+                display: inline-block !important;
+                margin: 1px !important;
+            }
+            
+            /* Fix visa badge for PDF printing */
+            .visa-badge {
+                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
+                color: white !important;
+                padding: 5px 10px !important;
+                border-radius: 20px !important;
+                font-size: 0.65em !important;
+                font-weight: 600 !important;
+                box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3) !important;
+                position: relative !important;
+                overflow: hidden !important;
+                display: inline-block !important;
+            }
+            
+            /* Fix company and education images for PDF printing */
+            .experience-item img,
+            .education-item img {
+                border-radius: 8px !important;
+                object-fit: contain !important;
+                max-width: 100% !important;
+                height: auto !important;
             }
             
             .download-btn {
@@ -127,6 +258,65 @@
             
             .summary {
                 background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            /* Preserve all other gradients and colors */
+            .container::before {
+                background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b6b) !important;
+            }
+            
+            .name {
+                color: white !important;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
+            }
+            
+            .title {
+                color: white !important;
+                opacity: 0.9 !important;
+            }
+            
+            .contact-item a {
+                color: white !important;
+            }
+            
+            .contact-item {
+                color: white !important;
+            }
+            
+            .metric-number {
+                color: white !important;
+                font-weight: 700 !important;
+            }
+            
+            .metric-label {
+                color: white !important;
+                font-size: 0.6em !important;
+            }
+            
+            .section-title {
+                color: #2c3e50 !important;
+                border-bottom: 3px solid #3498db !important;
+            }
+            
+            .achievements li {
+                color: #2c3e50 !important;
+            }
+            
+            .tech-stack {
+                color: #7f8c8d !important;
+            }
+            
+            .institution {
+                color: #7f8c8d !important;
+            }
+            
+            .award-item {
+                color: #2c3e50 !important;
+            }
+            
+            .skill-tag {
+                color: #2c3e50 !important;
+                background: rgba(52, 152, 219, 0.1) !important;
             }
             
             /* Preserve text colors */
@@ -319,7 +509,7 @@
 
         .profile-image {
             width: 65px;
-            height: 60px;
+            height: 70px;
             border-radius: 50%;
             object-fit: cover;
             border: 3px solid rgba(255,255,255,0.3);
@@ -608,7 +798,7 @@
         
         .company-logo {
             width: 35px;
-            height: 35px;
+            height: 100%;
             border-radius: 8px;
             object-fit: contain;
             background: white;
@@ -1121,7 +1311,7 @@
   </script>
   
   <!-- Code Protection Script -->
-  <!-- <script>
+  <script>
     // Disable right-click context menu
     document.addEventListener('contextmenu', function(e) {
       e.preventDefault();
@@ -1235,7 +1425,7 @@
       e.preventDefault();
       e.returnValue = '';
     });
-  </script> -->
+  </script>
 </head>
 <body>
     <!-- Download Resume Button -->
