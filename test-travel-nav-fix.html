@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Travel Navigation Fix Test - Shubham Mallick</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Navigation Component -->
+    <script src="assets/js/navigation.js"></script>
+</head>
+<body>
+    <!-- Navigation will be automatically inserted here by navigation.js -->
+    
+    <div class="container mt-5">
+        <h1>Travel Navigation Fix Test</h1>
+        <p>This page tests the fix for travel navigation from pages directory.</p>
+        
+        <div class="alert alert-success">
+            <h4>✅ Navigation Fix Applied:</h4>
+            <ul>
+                <li><strong>Issue:</strong> From `/travel/pages/` pages, "Travel-Blog" was linking to `../../../travel/index.html`</li>
+                <li><strong>Fix:</strong> Now correctly links to `../../index.html` (travel/index.html)</li>
+                <li><strong>Result:</strong> CSS should load correctly when navigating from Venice.html</li>
+            </ul>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Before Fix (Broken)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>From:</strong> <code>/travel/pages/Venice.html</code></p>
+                        <p><strong>Travel Link:</strong> <code>../../../travel/index.html</code></p>
+                        <p><strong>Result:</strong> ❌ CSS broken (wrong path)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>After Fix (Working)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>From:</strong> <code>/travel/pages/Venice.html</code></p>
+                        <p><strong>Travel Link:</strong> <code>../../index.html</code></p>
+                        <p><strong>Result:</strong> ✅ CSS loads correctly</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h5>Test Links:</h5>
+            <a href="travel/pages/Venice.html" class="btn btn-primary">Test Venice Page</a>
+            <a href="travel/index.html" class="btn btn-secondary">Test Travel Index</a>
+        </div>
+        
+        <div class="mt-4">
+            <h5>Path Resolution Logic:</h5>
+            <pre><code>
+// From /travel/pages/Venice.html:
+// Old: ../../../travel/index.html (wrong)
+// New: ../../index.html (correct)
+
+// From /travel/index.html:
+// Travel link: ./travel/index.html (unchanged)
+
+// From root index.html:
+// Travel link: ./travel/index.html (unchanged)
+            </code></pre>
+        </div>
+    </div>
+</body>
+</html> 

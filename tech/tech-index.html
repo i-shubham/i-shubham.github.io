@@ -33,20 +33,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Navigation Component -->
+    <script src="../assets/js/navigation.js"></script>
+    
     <style>
-        /* Center navigation menu */
-        .navbar-nav {
-            margin-left: auto;
-            margin-right: auto;
-        }
-        #navbarImg {
-            height: 50px;
-            padding-left: 10px;
-        }
-        #navbarNav {
-            padding-left: 10px;
-        }
-        
         /* Coming Soon Styles */
         .coming-soon-hero {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -232,46 +223,7 @@
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container-fluid" id="mainDivNavBar">
-            <img id="navbarImg" src="../../assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
-            <!-- Brand/Logo -->
-            <a class="navbar-brand" href="#">
-                &nbsp;&nbsp;Shubham Mallick
-            </a>
-
-            <!-- Toggle Button for Mobile -->
-            <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <!-- Navbar Content -->
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Centered Menu -->
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="../index.html">Portfolio</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../travel/index.html">Travel-Blog</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="https://www.youtube.com/@i-shubham-mallick" target="_blank">YouTube</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="tech-index.html">Tech-Blog</a>
-                    </li>
-                </ul>
-                <!-- Social Media Icons -->
-                <div class="d-flex">
-                    <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" class="btn btn-outline-primary me-2" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
-                    <a href="https://www.youtube.com/@i-shubham-mallick" target="_blank" class="btn btn-outline-primary me-2" title="YouTube"><i class="fab fa-youtube"></i></a>
-                    <a href="https://www.instagram.com/i.shubham.01/" target="_blank" class="btn btn-outline-primary me-2" title="Instagram"><i class="fab fa-instagram"></i></a>
-                    <a href="#" class="btn btn-outline-info" title="Twitter"><i class="fab fa-twitter"></i></a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- Navigation will be automatically inserted here by navigation.js -->
 
     <!-- Coming Soon Hero Section -->
     <div class="coming-soon-hero">

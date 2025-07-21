@@ -34,78 +34,10 @@
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
+    <!-- Navigation Component -->
+    <script src="../assets/js/navigation.js"></script>
+    
     <style>
-        /* Center navigation menu */
-        .navbar-nav {
-            margin-left: auto;
-            margin-right: auto;
-        }
-        #navbarImg {
-            height: 50px;
-            padding-left: 10px;
-        }
-        #navbarNav {
-            padding-left: 10px;
-        }
-        
-        /* GPT Navigation Animation */
-        .gpt-icon {
-            display: inline-block;
-            animation: pulse-gpt 2s infinite;
-            margin-right: 5px;
-            font-size: 1.1em;
-        }
-        
-        .gpt-text {
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradient-shift 3s ease-in-out infinite;
-            font-weight: 600;
-        }
-        
-        @keyframes pulse-gpt {
-            0%, 100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(1.1);
-                opacity: 0.8;
-            }
-        }
-        
-        @keyframes gradient-shift {
-            0%, 100% {
-                background-position: 0% 50%;
-            }
-            50% {
-                background-position: 100% 50%;
-            }
-        }
-        
-        /* Hover effects */
-        .nav-link:hover .gpt-icon {
-            animation: bounce-gpt 0.6s ease-in-out;
-        }
-        
-        .nav-link:hover .gpt-text {
-            animation: gradient-shift 1s ease-in-out infinite;
-        }
-        
-        @keyframes bounce-gpt {
-            0%, 20%, 50%, 80%, 100% {
-                transform: translateY(0) scale(1);
-            }
-            40% {
-                transform: translateY(-3px) scale(1.1);
-            }
-            60% {
-                transform: translateY(-1px) scale(1.05);
-            }
-        }
 
         /* Coming Soon Styles */
         .coming-soon-hero {
@@ -465,52 +397,7 @@
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <div class="container-fluid" id="mainDivNavBar">
-            <img id="navbarImg" src="../../assets/img/profile-img.jpg" alt="" class="img-fluid rounded-circle">
-            <!-- Brand/Logo -->
-            <a class="navbar-brand" href="#">
-                &nbsp;&nbsp;Shubham Mallick
-            </a>
-
-            <!-- Toggle Button for Mobile -->
-            <button id="navBarExpandBtn" class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <!-- Navbar Content -->
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Centered Menu -->
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="../index.html">Portfolio</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../travel/index.html">Travel-Blog</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="https://www.youtube.com/@i-shubham-mallick" target="_blank">YouTube</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="../tech/tech-index.html">Tech-Blog</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="../gpt/index.html">
-                            <span class="gpt-icon">🤖</span>
-                            <span class="gpt-text">Open GPT</span>
-                        </a>
-                    </li>
-                </ul>
-                <!-- Social Media Icons -->
-                <div class="d-flex">
-                    <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" class="btn btn-outline-primary me-2" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
-                    <a href="https://www.youtube.com/@i-shubham-mallick" target="_blank" class="btn btn-outline-primary me-2" title="YouTube"><i class="fab fa-youtube"></i></a>
-                    <a href="https://www.instagram.com/i.shubham.01/" target="_blank" class="btn btn-outline-primary me-2" title="Instagram"><i class="fab fa-instagram"></i></a>
-                    <a href="#" class="btn btn-outline-info" title="Twitter"><i class="fab fa-twitter"></i></a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    <!-- Navigation will be automatically inserted here by navigation.js -->
 
     <!-- Coming Soon Hero Section -->
     <div class="coming-soon-hero">
