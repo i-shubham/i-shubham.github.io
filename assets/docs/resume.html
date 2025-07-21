@@ -30,16 +30,38 @@
             color: #2c3e50;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-size: 11px;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
         }
 
         .container {
             max-width: 850px;
             margin: 15px auto;
             background: white;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
-            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+            border-radius: 15px;
             overflow: hidden;
             position: relative;
+            animation: container-float 6s ease-in-out infinite;
+        }
+
+        @keyframes container-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
         }
 
         .container::before {
@@ -48,8 +70,14 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff);
+            height: 6px;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff, #5f27cd, #00d2d3);
+            animation: rainbow-shift 3s ease-in-out infinite;
+        }
+
+        @keyframes rainbow-shift {
+            0%, 100% { filter: hue-rotate(0deg); }
+            50% { filter: hue-rotate(30deg); }
         }
 
         .header {
@@ -58,6 +86,19 @@
             padding: 15px 15px 12px 15px;
             position: relative;
             overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 30% 70%, rgba(52, 152, 219, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(155, 89, 182, 0.1) 0%, transparent 50%);
+            pointer-events: none;
         }
 
         .header::after {
@@ -89,8 +130,8 @@
         }
 
         .profile-image {
-            width: 70px;
-            height: 75px;
+            width: 65px;
+            height: 60px;
             border-radius: 50%;
             object-fit: cover;
             border: 3px solid rgba(255,255,255,0.3);
@@ -123,18 +164,35 @@
             letter-spacing: -1px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
             padding-top: 10px;
+            background: linear-gradient(45deg, #ffffff, #f8f9fa, #e9ecef);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: name-glow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes name-glow {
+            0% { filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); }
+            100% { filter: drop-shadow(0 0 15px rgba(255,255,255,0.6)); }
         }
 
         .visa-badge {
-            background: #27ae60;
-            padding: 4px 8px;
-            border-radius: 15px;
+            background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085);
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 0.7em;
             font-weight: 600;
+            box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3);
+            animation: visa-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes visa-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
         }
 
         .title {
-            font-size: 1.1em;
+            font-size: 0.8em;
             opacity: 0.9;
             font-weight: 500;
         }
@@ -150,25 +208,64 @@
             display: flex;
             align-items: center;
             gap: 5px;
+            transition: transform 0.2s ease;
+        }
+
+        .contact-item:hover {
+            transform: translateX(3px);
+        }
+
+        .contact-item a {
+            transition: color 0.2s ease;
+        }
+
+        .contact-item a:hover {
+            color: #3498db !important;
+            text-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
         }
 
         .awards-ribbon {
-            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff);
             color: white;
-            padding: 3px 20px;
+            padding: 4px 20px;
             text-align: center;
             font-weight: 700;
             font-size: 0.75em;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            margin: 0 25px 5px 25px;
-            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            margin: 0 25px 2px 25px;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .awards-ribbon::before {
+            content: '🏆';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+        }
+
+        .awards-ribbon::after {
+            content: '🏆';
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+        }
+
+        .awards-ribbon span {
+            padding-left: 25px;
+            padding-right: 25px;
         }
 
         .content {
             display: grid;
             grid-template-columns: 2fr 1fr;
             gap: 10px;
-            padding: 5px 12px 2px 12px;
+            padding: 10px 12px 2px 12px
         }
 
         .main-content {
@@ -187,26 +284,51 @@
             color: #2c3e50;
             font-size: 1.1em;
             font-weight: 800;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 4px;
-            margin-bottom: 3px;
+            border-bottom: 3px solid;
+            border-image: linear-gradient(90deg, #3498db, #9b59b6, #e74c3c, #f39c12) 1;
+            padding-bottom: 2px;
+            padding-left: 8px;
+            margin-bottom: 2px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: relative;
+        }
+
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #3498db, #9b59b6);
+            border-radius: 2px;
         }
 
         .summary {
             font-size: 0.9em;
             line-height: 1.4;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 5px;
-            border-radius: 8px;
+            padding: 8px;
+            border-radius: 10px;
             border-left: 4px solid #3498db;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .summary::before {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5em;
+            opacity: 0.2;
         }
 
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
+            gap: 5px;
             margin: 5px 0;
         }
 
@@ -214,9 +336,27 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 2px;
-            border-radius: 6px;
+            border-radius: 8px;
             text-align: center;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
 
         .metric-number {
@@ -224,6 +364,13 @@
             font-weight: 800;
             display: block;
             line-height: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            animation: metric-glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes metric-glow {
+            0% { text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+            100% { text-shadow: 0 2px 8px rgba(255,255,255,0.4); }
         }
 
         .metric-label {
@@ -233,12 +380,32 @@
         }
 
         .experience-item {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 5px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 10px;
+            padding: 3px;
             margin-bottom: 8px;
             border-left: 4px solid #27ae60;
             position: relative;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .experience-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .experience-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 20px 20px 0;
+            border-color: transparent #27ae60 transparent transparent;
+            border-radius: 0 10px 0 0;
         }
         
         .job-header {
@@ -255,13 +422,19 @@
         }
         
         .company-logo {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
+            width: 35px;
+            height: 35px;
+            border-radius: 8px;
             object-fit: contain;
             background: white;
-            padding: 2px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 3px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .company-logo:hover {
+            transform: scale(1.1);
+            box-shadow: 0 5px 10px rgba(0,0,0,0.2);
         }
 
         .job-header {
@@ -274,13 +447,19 @@
         .job-title {
             font-size: 1em;
             font-weight: 700;
-            color: #704da6;
+            background: linear-gradient(45deg, #704da6, #9b59b6, #8e44ad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             line-height: 1.1;
         }
 
         .company {
             font-size: 1.2em;
-            color: #3498db;
+            background: linear-gradient(45deg, #3498db, #2980b9, #5dade2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-weight: 600;
         }
 
@@ -289,18 +468,20 @@
             font-size: 0.75em;
             font-weight: 600;
             background: white;
-            padding: 2px 6px;
+            padding: 2px 15px 2px 6px;
             border-radius: 10px;
         }
 
         .tech-stack {
-            background: #ecf0f1;
-            padding: 4px 8px;
-            border-radius: 12px;
+            background: linear-gradient(135deg, #ecf0f1 0%, #d5dbdb 100%);
+            padding: 6px 10px;
+            border-radius: 15px;
             font-size: 0.7em;
             color: #34495e;
             margin: 4px 0;
             font-style: italic;
+            border-left: 3px solid #3498db;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .achievements {
@@ -323,26 +504,62 @@
             position: absolute;
             left: 0;
             font-size: 1.1em;
+            animation: bullet-bounce 1s ease-in-out infinite;
+        }
+
+        @keyframes bullet-bounce {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(2px); }
         }
 
         .highlight {
             background: linear-gradient(120deg, #ffecd2 0%, #fcb69f 100%);
-            padding: 1px 3px;
-            border-radius: 3px;
+            padding: 2px 4px;
+            border-radius: 4px;
             font-weight: 700;
             color: #d35400;
+            box-shadow: 0 1px 3px rgba(211, 84, 0, 0.2);
+            animation: highlight-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes highlight-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
         }
 
         .skills-container {
-            background: #f8f9fa;
-            padding: 12px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skills-container::before {
+            position: absolute;
+            right: 15px;
+            top: 15px;
+            font-size: 2em;
+            opacity: 0.1;
         }
 
         .leadership-container {
-            background: #f8f9fa;
-            padding: 2px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 8px;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .leadership-container::before {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5em;
+            opacity: 0.2;
         }
 
         .skill-category {
@@ -350,7 +567,10 @@
         }
 
         .skill-category h4 {
-            color: #2c3e50;
+            background: linear-gradient(45deg, #2c3e50, #34495e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-size: 0.85em;
             margin-bottom: 4px;
             font-weight: 700;
@@ -363,38 +583,58 @@
         }
 
         .skill-tag {
-            background: linear-gradient(45deg, #3498db, #2980b9);
+            background: linear-gradient(45deg, #3498db, #2980b9, #9b59b6);
             color: white;
-            padding: 2px 5px;
-            border-radius: 8px;
+            padding: 3px 6px;
+            border-radius: 10px;
             font-size: 0.65em;
             font-weight: 600;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .skill-tag:hover {
+            transform: scale(1.05);
         }
 
         .education-item {
             display: flex;
             align-items: center;
-            gap: 5px;
-            padding: 2px;
-            margin-bottom: 6px;
-            background: #f8f9fa;
-            border-radius: 6px;
-            border-left: 3px solid #e74c3c;
+            gap: 8px;
+            padding: 6px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease;
+        }
+
+        .education-item:hover {
+            transform: translateX(3px);
         }
         
         .institute-logo {
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
             object-fit: contain;
             background: white;
-            padding: 2px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 3px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+            transition: transform 0.2s ease;
+        }
+
+        .institute-logo:hover {
+            transform: scale(1.1);
         }
 
         .degree {
             font-weight: 700;
-            color: #2c3e50;
+            background: linear-gradient(45deg, #2c3e50, #34495e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-size: 0.8em;
             line-height: 1.2;
         }
@@ -406,7 +646,10 @@
 
         .grade {
             font-weight: 700;
-            color: #27ae60;
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-size: 0.75em;
         }
 
@@ -417,10 +660,28 @@
 
         .award-item {
             background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-            padding: 6px 8px;
-            border-radius: 5px;
-            border-left: 3px solid #fdcb6e;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border-left: 4px solid #fdcb6e;
             font-size: 0.7em;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .award-item::before {
+            content: '🏆';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+            opacity: 0.3;
+        }
+
+        .award-item:hover {
+            transform: translateX(2px);
         }
         
         /* Override link styling for awards grid */
@@ -441,7 +702,10 @@
 
         .award-title {
             font-weight: 700;
-            color: #d35400;
+            background: linear-gradient(45deg, #d35400, #e67e22, #f39c12);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-size: 1.1em;
         }
 
@@ -688,13 +952,13 @@
         </header>
 
         <div class="awards-ribbon">
-            🏆 Qualcomm Hackathon Winner, Innovation Maestro, Super-Qualstar, Top 3 ML Contest | Apple/PwC Awardee | Microsoft/IBM Certified
+            <span>Qualcomm Hackathon Winner, Innovation Maestro, Super-Qualstar, Top 3 ML Contest | Apple/PwC Awardee | Microsoft/IBM Certified</span>
         </div>
 
         <div class="content">
             <div class="main-content">
                 <section>
-                    <h2 class="section-title">Executive Summary</h2>
+                    <h2 class="section-title">Executive Summary 💡</h2>
                     <div class="summary">
                         <strong>13+ years</strong> seasoned Engineering Leader specializing in scalable application and data platforms, ML/AI solutions, and high-performing team leadership. Delivered systems processing <strong>50M+ records daily</strong> with <strong>70% latency reduction</strong>. Expert in cloud migration, microservices architecture, and real-time analytics across Salesforce, Apple, Qualcomm, PwC ecosystems.
                     </div>
@@ -844,7 +1108,7 @@
 
             <div class="sidebar">
                 <section>
-                    <h2 class="section-title">Core Skills</h2>
+                    <h2 class="section-title">Core Skills ⚡</h2>
                     <div class="skills-container">
                         <div class="skill-category">
                             <h4>Big Data & Analytics</h4>
@@ -972,7 +1236,7 @@
                 </section>
 
                 <section>
-                    <h2 class="section-title">Leadership</h2>
+                    <h2 class="section-title">Leadership 👥</h2>
                     <div class="leadership-container">
                         <div style="font-size: 0.75em; line-height: 1.3;">
                             • <strong>Mentor:</strong> 50+ professionals across Apple, Qualcomm, IBM, PwC<br>
