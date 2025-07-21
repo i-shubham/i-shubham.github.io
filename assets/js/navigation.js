@@ -23,7 +23,7 @@ class Navigation {
         // Special handling for travel pages
         let travelUrl = `${basePath}travel/index.html`;
         if (path.includes('/travel/pages/')) {
-            travelUrl = '../../index.html'; // Go to travel/index.html from pages directory
+            travelUrl = '../index.html'; // This points to travel/index.html from pages directory
         }
         
         return [
