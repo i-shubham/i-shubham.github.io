@@ -5,6 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shubham Mallick - Data & Application Architect</title>
     <style>
+        /* Download Button Styles */
+        .download-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        .download-btn::before {
+            content: '📄';
+            font-size: 16px;
+        }
+
         /* Disable text selection */
         * {
             margin: 0;
@@ -14,6 +49,171 @@
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
+        }
+
+        /* PDF Generation Styles */
+        @media print {
+            body {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            .container {
+                margin: 0 !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                border: none !important;
+                overflow: visible !important;
+            }
+            
+            /* Force remove any border radius from all elements in PDF */
+            * {
+                border-radius: 0 !important;
+            }
+            
+            /* Specific container overrides */
+            .container, .container * {
+                border-radius: 0 !important;
+                border: none !important;
+            }
+            
+            /* Ensure container has no border radius in PDF */
+            .container {
+                border-radius: 0 !important;
+                border: none !important;
+                overflow: visible !important;
+            }
+            
+            .download-btn {
+                display: none !important;
+            }
+            
+            /* Preserve all gradients and colors in PDF */
+            .header {
+                background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
+            }
+            
+            .visa-badge {
+                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
+            }
+            
+            .awards-ribbon {
+                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
+            }
+            
+            .metric {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) !important;
+            }
+            
+            .experience-item {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            .skills-container {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            .education-item {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            .award-item {
+                background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
+            }
+            
+            .leadership-container {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            .summary {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            }
+            
+            /* Preserve text colors */
+            .name {
+                color: white !important;
+            }
+            
+            /* Remove gradient backgrounds for clean PDF printing */
+            .company {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #2c3e50 !important;
+                font-weight: 700 !important;
+                text-shadow: none !important;
+            }
+            
+            .job-title {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #e74c3c !important;
+                font-weight: 600 !important;
+                text-shadow: none !important;
+            }
+            
+            .degree {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #9b59b6 !important;
+                font-weight: 600 !important;
+                text-shadow: none !important;
+            }
+            
+            .grade {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #f39c12 !important;
+                font-weight: 600 !important;
+                text-shadow: none !important;
+            }
+            
+            .award-title {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #e74c3c !important;
+                font-weight: 700 !important;
+                text-shadow: none !important;
+            }
+            
+            .skill-category h4 {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #27ae60 !important;
+                font-weight: 700 !important;
+                text-shadow: none !important;
+            }
+            
+            /* Force override for gradient text elements */
+            [class*="company"], [class*="job-title"], [class*="degree"], [class*="grade"], [class*="award-title"] {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                text-shadow: none !important;
+            }
+            
+            /* Specific override for skill category headers */
+            .skill-category h4, .skill-category h4 * {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #27ae60 !important;
+                font-weight: 700 !important;
+                text-shadow: none !important;
+            }
         }
         
         /* Allow selection only for specific elements if needed */
@@ -50,7 +250,7 @@
 
         .container {
             max-width: 850px;
-            margin: 15px auto;
+            margin: 0 auto;
             background: white;
             box-shadow: 0 20px 40px rgba(0,0,0,0.25);
             border-radius: 15px;
@@ -1038,6 +1238,9 @@
   </script> -->
 </head>
 <body>
+    <!-- Download Resume Button -->
+    <button class="download-btn" onclick="downloadResume()">Download Resume</button>
+    
     <div class="container">
         <header class="header">
             <div class="header-content">
@@ -1361,5 +1564,142 @@
             </div>
         </div>
     </div>
+
+    <!-- PDF Generation Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        function downloadResume() {
+            // Hide the download button temporarily
+            const downloadBtn = document.querySelector('.download-btn');
+            downloadBtn.style.display = 'none';
+            
+            // Get the resume container
+            const element = document.querySelector('.container');
+            
+            // Temporarily fix gradient text elements for PDF
+            const gradientElements = element.querySelectorAll('.company, .job-title, .degree, .grade, .award-title, .skill-category h4');
+            const originalStyles = [];
+            
+            // Store original container styles
+            const originalContainerStyles = {
+                borderRadius: element.style.borderRadius,
+                border: element.style.border,
+                overflow: element.style.overflow
+            };
+            
+            // Remove border radius from container for PDF
+            element.style.borderRadius = '0';
+            element.style.border = 'none';
+            element.style.overflow = 'visible';
+            
+            gradientElements.forEach((el, index) => {
+                originalStyles[index] = {
+                    background: el.style.background,
+                    webkitBackgroundClip: el.style.webkitBackgroundClip,
+                    webkitTextFillColor: el.style.webkitTextFillColor,
+                    backgroundClip: el.style.backgroundClip
+                };
+                
+                // Force solid colors for PDF
+                el.style.background = 'none';
+                el.style.webkitBackgroundClip = 'unset';
+                el.style.webkitTextFillColor = 'unset';
+                el.style.backgroundClip = 'unset';
+                el.style.textShadow = 'none';
+                
+                // Set appropriate solid colors
+                if (el.classList.contains('company')) {
+                    el.style.color = '#2c3e50';
+                    el.style.fontWeight = '700';
+                } else if (el.classList.contains('job-title')) {
+                    el.style.color = '#e74c3c';
+                    el.style.fontWeight = '600';
+                } else if (el.classList.contains('degree')) {
+                    el.style.color = '#9b59b6';
+                    el.style.fontWeight = '600';
+                } else if (el.classList.contains('grade')) {
+                    el.style.color = '#f39c12';
+                    el.style.fontWeight = '600';
+                } else if (el.classList.contains('award-title')) {
+                    el.style.color = '#e74c3c';
+                    el.style.fontWeight = '700';
+                } else if (el.closest('.skill-category')) {
+                    el.style.color = '#27ae60';
+                    el.style.fontWeight = '700';
+                }
+            });
+            
+            // PDF options - NO MARGINS with better color preservation
+            const opt = {
+                margin: [0, 0, 0, 0],
+                filename: 'Shubham Mallick - Data and Application Architect.pdf',
+                image: { type: 'jpeg', quality: 1.0 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: document.documentElement.offsetWidth,
+                    windowHeight: document.documentElement.offsetHeight,
+                    logging: false,
+                    removeContainer: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: false
+                }
+            };
+            
+            // Generate and download PDF
+            html2pdf().set(opt).from(element).save().then(() => {
+                // Restore original styles
+                gradientElements.forEach((el, index) => {
+                    if (originalStyles[index]) {
+                        el.style.background = originalStyles[index].background;
+                        el.style.webkitBackgroundClip = originalStyles[index].webkitBackgroundClip;
+                        el.style.webkitTextFillColor = originalStyles[index].webkitTextFillColor;
+                        el.style.backgroundClip = originalStyles[index].backgroundClip;
+                        el.style.color = '';
+                        el.style.fontWeight = '';
+                        el.style.textShadow = '';
+                    }
+                });
+                
+                // Restore container styles
+                element.style.borderRadius = originalContainerStyles.borderRadius;
+                element.style.border = originalContainerStyles.border;
+                element.style.overflow = originalContainerStyles.overflow;
+                
+                // Show the download button again
+                downloadBtn.style.display = 'flex';
+            }).catch(error => {
+                console.error('PDF generation failed:', error);
+                
+                // Restore original styles on error too
+                gradientElements.forEach((el, index) => {
+                    if (originalStyles[index]) {
+                        el.style.background = originalStyles[index].background;
+                        el.style.webkitBackgroundClip = originalStyles[index].webkitBackgroundClip;
+                        el.style.webkitTextFillColor = originalStyles[index].webkitTextFillColor;
+                        el.style.backgroundClip = originalStyles[index].backgroundClip;
+                        el.style.color = '';
+                        el.style.fontWeight = '';
+                        el.style.textShadow = '';
+                    }
+                });
+                
+                // Restore container styles on error too
+                element.style.borderRadius = originalContainerStyles.borderRadius;
+                element.style.border = originalContainerStyles.border;
+                element.style.overflow = originalContainerStyles.overflow;
+                
+                downloadBtn.style.display = 'flex';
+            });
+        }
+    </script>
 </body>
 </html>
