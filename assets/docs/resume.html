@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shubham Mallick - Data & Application Architect</title>
     <style>
+        /* Disable text selection */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        /* Allow selection only for specific elements if needed */
+        .allow-select {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
         }
 
         body {
@@ -505,6 +518,123 @@
         var newPath = urlPath.replace(currentPage, newLink);
         window.history.replaceState(null, null, newPath);
       }
+    });
+  </script>
+  
+  <!-- Code Protection Script -->
+  <script>
+    // Disable right-click context menu
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Disable keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Disable Ctrl+U (View Source)
+      if (e.ctrlKey && e.key === 'u') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable F12 (Developer Tools)
+      if (e.key === 'F12') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable Ctrl+Shift+I (Developer Tools)
+      if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable Ctrl+Shift+C (Developer Tools)
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable Ctrl+S (Save Page)
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable Ctrl+P (Print)
+      if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        return false;
+      }
+      // Disable Ctrl+A (Select All)
+      if (e.ctrlKey && e.key === 'a') {
+        e.preventDefault();
+        return false;
+      }
+    });
+    
+    // Disable drag and drop
+    document.addEventListener('dragstart', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Disable text selection
+    document.addEventListener('selectstart', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Disable copy
+    document.addEventListener('copy', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Disable cut
+    document.addEventListener('cut', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Disable paste
+    document.addEventListener('paste', function(e) {
+      e.preventDefault();
+      return false;
+    });
+    
+    // Detect developer tools
+    let devtools = {open: false, orientation: null};
+    setInterval(() => {
+      const threshold = 160;
+      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+      
+      if (widthThreshold || heightThreshold) {
+        if (!devtools.open) {
+          devtools.open = true;
+          devtools.orientation = widthThreshold ? 'vertical' : 'horizontal';
+          // Show warning and redirect
+          document.body.innerHTML = '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
+        }
+      } else {
+        devtools.open = false;
+        devtools.orientation = null;
+      }
+    }, 500);
+    
+    // Disable view source via URL
+    if (window.location.href.includes('view-source:')) {
+      window.location.href = window.location.href.replace('view-source:', '');
+    }
+    
+    // Disable print screen
+    document.addEventListener('keyup', function(e) {
+      if (e.key === 'PrintScreen') {
+        e.preventDefault();
+        return false;
+      }
+    });
+    
+    // Disable save as
+    document.addEventListener('beforeunload', function(e) {
+      e.preventDefault();
+      e.returnValue = '';
     });
   </script>
 </head>
