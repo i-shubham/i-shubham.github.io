@@ -136,22 +136,57 @@
                 overflow: visible !important;
             }
             
-            /* Force remove any border radius from all elements in PDF */
-            * {
-                border-radius: 0 !important;
-            }
-            
-            /* Specific container overrides */
-            .container, .container * {
-                border-radius: 0 !important;
-                border: none !important;
-            }
-            
-            /* Ensure container has no border radius in PDF */
+            /* Preserve border radius for specific elements in PDF */
             .container {
-                border-radius: 0 !important;
+                border-radius: 15px !important;
                 border: none !important;
-                overflow: visible !important;
+                overflow: hidden !important;
+                box-shadow: none !important;
+            }
+            
+            /* Preserve border radius for specific elements */
+            .profile-image {
+                border-radius: 50% !important;
+            }
+            
+            .visa-badge {
+                border-radius: 20px !important;
+            }
+            
+            .awards-ribbon {
+                border-radius: 8px !important;
+            }
+            
+            .metric {
+                border-radius: 8px !important;
+            }
+            
+            .experience-item {
+                border-radius: 10px !important;
+            }
+            
+            .skills-container {
+                border-radius: 12px !important;
+            }
+            
+            .skill-tag {
+                border-radius: 10px !important;
+            }
+            
+            .education-item {
+                border-radius: 8px !important;
+            }
+            
+            .award-item {
+                border-radius: 8px !important;
+            }
+            
+            .summary {
+                border-radius: 10px !important;
+            }
+            
+            .leadership-container {
+                border-radius: 10px !important;
             }
             
             /* Preserve profile image round shape in PDF */
@@ -222,6 +257,11 @@
             /* Preserve all gradients and colors in PDF */
             .header {
                 background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
+                border-radius: 15px 15px 0 0 !important;
+            }
+            
+            .content {
+                border-radius: 0 0 15px 15px !important;
             }
             
             .visa-badge {
@@ -879,7 +919,7 @@
 
         .highlight {
             background: linear-gradient(120deg, #ffecd2 0%, #fcb69f 100%);
-            padding: 2px 4px;
+            padding: 2px 2px 2px 2px;
             border-radius: 4px;
             font-weight: 700;
             color: #d35400;
@@ -901,7 +941,7 @@
 
         .skills-container {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 15px;
+            padding: 5px 5px 5px 5px;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             position: relative;
@@ -935,7 +975,7 @@
         }
 
         .skill-category {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .skill-category h4 {
@@ -1143,35 +1183,42 @@
                 color-adjust: exact !important;
             }
             .experience-item {
-                background: #f8f9fa !important;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
                 border-left: 4px solid #27ae60 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
             }
             .skills-container {
-                background: #f8f9fa !important;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
             }
             .skill-tag {
-                background: #3498db !important;
+                background: linear-gradient(45deg, #3498db, #2980b9, #9b59b6) !important;
                 color: white !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
             }
             .education-item {
-                background: #f8f9fa !important;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
                 border-left: 3px solid #e74c3c !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
             }
             .award-item {
-                background: #fff3cd !important;
+                background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
                 border-left: 3px solid #fdcb6e !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            .summary {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+                border-left: 4px solid #3498db !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
@@ -1249,7 +1296,6 @@
             .awards-ribbon::before,
             .awards-ribbon::after,
             .metric::before,
-            .achievements li::before,
             .highlight::before,
             .skill-tag::before,
             .award-item::before,
@@ -1258,6 +1304,18 @@
             .education-item::after,
             .section-title::before {
                 display: none !important;
+            }
+            
+            /* Preserve achievements li::before for CMD+P printing */
+            .achievements li::before {
+                display: block !important;
+                content: '▸' !important;
+                color: #27ae60 !important;
+                font-weight: bold !important;
+                position: absolute !important;
+                left: 0 !important;
+                font-size: 1.1em !important;
+                text-shadow: none !important;
             }
             
             /* Remove all filters and shadows in print */
@@ -1300,121 +1358,121 @@
   <script src="../../assets/js/url-cleanup.js"></script>
   
   <!-- Code Protection Script -->
-  <script>
-    // Disable right-click context menu
-    document.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Disable keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-      // Disable Ctrl+U (View Source)
-      if (e.ctrlKey && e.key === 'u') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable F12 (Developer Tools)
-      if (e.key === 'F12') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable Ctrl+Shift+I (Developer Tools)
-      if (e.ctrlKey && e.shiftKey && e.key === 'I') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable Ctrl+Shift+C (Developer Tools)
-      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable Ctrl+S (Save Page)
-      if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable Ctrl+P (Print)
-      if (e.ctrlKey && e.key === 'p') {
-        e.preventDefault();
-        return false;
-      }
-      // Disable Ctrl+A (Select All)
-      if (e.ctrlKey && e.key === 'a') {
-        e.preventDefault();
-        return false;
-      }
-    });
-    
-    // Disable drag and drop
-    document.addEventListener('dragstart', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Disable text selection
-    document.addEventListener('selectstart', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Disable copy
-    document.addEventListener('copy', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Disable cut
-    document.addEventListener('cut', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Disable paste
-    document.addEventListener('paste', function(e) {
-      e.preventDefault();
-      return false;
-    });
-    
-    // Detect developer tools
-    let devtools = {open: false, orientation: null};
-    setInterval(() => {
-      const threshold = 160;
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-      
-      if (widthThreshold || heightThreshold) {
-        if (!devtools.open) {
-          devtools.open = true;
-          devtools.orientation = widthThreshold ? 'vertical' : 'horizontal';
-          // Show warning and redirect
-          document.body.innerHTML = '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
-        }
-      } else {
-        devtools.open = false;
-        devtools.orientation = null;
-      }
-    }, 500);
-    
-    // Disable view source via URL
-    if (window.location.href.includes('view-source:')) {
-      window.location.href = window.location.href.replace('view-source:', '');
-    }
-    
-    // Disable print screen
-    document.addEventListener('keyup', function(e) {
-      if (e.key === 'PrintScreen') {
-        e.preventDefault();
-        return false;
-      }
-    });
-    
-    // Disable save as
-    document.addEventListener('beforeunload', function(e) {
-      e.preventDefault();
-      e.returnValue = '';
-    });
-  </script>
+<!--  <script>-->
+<!--    // Disable right-click context menu-->
+<!--    document.addEventListener('contextmenu', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Disable keyboard shortcuts-->
+<!--    document.addEventListener('keydown', function(e) {-->
+<!--      // Disable Ctrl+U (View Source)-->
+<!--      if (e.ctrlKey && e.key === 'u') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable F12 (Developer Tools)-->
+<!--      if (e.key === 'F12') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable Ctrl+Shift+I (Developer Tools)-->
+<!--      if (e.ctrlKey && e.shiftKey && e.key === 'I') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable Ctrl+Shift+C (Developer Tools)-->
+<!--      if (e.ctrlKey && e.shiftKey && e.key === 'C') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable Ctrl+S (Save Page)-->
+<!--      if (e.ctrlKey && e.key === 's') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable Ctrl+P (Print)-->
+<!--      if (e.ctrlKey && e.key === 'p') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--      // Disable Ctrl+A (Select All)-->
+<!--      if (e.ctrlKey && e.key === 'a') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--    });-->
+<!--    -->
+<!--    // Disable drag and drop-->
+<!--    document.addEventListener('dragstart', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Disable text selection-->
+<!--    document.addEventListener('selectstart', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Disable copy-->
+<!--    document.addEventListener('copy', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Disable cut-->
+<!--    document.addEventListener('cut', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Disable paste-->
+<!--    document.addEventListener('paste', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      return false;-->
+<!--    });-->
+<!--    -->
+<!--    // Detect developer tools-->
+<!--    let devtools = {open: false, orientation: null};-->
+<!--    setInterval(() => {-->
+<!--      const threshold = 160;-->
+<!--      const widthThreshold = window.outerWidth - window.innerWidth > threshold;-->
+<!--      const heightThreshold = window.outerHeight - window.innerHeight > threshold;-->
+<!--      -->
+<!--      if (widthThreshold || heightThreshold) {-->
+<!--        if (!devtools.open) {-->
+<!--          devtools.open = true;-->
+<!--          devtools.orientation = widthThreshold ? 'vertical' : 'horizontal';-->
+<!--          // Show warning and redirect-->
+<!--          document.body.innerHTML = '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';-->
+<!--        }-->
+<!--      } else {-->
+<!--        devtools.open = false;-->
+<!--        devtools.orientation = null;-->
+<!--      }-->
+<!--    }, 500);-->
+<!--    -->
+<!--    // Disable view source via URL-->
+<!--    if (window.location.href.includes('view-source:')) {-->
+<!--      window.location.href = window.location.href.replace('view-source:', '');-->
+<!--    }-->
+<!--    -->
+<!--    // Disable print screen-->
+<!--    document.addEventListener('keyup', function(e) {-->
+<!--      if (e.key === 'PrintScreen') {-->
+<!--        e.preventDefault();-->
+<!--        return false;-->
+<!--      }-->
+<!--    });-->
+<!--    -->
+<!--    // Disable save as-->
+<!--    document.addEventListener('beforeunload', function(e) {-->
+<!--      e.preventDefault();-->
+<!--      e.returnValue = '';-->
+<!--    });-->
+<!--  </script>-->
 </head>
 <body>
     <!-- Download Resume Button -->
@@ -1494,10 +1552,11 @@
                         <div class="tech-stack">AWS • PySpark • Kafka • Redis • Python • Go • Airflow • GenAI • LLM • Agentforce • MySQL • NoSQL • Graph Database • EKS • S3 • Lambda • Docker • Kubernetes</div>
                         <ul class="achievements">
                             <li>Re-architected high-volume AWS applications to process <span class="highlight">10M+ transactions/day</span> with 99.9% uptime</li>
-                            <li>Enhanced application/database performance by <span class="highlight">50-60%</span> through GenAI integration and Agentforce prompt engineering</li>
                             <li>Built distributed microservices ticketing system, reducing response time by <span class="highlight">45%</span></li>
                             <li>Redesigned data pipelines achieving <span class="highlight">70% latency reduction</span> with Spark/EKS/Kafka</li>
-                            <li>Worked on CI/CD automation (EKS/Terraform/Jenkins), cutting deployment time by <span class="highlight">80%</span></li>
+                            <li>Worked on CI/CD automation (EKS/Terraform/Jenkins), cutting deployment time by <span class="highlight">70%</span></li>
+                            <li>Enhanced application/database performance by <span class="highlight">50-60%</span> through GenAI integration and Agentforce prompt engineering</li>
+                            <li>Worked on Agentforce performance engineering evaluation and achieved <span class="highlight">30-40%</span> improvement</li>
                         </ul>
                     </div>
 
@@ -1514,8 +1573,8 @@
                         </div>
                         <div class="tech-stack">Apple Cloud • AWS • Python • Django • Kafka • Redis • PySpark • Snowflake • Oracle • Docker • Kubernetes • EMR • EC2 • S3</div>
                         <ul class="achievements">
-                            <li>Led <span class="highlight">12-member team</span> in Supply-Chain CPT/MDAT projects, key player of GA application, awarded for go-live success</li>
-                            <li>Architected backend pipeline processing <span class="highlight">100GB+ daily</span> from Oracle DW to AWS for scalability</li>
+                            <li>Led <span class="highlight">12-member team</span> in Supply-Chain CPT projects, key player of GA application, awarded as key contributor</li>
+                            <li>Architected backend pipeline processing <span class="highlight">100GB+ daily</span> from Oracle DW to AWS, with distributed architecture</li>
                             <li>Built Kafka queues handling <span class="highlight">1M+ messages/hour</span> for near real-time data-streaming</li>
                             <li>Migrated data-lake to AWS, reducing storage costs by <span class="highlight">50%</span></li>
                             <li>Transformed monolith to microservices, improving scalability by <span class="highlight">300%</span></li>
@@ -1535,11 +1594,11 @@
                         </div>
                         <div class="tech-stack">Machine Learning • NLP • Big-Data • Spark • Python • HIVE • MapR DB • Kafka • TensorFlow • Keras • Snowflake</div>
                         <ul class="achievements">
-                            <li>Developed ML models for chipset forecasting with <span class="highlight">95% accuracy</span> using different ML Algorithms like XGBoost, LSTM, etc.</li>
-                            <li>Built GAN-based image models, improving quality by <span class="highlight">35%</span></li>
-                            <li>Optimized CPU/RAM utilization by <span class="highlight">25%</span> using ML algorithms</li>
-                            <li>Built Big-Data pipelines processing <span class="highlight">2TB+ daily</span> in Hadoop ecosystem</li>
-                            <li>Won Innovation Maestro, HaQkathon Winner, presented to CxO leadership</li>
+                            <li>Developed ML models for chipset forecasting with <span class="highlight">92% accuracy</span> using Algorithms like XGBoost, LSTM, NuralNetwork etc.</li>
+                            <li>Built GAN-based models, improving image quality by <span class="highlight">35%</span></li>
+                            <li>Optimized CPU/RAM usage utilization by <span class="highlight">25%</span> using ML algorithms</li>
+                            <li>Built Big-Data pipelines processing <span class="highlight">2TB+ daily</span> in Hadoop ecosystem using Spark / MapR DB</li>
+                            <li>Won Innovation Maestro, Super-Qualstar, and multiple Qualstars; HaQkathon Winner, presented prototype to CxO leadership</li>
                         </ul>
                     </div>
 
@@ -1556,7 +1615,7 @@
                         </div>
                         <div class="tech-stack">Azure Cloud • Azure Data Factory • Azure Service Bus • WCF • MongoDB • C#</div>
                         <ul class="achievements">
-                            <li>Led <span class="highlight">6-member team</span>, Azure migration for DB and Application completed 3 weeks early</li>
+                            <li>Led <span class="highlight">6-member team</span>, Azure migration for DB and Application completed weeks early from deadline</li>
                             <li>Migrated <span class="highlight">500GB+ data</span> with 99.9% integrity/accuracy, using Azure Data Factory, Service Bus, WCF, MongoDB, C#</li>
                         </ul>
                     </div>
@@ -1574,7 +1633,7 @@
                         </div>
                         <div class="tech-stack">Data Warehouse • SQL-Server / Oracle • SSIS • ETL • C# • ADO.NET • WCF • JavaScript • MongoDB • Python • jQuery • Bootstrap • HTML • CSS</div>
                         <ul class="achievements">
-                            <li>Built predictive search from <span class="highlight">billion+ rows</span> in 2-5 seconds, using SQL Server, C#, JavaScript, MongoDB, Python, jQuery, Bootstrap, HTML, CSS</li>
+                            <li>Built predictive search from <span class="highlight">billion+ rows</span> in 2-5 seconds [used C#, Python, jQuery, Bootstrap], tuned highly optimisations in DB</li>
                             <li>Performance tuned SSIS to load <span class="highlight">50M rows</span> within SLA</li>
                             <li>Won STAR Performer & multiple client appreciation awards</li>
                         </ul>
@@ -1605,9 +1664,11 @@
                     <h2 class="section-title">Core Skills ⚡</h2>
                     <div class="skills-container">
                         <div class="skill-category">
-                            <h4>Big Data & Analytics</h4>
+                            <h4>Database, Big-Data & Analytics</h4>
                             <div class="skill-tags">
-                                <span class="skill-tag">Hadoop</span>
+                                <span class="skill-tag">DB Internals</span>
+                                <span class="skill-tag">DB Tuning/Optimisations</span>
+                                <span class="skill-tag">MapR</span>
                                 <span class="skill-tag">Spark</span>
                                 <span class="skill-tag">HIVE</span>
                                 <span class="skill-tag">Kafka</span>
@@ -1616,6 +1677,7 @@
                                 <span class="skill-tag">Flink</span>
                                 <span class="skill-tag">NoSQL</span>
                                 <span class="skill-tag">MongoDB</span>
+                                <span class="skill-tag">Predictive Analytics</span>
                             </div>
                         </div>
                         <div class="skill-category">
@@ -1630,8 +1692,8 @@
                                 <span class="skill-tag">Neural Networks</span>
                                 <span class="skill-tag">GAN</span>
                                 <span class="skill-tag">LSTM</span>
-                                <span class="skill-tag">Agentforce</span>
                                 <span class="skill-tag">Langchain</span>
+                                <span class="skill-tag">Agentforce</span>
                             </div>
                         </div>
                         <div class="skill-category">
