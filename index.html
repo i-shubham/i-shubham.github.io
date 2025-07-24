@@ -119,9 +119,21 @@
       return false;
     });
 
-    // Detect developer tools
+    // Detect developer tools (mobile-friendly)
     let devtools = {open: false, orientation: null};
+    
+    // Check if device is mobile
+    function isMobile() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+             window.innerWidth <= 768;
+    }
+    
     setInterval(() => {
+      // Skip detection on mobile devices
+      if (isMobile()) {
+        return;
+      }
+      
       const threshold = 160;
       const widthThreshold = window.outerWidth - window.innerWidth > threshold;
       const heightThreshold = window.outerHeight - window.innerHeight > threshold;
