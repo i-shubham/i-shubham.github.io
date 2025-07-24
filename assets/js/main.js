@@ -258,7 +258,10 @@
 
 
 function showPortfolioDetails(src) {
-  portfolio_data = {
+  try {
+    console.log('showPortfolioDetails called with:', src);
+    
+    portfolio_data = {
     "sfdc_cop_hackathon": {
       "project_image": "assets/img/portfolio/sfdc_cop_hackathon.png",
       "project_category": "AI/ML",
@@ -342,15 +345,35 @@ function showPortfolioDetails(src) {
   var project_client = portfolio_data[src]['project_client'];
   var project_date = portfolio_data[src]['project_date'];
   var project_description = portfolio_data[src]['project_description'];
+  
+  // Store data in localStorage
   localStorage["project_image"] = project_image;
   localStorage["project_category"] = project_category;
   localStorage["project_client"] = project_client;
   localStorage["project_date"] = project_date;
   localStorage["project_description"] = project_description;
+  
+  console.log('Portfolio data stored:', {
+    image: project_image,
+    category: project_category,
+    client: project_client,
+    date: project_date,
+    description: project_description
+  });
   var link = 'portfolio_details.html';
-  var newLink = link.split('.html')[0];
-  window.history.replaceState(null, null, newLink);
-  window.open(newLink, '_blank').focus();       // Locally it might not work, but it'll work from Server (i.e., github). To run locally use "window.open(link, '_blank').focus();"
+  console.log('Opening portfolio details page:', link);
+  
+  // For local development, use the full filename
+  if (window.location.protocol === 'file:') {
+    console.log('Running locally, opening:', link);
+    window.open(link, '_blank').focus();
+  } else {
+    // For server deployment, use the clean URL
+    var newLink = link.split('.html')[0];
+    console.log('Running on server, opening:', newLink);
+    window.history.replaceState(null, null, newLink);
+    window.open(newLink, '_blank').focus();
+  }
 
   //    $.ajax({
   //    url: "assets/docs/portfolio_info.json", //the path of the file is replaced by File.json
@@ -372,5 +395,9 @@ function showPortfolioDetails(src) {
   //        }
   //    });
 
+  } catch (error) {
+    console.error('Error in showPortfolioDetails:', error);
+    alert('Error opening portfolio details. Please try again.');
+  }
 
 };
