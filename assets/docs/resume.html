@@ -400,7 +400,7 @@
                 -webkit-background-clip: unset !important;
                 -webkit-text-fill-color: unset !important;
                 background-clip: unset !important;
-                color: #f39c12 !important;
+                color: #27ae60 !important;
                 font-weight: 600 !important;
                 text-shadow: none !important;
             }
@@ -440,7 +440,7 @@
                 -webkit-background-clip: unset !important;
                 -webkit-text-fill-color: unset !important;
                 background-clip: unset !important;
-                color: #27ae60 !important;
+                color: #2c3e50 !important;
                 font-weight: 700 !important;
                 text-shadow: none !important;
             }
@@ -1856,7 +1856,8 @@
     </div>
 
     <!-- PDF Generation Script -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script> -->
+     <script src="../../assets/js/html2pdf.bundle.min.js"></script>
     <script>
         function downloadResume() {
             // Hide the download button temporarily
@@ -1908,13 +1909,13 @@
                     el.style.color = '#9b59b6';
                     el.style.fontWeight = '600';
                 } else if (el.classList.contains('grade')) {
-                    el.style.color = '#f39c12';
+                    el.style.color = '#27ae60';
                     el.style.fontWeight = '600';
                 } else if (el.classList.contains('award-title')) {
                     el.style.color = '#e74c3c';
                     el.style.fontWeight = '700';
-                } else if (el.closest('.skill-category')) {
-                    el.style.color = '#27ae60';
+                } else if (el.classList.contains('skill-category') && el.tagName === 'H4') {
+                    el.style.color = '#2c3e50';
                     el.style.fontWeight = '700';
                 }
             });
@@ -1923,9 +1924,9 @@
             const opt = {
                 margin: [0, 0, 0, 0],
                 filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                image: { type: 'jpeg', quality: 1.0 },
+                image: { type: 'jpeg', quality: 1.0, pixelRatio: 4, dpi: 900 },
                 html2canvas: { 
-                    scale: 2,
+                    scale: 4,
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
