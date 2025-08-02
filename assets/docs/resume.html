@@ -356,6 +356,42 @@
                 color-adjust: exact !important;
             }
             
+            .company {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #3498db !important;
+                font-weight: 600 !important;
+                font-size: 1.2em !important;
+                text-shadow: none !important;
+                color-adjust: exact !important;
+            }
+            
+            .job-title {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #704da6 !important;
+                font-weight: 700 !important;
+                font-size: 1em !important;
+                text-shadow: none !important;
+                color-adjust: exact !important;
+            }
+            
+            .degree {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                -webkit-text-fill-color: unset !important;
+                background-clip: unset !important;
+                color: #2c3e50 !important;
+                font-size: 0.8em !important;
+                line-height: 1.2 !important;
+                text-shadow: none !important;
+                color-adjust: exact !important;
+            }
+            
             .awards-ribbon {
                 background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3) !important;
                 color: white !important;
@@ -1867,7 +1903,7 @@
                     <div class="education-item">
                         <img src="../../assets/img/org/microsoft.jpeg" alt="Microsoft" class="institute-logo">
                         <div>
-                            <div class="degree">Microsoft Certified Professional</div>
+                            <div class="degree"><strong>Microsoft Certified Professional</strong></div>
                             <div class="institution">SQL Server (70-463)</div>
                             <div class="grade">✓ Certified</div>
                         </div>
@@ -1970,14 +2006,17 @@
                 
                 // Set appropriate solid colors
                 if (el.classList.contains('company')) {
-                    el.style.color = '#2c3e50';
-                    el.style.fontWeight = '700';
+                    el.style.color = '#3498db';
+                    el.style.fontWeight = '600';
+                    el.style.fontSize = '1.2em';
                 } else if (el.classList.contains('job-title')) {
-                    el.style.color = '#e74c3c';
-                    el.style.fontWeight = '600';
+                    el.style.color = '#704da6';
+                    el.style.fontWeight = '700';
+                    el.style.fontSize = '1em';
                 } else if (el.classList.contains('degree')) {
-                    el.style.color = '#9b59b6';
-                    el.style.fontWeight = '600';
+                    el.style.color = '#2c3e50';
+                    el.style.fontSize = '0.8em';
+                    el.style.lineHeight = '1.2';
                 } else if (el.classList.contains('grade')) {
                     el.style.color = '#27ae60';
                     el.style.fontWeight = '600';
@@ -1986,7 +2025,7 @@
                     el.style.fontWeight = '700';
                 } else if (el.classList.contains('skill-category') && el.tagName === 'H4') {
                     el.style.color = '#2c3e50';
-                    el.style.fontWeight = '700';
+                    el.style.fontWeight = '600';
                 }
             });
             
