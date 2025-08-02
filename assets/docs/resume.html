@@ -330,7 +330,74 @@
             
             .metric-label {
                 color: white !important;
-                font-size: 0.6em !important;
+                font-size: 0.7em !important;
+            }
+            
+            .metric {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                color: white !important;
+                padding: 2px !important;
+                border-radius: 8px !important;
+                text-align: center !important;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+                position: relative !important;
+                overflow: hidden !important;
+                color-adjust: exact !important;
+            }
+            
+            .metric-number {
+                font-size: 1.2em !important;
+                font-weight: 800 !important;
+                display: block !important;
+                line-height: 1 !important;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+                filter: drop-shadow(0 0 3px rgba(255,255,255,0.3)) !important;
+                color: white !important;
+                color-adjust: exact !important;
+            }
+            
+            .awards-ribbon {
+                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3) !important;
+                color: white !important;
+                padding: 4px 20px !important;
+                text-align: center !important;
+                font-weight: 700 !important;
+                font-size: 0.75em !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                margin: 0 25px 2px 25px !important;
+                border-radius: 8px !important;
+                position: relative !important;
+                overflow: hidden !important;
+                color-adjust: exact !important;
+            }
+            
+            .awards-ribbon::before {
+                content: '🏆' !important;
+                position: absolute !important;
+                left: 10px !important;
+                top: 50% !important;
+                transform: translateY(-50%) !important;
+                font-size: 1.2em !important;
+                filter: drop-shadow(0 0 3px rgba(255,255,255,0.5)) !important;
+                color-adjust: exact !important;
+            }
+            
+            .awards-ribbon::after {
+                content: '🏆' !important;
+                position: absolute !important;
+                right: 10px !important;
+                top: 50% !important;
+                transform: translateY(-50%) !important;
+                font-size: 1.2em !important;
+                filter: drop-shadow(0 0 3px rgba(255,255,255,0.5)) !important;
+                color-adjust: exact !important;
+            }
+            
+            .awards-ribbon span {
+                padding-left: 25px !important;
+                padding-right: 25px !important;
+                color: white !important;
+                color-adjust: exact !important;
             }
             
             .section-title {
@@ -743,7 +810,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 5px;
-            margin: 5px 0;
+            margin: 5px 0 0 0;
         }
 
         .metric {
@@ -774,7 +841,7 @@
         }
 
         .metric-number {
-            font-size: 1.4em;
+            font-size: 1.2em;
             font-weight: 800;
             display: block;
             line-height: 1;
@@ -783,7 +850,7 @@
         }
 
         .metric-label {
-            font-size: 0.65em;
+            font-size: 0.7em;
             opacity: 0.9;
             font-weight: 500;
         }
@@ -1160,9 +1227,9 @@
                 color-adjust: exact !important;
             }
             .awards-ribbon {
-                background: #ff6b35 !important;
+                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3) !important;
                 color: white !important;
-                box-shadow: none;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
@@ -1175,9 +1242,9 @@
                 color-adjust: exact !important;
             }
             .metric {
-                background: #667eea !important;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                 color: white !important;
-                box-shadow: none;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
