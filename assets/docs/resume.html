@@ -745,7 +745,7 @@
         .awards-ribbon {
             background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3);
             color: white;
-            padding: 4px 20px;
+            padding: 4px 10px;
             text-align: center;
             font-weight: 700;
             font-size: 0.75em;
@@ -777,15 +777,14 @@
         }
 
         .awards-ribbon span {
-            padding-left: 25px;
-            padding-right: 25px;
+            text-align: center;
         }
 
         .content {
             display: grid;
             grid-template-columns: 2fr 1fr;
             gap: 10px;
-            padding: 10px 12px 2px 12px
+            padding: 10px 8px 2px 8px
         }
 
         .main-content {
@@ -797,12 +796,12 @@
         .sidebar {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 20px;
         }
 
         .section-title {
             color: #2c3e50;
-            font-size: 1.1em;
+            font-size: 1.2em;
             font-weight: 800;
             border-bottom: 3px solid;
             border-image: linear-gradient(90deg, #3498db, #9b59b6, #e74c3c, #f39c12) 1;
@@ -829,7 +828,7 @@
             font-size: 0.9em;
             line-height: 1.4;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 8px;
+            padding: 5px;
             border-radius: 10px;
             border-left: 4px solid #3498db;
             position: relative;
@@ -849,7 +848,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 5px;
-            margin: 5px 0 0 0;
+            margin: 3px 0 0 0;
         }
 
         .metric {
@@ -1050,7 +1049,6 @@
 
         .skills-container {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 5px 2px 1px 5px;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             position: relative;
@@ -1092,22 +1090,6 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.08);
             position: relative;
             overflow: hidden;
-        }
-
-        .skill-group-item:nth-child(1) {
-            border-left-color: #2196f3;
-        }
-
-        .skill-group-item:nth-child(2) {
-            border-left-color: #9c27b0;
-        }
-
-        .skill-group-item:nth-child(3) {
-            border-left-color: #ff9800;
-        }
-
-        .skill-group-item:nth-child(4) {
-            border-left-color: #4caf50;
         }
 
         .skill-group-item::after {
@@ -1188,9 +1170,9 @@
         .education-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px;
-            margin-bottom: 8px;
+            gap: 5px;
+            padding: 4px;
+            margin-bottom: 3px;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-radius: 8px;
             border-left: 4px solid #e74c3c;
@@ -1370,23 +1352,6 @@
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
             }
-
-            .skill-group-item:nth-child(1) {
-                border-left-color: #2196f3 !important;
-            }
-
-            .skill-group-item:nth-child(2) {
-                border-left-color: #9c27b0 !important;
-            }
-
-            .skill-group-item:nth-child(3) {
-                border-left-color: #ff9800 !important;
-            }
-
-            .skill-group-item:nth-child(4) {
-                border-left-color: #4caf50 !important;
-            }
-
 
 
             .skill-group-title {
@@ -1638,7 +1603,7 @@
   <script src="../../assets/js/url-cleanup.js"></script>
   
 <!--   Code Protection Script -->
-  <script>
+  <!-- <script>
     // Disable right-click context menu
     document.addEventListener('contextmenu', function(e) {
       e.preventDefault();
@@ -1752,7 +1717,7 @@
       e.preventDefault();
       e.returnValue = '';
     });
-  </script>
+  </script> -->
 </head>
 <body>
     <!-- Download Resume Button -->
