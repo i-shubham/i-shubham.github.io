@@ -31,7 +31,7 @@ class Navigation {
             { id: 'travel', text: 'Travel-Blog', url: travelUrl, icon: 'fas fa-plane' },
             { id: 'youtube', text: 'YouTube', url: 'https://www.youtube.com/@i-shubham-mallick', icon: 'fab fa-youtube', external: true },
             { id: 'tech', text: 'Tech-Blog', url: `${basePath}tech/tech-index.html`, icon: 'fas fa-code' },
-            { id: 'gpt', text: 'Open GPT', url: `${basePath}gpt/gpt-index.html`, icon: 'fas fa-robot', special: true }
+            { id: 'gpt', text: 'Open-GPT', url: `${basePath}gpt/gpt-index.html`, icon: 'fas fa-robot', special: true }
         ];
     }
 
