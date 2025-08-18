@@ -159,6 +159,7 @@ HTML_TEMPLATE = '''
                 <option value="kotlin">Kotlin</option>
                 <option value="javascript">JavaScript</option>
                 <option value="rust">Rust</option>
+                <option value="text">Text</option>
             </select>
             <button onclick="runCode()" id="runBtn">▶ Run Code</button>
             <button onclick="clearOutput()">🗑 Clear Output</button>
@@ -280,6 +281,19 @@ fn main() {
     }
 }`,
                 filename: 'main.rs'
+            },
+            text: {
+                code: `This is a text document.
+
+You can write any text content here:
+- Notes
+- Documentation
+- Plain text
+- Lists
+- Paragraphs
+
+Feel free to use this for writing and editing text documents!`,
+                filename: 'document.txt'
             }
         };
         
@@ -714,6 +728,15 @@ def run_rust_code(code):
     except Exception as e:
         return {'error': str(e)}
 
+def run_text_code(code):
+    """Handle text content - simply return the text as output"""
+    try:
+        if not code.strip():
+            return {'output': '(Empty text document)'}
+        return {'output': code}
+    except Exception as e:
+        return {'error': str(e)}
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -741,7 +764,8 @@ def run_code():
         'java': run_java_code,
         'kotlin': run_kotlin_code,
         'javascript': run_javascript_code,
-        'rust': run_rust_code
+        'rust': run_rust_code,
+        'text': run_text_code
     }
     
     runner = runners.get(language, run_python_code)
