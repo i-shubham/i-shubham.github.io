@@ -216,7 +216,8 @@ int main() {
 int main() {
     printf("Hello, World!");
     for(int i = 0; i < 3; i++) {
-        printf("\\nCount: %d", i);
+        printf("  ");
+        printf("Count: %d", i);
     }
     return 0;
 }`,
@@ -667,10 +668,11 @@ def run_code():
     if not code.strip():
         return jsonify({'error': 'No code provided'})
     
-    # Security: Basic validation
-    dangerous_imports = ['os', 'subprocess', 'sys', 'eval', 'exec', '__import__']
-    if any(dangerous in code for dangerous in dangerous_imports):
-        return jsonify({'error': 'Potentially dangerous code detected'})
+    # Security: Basic validation (only for Python)
+    if language == 'python':
+        dangerous_imports = ['os', 'subprocess', 'sys', 'eval', 'exec', '__import__']
+        if any(dangerous in code for dangerous in dangerous_imports):
+            return jsonify({'error': 'Potentially dangerous code detected'})
     
     # Route to appropriate runner
     runners = {
