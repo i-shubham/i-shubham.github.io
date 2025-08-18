@@ -1,0 +1,500 @@
+from flask import Flask, render_template_string, request, jsonify
+import subprocess
+import tempfile
+import os
+import signal
+from threading import Timer
+
+app = Flask(__name__)
+
+# HTML template for the web interface with Monaco Editor
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Compiler</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #252526;
+            border-radius: 5px;
+        }
+        .editor-container {
+            flex: 1;
+            display: flex;
+            gap: 15px;
+            min-height: 0;
+        }
+        .editor-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .editor-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        #editor {
+            flex: 1;
+            min-height: 400px;
+        }
+        .output-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .output-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .output { 
+            flex: 1;
+            background: #1e1e1e; 
+            padding: 15px; 
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            overflow-y: auto;
+            color: #d4d4d4;
+        }
+        .output.error {
+            color: #f48771;
+        }
+        button { 
+            padding: 10px 20px; 
+            background: #0e639c; 
+            color: white; 
+            border: none; 
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background 0.2s;
+        }
+        button:hover { 
+            background: #1177bb; 
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        select { 
+            padding: 8px 12px; 
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 3px;
+            margin: 0 5px;
+        }
+        .loading {
+            color: #ffd700;
+        }
+        h1 {
+            margin: 0;
+            color: #fff;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Online Compiler</h1>
+            <label>Language:</label>
+            <select id="language">
+                <option value="python">Python</option>
+                <option value="cpp">C++</option>
+                <option value="java">Java</option>
+                <option value="javascript">JavaScript</option>
+            </select>
+            <button onclick="runCode()" id="runBtn">▶ Run Code</button>
+            <button onclick="clearOutput()">🗑 Clear Output</button>
+        </div>
+        
+        <div class="editor-container">
+            <div class="editor-panel">
+                <div class="editor-header">
+                    <span id="filename">main.py</span>
+                </div>
+                <div id="editor"></div>
+            </div>
+            
+            <div class="output-panel">
+                <div class="output-header">Output</div>
+                <div id="output" class="output">Output will appear here...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let editor;
+        
+        // Initialize Monaco Editor
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: `# Python example
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
+                language: 'python',
+                theme: 'vs-dark',
+                fontSize: 14,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 4,
+                insertSpaces: true
+            });
+        });
+        
+        // Language examples
+        const examples = {
+            python: {
+                code: `# Python example
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
+                filename: 'main.py'
+            },
+            cpp: {
+                code: `// C++ example
+#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "Hello, World!" << endl;
+    for(int i = 0; i < 3; i++) {
+        cout << "Count: " << i << endl;
+    }
+    return 0;
+}`,
+                filename: 'main.cpp'
+            },
+            java: {
+                code: `// Java example
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        for(int i = 0; i < 3; i++) {
+            System.out.println("Count: " + i);
+        }
+    }
+}`,
+                filename: 'Main.java'
+            },
+            javascript: {
+                code: `// JavaScript example
+console.log("Hello, World!");
+for(let i = 0; i < 3; i++) {
+    console.log(\`Count: \${i}\`);
+}`,
+                filename: 'main.js'
+            }
+        };
+        
+        // Handle language change
+        document.getElementById('language').addEventListener('change', function() {
+            const language = this.value;
+            const example = examples[language];
+            
+            if (editor) {
+                // Update editor language and content
+                monaco.editor.setModelLanguage(editor.getModel(), language);
+                editor.setValue(example.code);
+                
+                // Update filename
+                document.getElementById('filename').textContent = example.filename;
+            }
+        });
+        
+        async function runCode() {
+            if (!editor) {
+                alert('Editor not ready yet. Please wait a moment and try again.');
+                return;
+            }
+            
+            const code = editor.getValue();
+            const language = document.getElementById('language').value;
+            const output = document.getElementById('output');
+            const runBtn = document.getElementById('runBtn');
+            
+            // Update UI for running state
+            output.textContent = 'Running...';
+            output.className = 'output loading';
+            runBtn.disabled = true;
+            runBtn.textContent = '⏳ Running...';
+            
+            try {
+                const response = await fetch('/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code, language: language })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    output.textContent = result.error;
+                    output.className = 'output error';
+                } else {
+                    output.textContent = result.output || 'Program executed successfully (no output)';
+                    output.className = 'output';
+                }
+            } catch (error) {
+                output.textContent = 'Network Error: ' + error.message;
+                output.className = 'output error';
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = '▶ Run Code';
+            }
+        }
+        
+        function clearOutput() {
+            const output = document.getElementById('output');
+            output.textContent = 'Output will appear here...';
+            output.className = 'output';
+        }
+        
+        // Add keyboard shortcut for running code (Ctrl+Enter or Cmd+Enter)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+        });
+    </script>
+</body>
+</html>
+'''
+
+def timeout_handler(process):
+    """Kill process if it takes too long"""
+    try:
+        process.kill()
+    except:
+        pass
+
+def run_python_code(code):
+    """Execute Python code safely"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        process = subprocess.Popen(
+            ['python3', temp_file],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # Set timeout
+        timer = Timer(5.0, timeout_handler, [process])
+        timer.start()
+        
+        stdout, stderr = process.communicate()
+        timer.cancel()
+        
+        os.unlink(temp_file)
+        
+        if stderr:
+            return {'error': stderr}
+        return {'output': stdout}
+        
+    except Exception as e:
+        return {'error': str(e)}
+
+def run_cpp_code(code):
+    """Compile and execute C++ code"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
+            f.write(code)
+            cpp_file = f.name
+        
+        exe_file = cpp_file.replace('.cpp', '')
+        
+        # Compile
+        compile_process = subprocess.run(
+            ['g++', cpp_file, '-o', exe_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if compile_process.returncode != 0:
+            os.unlink(cpp_file)
+            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+        
+        # Execute
+        run_process = subprocess.run(
+            [exe_file],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        # Cleanup
+        os.unlink(cpp_file)
+        if os.path.exists(exe_file):
+            os.unlink(exe_file)
+        
+        if run_process.stderr:
+            return {'error': run_process.stderr}
+        return {'output': run_process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
+def run_java_code(code):
+    """Compile and execute Java code"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
+            f.write(code)
+            java_file = f.name
+        
+        # Extract class name from code
+        class_name = 'Main'  # Default
+        for line in code.split('\n'):
+            if 'public class' in line:
+                class_name = line.split('public class')[1].split('{')[0].strip()
+                break
+        
+        # Rename file to match class name
+        correct_file = java_file.replace('.java', f'/{class_name}.java')
+        os.makedirs(os.path.dirname(correct_file), exist_ok=True)
+        os.rename(java_file, correct_file)
+        
+        # Compile
+        compile_process = subprocess.run(
+            ['javac', correct_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if compile_process.returncode != 0:
+            os.unlink(correct_file)
+            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+        
+        # Execute
+        class_dir = os.path.dirname(correct_file)
+        run_process = subprocess.run(
+            ['java', '-cp', class_dir, class_name],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        # Cleanup
+        os.unlink(correct_file)
+        class_file = correct_file.replace('.java', '.class')
+        if os.path.exists(class_file):
+            os.unlink(class_file)
+        
+        if run_process.stderr:
+            return {'error': run_process.stderr}
+        return {'output': run_process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
+def run_javascript_code(code):
+    """Execute JavaScript code using Node.js"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+            f.write(code)
+            js_file = f.name
+        
+        process = subprocess.run(
+            ['node', js_file],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        os.unlink(js_file)
+        
+        if process.stderr:
+            return {'error': process.stderr}
+        return {'output': process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/run', methods=['POST'])
+def run_code():
+    data = request.get_json()
+    code = data.get('code', '')
+    language = data.get('language', 'python')
+    
+    if not code.strip():
+        return jsonify({'error': 'No code provided'})
+    
+    # Security: Basic validation
+    dangerous_imports = ['os', 'subprocess', 'sys', 'eval', 'exec', '__import__']
+    if any(dangerous in code for dangerous in dangerous_imports):
+        return jsonify({'error': 'Potentially dangerous code detected'})
+    
+    # Route to appropriate runner
+    runners = {
+        'python': run_python_code,
+        'cpp': run_cpp_code,
+        'java': run_java_code,
+        'javascript': run_javascript_code
+    }
+    
+    runner = runners.get(language, run_python_code)
+    result = runner(code)
+    
+    return jsonify(result)
+
+if __name__ == '__main__':
+    print("Starting online compiler server with Monaco Editor...")
+    print("Make sure you have the required compilers installed:")
+    print("- Python 3")
+    print("- g++ (for C++)")
+    print("- javac and java (for Java)")
+    print("- node (for JavaScript)")
+    
+    app.run(debug=True, host='0.0.0.0', port=5003)
