@@ -159,6 +159,7 @@ HTML_TEMPLATE = '''
                 <option value="kotlin">Kotlin</option>
                 <option value="javascript">JavaScript</option>
                 <option value="rust">Rust</option>
+                <option value="sql">SQL</option>
                 <option value="text">Text</option>
             </select>
             <button onclick="runCode()" id="runBtn">▶ Run Code</button>
@@ -294,6 +295,35 @@ You can write any text content here:
 
 Feel free to use this for writing and editing text documents!`,
                 filename: 'document.txt'
+            },
+            sql: {
+                code: `-- SQL example
+-- Create a sample table
+CREATE TABLE employees (
+    id INT PRIMARY KEY,
+    name VARCHAR(100),
+    department VARCHAR(50),
+    salary DECIMAL(10,2)
+);
+
+-- Insert sample data
+INSERT INTO employees VALUES (1, 'John Doe', 'Engineering', 75000.00);
+INSERT INTO employees VALUES (2, 'Jane Smith', 'Marketing', 65000.00);
+INSERT INTO employees VALUES (3, 'Bob Johnson', 'Engineering', 80000.00);
+
+-- Query the data
+SELECT * FROM employees;
+
+-- Group by department and show average salary
+SELECT department, AVG(salary) as avg_salary 
+FROM employees 
+GROUP BY department;
+
+-- Find employees with salary above average
+SELECT name, salary 
+FROM employees 
+WHERE salary > (SELECT AVG(salary) FROM employees);`,
+                filename: 'query.sql'
             }
         };
         
@@ -728,6 +758,82 @@ def run_rust_code(code):
     except Exception as e:
         return {'error': str(e)}
 
+def run_sql_code(code):
+    """Execute SQL code using SQLite"""
+    try:
+        import sqlite3
+        import tempfile
+        import os
+        
+        # Create a temporary SQLite database
+        db_path = tempfile.mktemp(suffix='.db')
+        
+        # Split the code into individual statements
+        statements = []
+        current_statement = ""
+        
+        for line in code.split('\n'):
+            line = line.strip()
+            if line.startswith('--'):  # Skip comments
+                continue
+            if line:  # Non-empty line
+                current_statement += line + " "
+                if line.endswith(';'):  # End of statement
+                    statements.append(current_statement.strip())
+                    current_statement = ""
+        
+        # Add any remaining statement without semicolon
+        if current_statement.strip():
+            statements.append(current_statement.strip())
+        
+        results = []
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        try:
+            for statement in statements:
+                if not statement.strip():
+                    continue
+                    
+                # Execute the statement
+                cursor.execute(statement)
+                
+                # If it's a SELECT statement, fetch results
+                if statement.strip().upper().startswith('SELECT'):
+                    rows = cursor.fetchall()
+                    if rows:
+                        # Get column names
+                        columns = [description[0] for description in cursor.description]
+                        results.append(f"Query: {statement}")
+                        results.append("Results:")
+                        results.append(" | ".join(columns))
+                        results.append("-" * (len(" | ".join(columns))))
+                        for row in rows:
+                            results.append(" | ".join(str(cell) for cell in row))
+                        results.append("")  # Empty line for separation
+                    else:
+                        results.append(f"Query: {statement}")
+                        results.append("No results returned.")
+                        results.append("")
+                else:
+                    # For non-SELECT statements, show affected rows
+                    results.append(f"Statement: {statement}")
+                    results.append(f"Rows affected: {cursor.rowcount}")
+                    results.append("")
+                    
+        except sqlite3.Error as e:
+            results.append(f"SQL Error: {str(e)}")
+        finally:
+            conn.close()
+            # Clean up the temporary database
+            if os.path.exists(db_path):
+                os.unlink(db_path)
+        
+        return {'output': '\n'.join(results)}
+        
+    except Exception as e:
+        return {'error': str(e)}
+
 def run_text_code(code):
     """Handle text content - simply return the text as output"""
     try:
@@ -765,6 +871,7 @@ def run_code():
         'kotlin': run_kotlin_code,
         'javascript': run_javascript_code,
         'rust': run_rust_code,
+        'sql': run_sql_code,
         'text': run_text_code
     }
     
@@ -783,5 +890,6 @@ if __name__ == '__main__':
     print("- kotlinc (for Kotlin)")
     print("- node (for JavaScript)")
     print("- cargo and rustc (for Rust)")
+    print("- sqlite3 (for SQL) - usually comes with Python")
     
     app.run(debug=True, host='0.0.0.0', port=5003)
