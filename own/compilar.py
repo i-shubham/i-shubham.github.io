@@ -142,6 +142,7 @@ HTML_TEMPLATE = '''
                 <option value="java">Java</option>
                 <option value="kotlin">Kotlin</option>
                 <option value="javascript">JavaScript</option>
+                <option value="rust">Rust</option>
             </select>
             <button onclick="runCode()" id="runBtn">▶ Run Code</button>
             <button onclick="clearOutput()">🗑 Clear Output</button>
@@ -213,9 +214,9 @@ int main() {
 #include <stdio.h>
 
 int main() {
-    printf("Hello, World!\\n");
+    printf("Hello, World!");
     for(int i = 0; i < 3; i++) {
-        printf("Count: %d\\n", i);
+        printf("\\nCount: %d", i);
     }
     return 0;
 }`,
@@ -250,6 +251,16 @@ for(let i = 0; i < 3; i++) {
     console.log(\`Count: \${i}\`);
 }`,
                 filename: 'main.js'
+            },
+            rust: {
+                code: `// Rust example
+fn main() {
+    println!("Hello, World!");
+    for i in 0..3 {
+        println!("Count: {}", i);
+    }
+}`,
+                filename: 'main.rs'
             }
         };
         
@@ -587,6 +598,62 @@ def run_javascript_code(code):
     except Exception as e:
         return {'error': str(e)}
 
+def run_rust_code(code):
+    """Compile and execute Rust code"""
+    try:
+        # Create a temporary directory for Cargo project
+        import tempfile
+        import shutil
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rs', delete=False) as f:
+            f.write(code)
+            rs_file = f.name
+        
+        temp_dir = tempfile.mkdtemp()
+        project_name = 'rust_project'
+        project_dir = os.path.join(temp_dir, project_name)
+        os.makedirs(project_dir)
+        
+        # Create Cargo.toml
+        cargo_toml = f'''[package]
+        name = "{project_name}"
+        version = "0.1.0"
+        edition = "2021"
+
+        [[bin]]
+        name = "main"
+        path = "src/main.rs"
+        '''
+        
+        with open(os.path.join(project_dir, 'Cargo.toml'), 'w') as f:
+            f.write(cargo_toml)
+        
+        # Create src directory and move the Rust file
+        src_dir = os.path.join(project_dir, 'src')
+        os.makedirs(src_dir)
+        shutil.move(rs_file, os.path.join(src_dir, 'main.rs'))
+        
+        # Compile and run
+        process = subprocess.run(
+            ['cargo', 'run', '--quiet'],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        
+        # Cleanup
+        shutil.rmtree(temp_dir)
+        
+        if process.returncode != 0:
+            return {'error': f'Compilation/Runtime Error:\n{process.stderr}'}
+        return {'output': process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -612,7 +679,8 @@ def run_code():
         'cpp': run_cpp_code,
         'java': run_java_code,
         'kotlin': run_kotlin_code,
-        'javascript': run_javascript_code
+        'javascript': run_javascript_code,
+        'rust': run_rust_code
     }
     
     runner = runners.get(language, run_python_code)
@@ -629,5 +697,6 @@ if __name__ == '__main__':
     print("- javac and java (for Java)")
     print("- kotlinc (for Kotlin)")
     print("- node (for JavaScript)")
+    print("- cargo and rustc (for Rust)")
     
     app.run(debug=True, host='0.0.0.0', port=5003)
