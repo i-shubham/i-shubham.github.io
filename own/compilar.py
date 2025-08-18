@@ -45,8 +45,8 @@ HTML_TEMPLATE = '''
         .editor-container {
             flex: 1;
             display: flex;
-            gap: 15px;
             min-height: 0;
+            position: relative;
         }
         .editor-panel {
             flex: 1;
@@ -55,6 +55,22 @@ HTML_TEMPLATE = '''
             background: #252526;
             border-radius: 5px;
             overflow: hidden;
+            min-width: 200px;
+        }
+        .resizer {
+            width: 4px;
+            background: #3e3e42;
+            cursor: col-resize;
+            position: relative;
+            margin: 0 5px;
+            border-radius: 2px;
+            transition: background 0.2s;
+        }
+        .resizer:hover {
+            background: #0e639c;
+        }
+        .resizer.dragging {
+            background: #0e639c;
         }
         .editor-header {
             background: #2d2d30;
@@ -155,6 +171,8 @@ HTML_TEMPLATE = '''
                 </div>
                 <div id="editor"></div>
             </div>
+            
+            <div class="resizer" id="resizer"></div>
             
             <div class="output-panel">
                 <div class="output-header">Output</div>
@@ -333,6 +351,47 @@ fn main() {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
                 runCode();
+            }
+        });
+        
+        // Draggable resizer functionality
+        const resizer = document.getElementById('resizer');
+        const editorPanel = document.querySelector('.editor-panel');
+        const outputPanel = document.querySelector('.output-panel');
+        const container = document.querySelector('.editor-container');
+        
+        let isResizing = false;
+        let startX, startWidth;
+        
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = editorPanel.offsetWidth;
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            
+            const deltaX = e.clientX - startX;
+            const newWidth = Math.max(200, Math.min(startWidth + deltaX, container.offsetWidth - 250));
+            
+            editorPanel.style.width = newWidth + 'px';
+            editorPanel.style.flex = 'none';
+            
+            // Trigger Monaco editor resize
+            if (editor) {
+                editor.layout();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('dragging');
+                document.body.style.cursor = '';
             }
         });
     </script>
