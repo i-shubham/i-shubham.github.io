@@ -1,3 +1,8 @@
+# brew install gcc
+# brew install kotlin
+# brew install node
+
+
 from flask import Flask, render_template_string, request, jsonify
 import subprocess
 import tempfile
@@ -133,7 +138,9 @@ HTML_TEMPLATE = '''
             <select id="language">
                 <option value="python">Python</option>
                 <option value="cpp">C++</option>
+                <option value="c">C</option>
                 <option value="java">Java</option>
+                <option value="kotlin">Kotlin</option>
                 <option value="javascript">JavaScript</option>
             </select>
             <button onclick="runCode()" id="runBtn">▶ Run Code</button>
@@ -201,6 +208,19 @@ int main() {
 }`,
                 filename: 'main.cpp'
             },
+            c: {
+                code: `// C example
+#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\\n");
+    for(int i = 0; i < 3; i++) {
+        printf("Count: %d\\n", i);
+    }
+    return 0;
+}`,
+                filename: 'main.c'
+            },
             java: {
                 code: `// Java example
 public class Main {
@@ -212,6 +232,16 @@ public class Main {
     }
 }`,
                 filename: 'Main.java'
+            },
+            kotlin: {
+                code: `// Kotlin example
+fun main() {
+    println("Hello, World!")
+    for (i in 0..2) {
+        println("Count: $i")
+    }
+}`,
+                filename: 'Main.kt'
             },
             javascript: {
                 code: `// JavaScript example
@@ -335,6 +365,49 @@ def run_python_code(code):
     except Exception as e:
         return {'error': str(e)}
 
+def run_c_code(code):
+    """Compile and execute C code"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False) as f:
+            f.write(code)
+            c_file = f.name
+        
+        exe_file = c_file.replace('.c', '')
+        
+        # Compile
+        compile_process = subprocess.run(
+            ['gcc', c_file, '-o', exe_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if compile_process.returncode != 0:
+            os.unlink(c_file)
+            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+        
+        # Execute
+        run_process = subprocess.run(
+            [exe_file],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        # Cleanup
+        os.unlink(c_file)
+        if os.path.exists(exe_file):
+            os.unlink(exe_file)
+        
+        if run_process.stderr:
+            return {'error': run_process.stderr}
+        return {'output': run_process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
 def run_cpp_code(code):
     """Compile and execute C++ code"""
     try:
@@ -433,6 +506,62 @@ def run_java_code(code):
     except Exception as e:
         return {'error': str(e)}
 
+def run_kotlin_code(code):
+    """Compile and execute Kotlin code"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.kt', delete=False) as f:
+            f.write(code)
+            kt_file = f.name
+        
+        # Extract class name from code (Kotlin files can have multiple classes)
+        class_name = 'MainKt'  # Default for top-level functions
+        
+        # Check if there's a main function
+        if 'fun main(' in code:
+            # For top-level main function, use MainKt
+            class_name = 'MainKt'
+        else:
+            # Look for class with main function
+            lines = code.split('\n')
+            for line in lines:
+                if 'class' in line and 'main' in code:
+                    class_name = line.split('class')[1].split('(')[0].split('{')[0].strip()
+                    break
+        
+        # Compile
+        compile_process = subprocess.run(
+            ['kotlinc', kt_file, '-include-runtime', '-d', 'output.jar'],
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        
+        if compile_process.returncode != 0:
+            os.unlink(kt_file)
+            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+        
+        # Execute
+        run_process = subprocess.run(
+            ['java', '-jar', 'output.jar'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        # Cleanup
+        os.unlink(kt_file)
+        if os.path.exists('output.jar'):
+            os.unlink('output.jar')
+        
+        if run_process.stderr:
+            return {'error': run_process.stderr}
+        return {'output': run_process.stdout}
+        
+    except subprocess.TimeoutExpired:
+        return {'error': 'Code execution timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
 def run_javascript_code(code):
     """Execute JavaScript code using Node.js"""
     try:
@@ -479,8 +608,10 @@ def run_code():
     # Route to appropriate runner
     runners = {
         'python': run_python_code,
+        'c': run_c_code,
         'cpp': run_cpp_code,
         'java': run_java_code,
+        'kotlin': run_kotlin_code,
         'javascript': run_javascript_code
     }
     
@@ -493,8 +624,10 @@ if __name__ == '__main__':
     print("Starting online compiler server with Monaco Editor...")
     print("Make sure you have the required compilers installed:")
     print("- Python 3")
+    print("- gcc (for C)")
     print("- g++ (for C++)")
     print("- javac and java (for Java)")
+    print("- kotlinc (for Kotlin)")
     print("- node (for JavaScript)")
     
     app.run(debug=True, host='0.0.0.0', port=5003)
