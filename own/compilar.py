@@ -3,7 +3,7 @@
 # brew install node
 
 
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, send_from_directory
 import subprocess
 import tempfile
 import os
@@ -145,7 +145,8 @@ HTML_TEMPLATE = '''
             color: #fff;
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script> -->
+    <script src="/monaco-editor/vs/loader.js"></script>
 </head>
 <body>
     <div class="container">
@@ -188,7 +189,8 @@ HTML_TEMPLATE = '''
         let editor;
         
         // Initialize Monaco Editor
-        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        // require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        require.config({ paths: { vs: '/monaco-editor/vs' }});
         require(['vs/editor/editor.main'], function () {
             editor = monaco.editor.create(document.getElementById('editor'), {
                 value: `# Python example
@@ -871,6 +873,10 @@ def run_text_code(code):
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
+
+@app.route('/monaco-editor/<path:filename>')
+def monaco_editor(filename):
+    return send_from_directory('monaco-editor', filename)
 
 @app.route('/run', methods=['POST'])
 def run_code():
