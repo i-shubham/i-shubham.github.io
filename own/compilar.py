@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import os
 import signal
+import time
 from threading import Timer
 
 app = Flask(__name__)
@@ -369,10 +370,12 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
                 const result = await response.json();
                 
                 if (result.error) {
-                    output.textContent = result.error;
+                    const executionTime = result.execution_time ? `\n\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = result.error + executionTime;
                     output.className = 'output error';
                 } else {
-                    output.textContent = result.output || 'Program executed successfully (no output)';
+                    const executionTime = result.execution_time ? `\n\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = (result.output || 'Program executed successfully (no output)') + executionTime;
                     output.className = 'output';
                 }
             } catch (error) {
@@ -457,6 +460,8 @@ def run_python_code(code):
             f.write(code)
             temp_file = f.name
         
+        start_time = time.time()
+        
         process = subprocess.Popen(
             ['python3', temp_file],
             stdout=subprocess.PIPE,
@@ -471,14 +476,16 @@ def run_python_code(code):
         stdout, stderr = process.communicate()
         timer.cancel()
         
+        execution_time = time.time() - start_time
+        
         os.unlink(temp_file)
         
         if stderr:
-            return {'error': stderr}
-        return {'output': stdout}
+            return {'error': stderr, 'execution_time': execution_time}
+        return {'output': stdout, 'execution_time': execution_time}
         
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_c_code(code):
     """Compile and execute C code"""
@@ -499,15 +506,17 @@ def run_c_code(code):
         
         if compile_process.returncode != 0:
             os.unlink(c_file)
-            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+            return {'error': f'Compilation Error:\n{compile_process.stderr}', 'execution_time': 0.0}
         
         # Execute
+        start_time = time.time()
         run_process = subprocess.run(
             [exe_file],
             capture_output=True,
             text=True,
             timeout=5
         )
+        execution_time = time.time() - start_time
         
         # Cleanup
         os.unlink(c_file)
@@ -515,13 +524,13 @@ def run_c_code(code):
             os.unlink(exe_file)
         
         if run_process.stderr:
-            return {'error': run_process.stderr}
-        return {'output': run_process.stdout}
+            return {'error': run_process.stderr, 'execution_time': execution_time}
+        return {'output': run_process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_cpp_code(code):
     """Compile and execute C++ code"""
@@ -542,15 +551,17 @@ def run_cpp_code(code):
         
         if compile_process.returncode != 0:
             os.unlink(cpp_file)
-            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+            return {'error': f'Compilation Error:\n{compile_process.stderr}', 'execution_time': 0.0}
         
         # Execute
+        start_time = time.time()
         run_process = subprocess.run(
             [exe_file],
             capture_output=True,
             text=True,
             timeout=5
         )
+        execution_time = time.time() - start_time
         
         # Cleanup
         os.unlink(cpp_file)
@@ -558,13 +569,13 @@ def run_cpp_code(code):
             os.unlink(exe_file)
         
         if run_process.stderr:
-            return {'error': run_process.stderr}
-        return {'output': run_process.stdout}
+            return {'error': run_process.stderr, 'execution_time': execution_time}
+        return {'output': run_process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_java_code(code):
     """Compile and execute Java code"""
@@ -595,16 +606,18 @@ def run_java_code(code):
         
         if compile_process.returncode != 0:
             os.unlink(correct_file)
-            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+            return {'error': f'Compilation Error:\n{compile_process.stderr}', 'execution_time': 0.0}
         
         # Execute
         class_dir = os.path.dirname(correct_file)
+        start_time = time.time()
         run_process = subprocess.run(
             ['java', '-cp', class_dir, class_name],
             capture_output=True,
             text=True,
             timeout=5
         )
+        execution_time = time.time() - start_time
         
         # Cleanup
         os.unlink(correct_file)
@@ -613,13 +626,13 @@ def run_java_code(code):
             os.unlink(class_file)
         
         if run_process.stderr:
-            return {'error': run_process.stderr}
-        return {'output': run_process.stdout}
+            return {'error': run_process.stderr, 'execution_time': execution_time}
+        return {'output': run_process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_kotlin_code(code):
     """Compile and execute Kotlin code"""
@@ -653,15 +666,17 @@ def run_kotlin_code(code):
         
         if compile_process.returncode != 0:
             os.unlink(kt_file)
-            return {'error': f'Compilation Error:\n{compile_process.stderr}'}
+            return {'error': f'Compilation Error:\n{compile_process.stderr}', 'execution_time': 0.0}
         
         # Execute
+        start_time = time.time()
         run_process = subprocess.run(
             ['java', '-jar', 'output.jar'],
             capture_output=True,
             text=True,
             timeout=5
         )
+        execution_time = time.time() - start_time
         
         # Cleanup
         os.unlink(kt_file)
@@ -669,13 +684,13 @@ def run_kotlin_code(code):
             os.unlink('output.jar')
         
         if run_process.stderr:
-            return {'error': run_process.stderr}
-        return {'output': run_process.stdout}
+            return {'error': run_process.stderr, 'execution_time': execution_time}
+        return {'output': run_process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_javascript_code(code):
     """Execute JavaScript code using Node.js"""
@@ -684,23 +699,25 @@ def run_javascript_code(code):
             f.write(code)
             js_file = f.name
         
+        start_time = time.time()
         process = subprocess.run(
             ['node', js_file],
             capture_output=True,
             text=True,
             timeout=5
         )
+        execution_time = time.time() - start_time
         
         os.unlink(js_file)
         
         if process.stderr:
-            return {'error': process.stderr}
-        return {'output': process.stdout}
+            return {'error': process.stderr, 'execution_time': execution_time}
+        return {'output': process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_rust_code(code):
     """Compile and execute Rust code"""
@@ -738,6 +755,7 @@ def run_rust_code(code):
         shutil.move(rs_file, os.path.join(src_dir, 'main.rs'))
         
         # Compile and run
+        start_time = time.time()
         process = subprocess.run(
             ['cargo', 'run', '--quiet'],
             cwd=project_dir,
@@ -745,18 +763,19 @@ def run_rust_code(code):
             text=True,
             timeout=15
         )
+        execution_time = time.time() - start_time
         
         # Cleanup
         shutil.rmtree(temp_dir)
         
         if process.returncode != 0:
-            return {'error': f'Compilation/Runtime Error:\n{process.stderr}'}
-        return {'output': process.stdout}
+            return {'error': f'Compilation/Runtime Error:\n{process.stderr}', 'execution_time': execution_time}
+        return {'output': process.stdout, 'execution_time': execution_time}
         
     except subprocess.TimeoutExpired:
-        return {'error': 'Code execution timed out'}
+        return {'error': 'Code execution timed out', 'execution_time': 0.0}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_sql_code(code):
     """Execute SQL code using SQLite"""
@@ -785,6 +804,8 @@ def run_sql_code(code):
         # Add any remaining statement without semicolon
         if current_statement.strip():
             statements.append(current_statement.strip())
+        
+        start_time = time.time()
         
         results = []
         conn = sqlite3.connect(db_path)
@@ -829,19 +850,23 @@ def run_sql_code(code):
             if os.path.exists(db_path):
                 os.unlink(db_path)
         
-        return {'output': '\n'.join(results)}
+        execution_time = time.time() - start_time
+        return {'output': '\n'.join(results), 'execution_time': execution_time}
         
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 def run_text_code(code):
     """Handle text content - simply return the text as output"""
     try:
+        start_time = time.time()
         if not code.strip():
-            return {'output': '(Empty text document)'}
-        return {'output': code}
+            execution_time = time.time() - start_time
+            return {'output': '(Empty text document)', 'execution_time': execution_time}
+        execution_time = time.time() - start_time
+        return {'output': code, 'execution_time': execution_time}
     except Exception as e:
-        return {'error': str(e)}
+        return {'error': str(e), 'execution_time': 0.0}
 
 @app.route('/')
 def index():
