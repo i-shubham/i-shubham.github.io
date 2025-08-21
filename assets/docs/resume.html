@@ -1651,12 +1651,45 @@
                'ontouchstart' in window;
     }
 
-    // Only apply desktop restrictions if not on mobile/tablet
+    // Check device types
     const isMobile = isMobileDevice();
     const isTablet = isTabletLandscape();
 
+    // DevTools detection - runs ALWAYS (even with mobile emulation)
+    function showWarning() {
+        document.body.innerHTML =  '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
+    }
+
+    function checkDevTools() {
+        const widthThreshold = 200;
+        const heightThreshold = 200;
+        
+        const widthDiff = window.outerWidth - window.innerWidth;
+        const heightDiff = window.outerHeight - window.innerHeight;
+        
+        // Account for normal browser chrome
+        const normalChromeHeight = 100;
+        const normalChromeWidth = 20;
+        
+        const suspiciousWidth = widthDiff > (normalChromeWidth + widthThreshold);
+        const suspiciousHeight = heightDiff > (normalChromeHeight + heightThreshold);
+        
+        if (suspiciousWidth || suspiciousHeight) {
+            showWarning();
+        }
+    }
+
+    // Start DevTools detection immediately (works regardless of mobile emulation)
+    let devToolsCheckInterval;
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            devToolsCheckInterval = setInterval(checkDevTools, 1000);
+        }, 2000);
+    });
+
+    // Apply other desktop restrictions only if not on mobile/tablet
     if (!isMobile && !isTablet) {
-        // Desktop-only restrictions
+        // Desktop-only restrictions (excluding DevTools detection which runs above)
 
         // Disable right-click context menu
         document.addEventListener('contextmenu', function(e) {
@@ -1738,73 +1771,7 @@
             return false;
         });
 
-        // Enhanced developer tools detection (desktop only)
-        let devtools = {open: false, orientation: null};
-        let detectionCount = 0;
-        
-        function checkDevTools() {
-            const widthThreshold = 200; // Increased threshold
-            const heightThreshold = 200; // Increased threshold
-            
-            // More sophisticated detection
-            const widthDiff = window.outerWidth - window.innerWidth;
-            const heightDiff = window.outerHeight - window.innerHeight;
-            
-            // Account for normal browser chrome (address bar, etc.)
-            const normalChromeHeight = 100; // Typical browser chrome height
-            const normalChromeWidth = 20; // Typical browser chrome width
-            
-            const suspiciousWidth = widthDiff > (normalChromeWidth + widthThreshold);
-            const suspiciousHeight = heightDiff > (normalChromeHeight + heightThreshold);
-            
-            if (suspiciousWidth || suspiciousHeight) {
-                detectionCount++;
-                // Require multiple detections to avoid false positives
-                if (detectionCount > 3 && !devtools.open) {
-                    devtools.open = true;
-                    devtools.orientation = suspiciousWidth ? 'vertical' : 'horizontal';
-                    showWarning();
-                }
-            } else {
-                detectionCount = Math.max(0, detectionCount - 1);
-                devtools.open = false;
-                devtools.orientation = null;
-            }
-        }
-
-        function showWarning() {
-            document.body.innerHTML =  '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
-        }
-
-        // Console detection
-        function detectConsole() {
-            let devtools = {
-                open: false,
-                orientation: null
-            };
-            const threshold = 160;
-            
-            setInterval(() => {
-                if (window.outerHeight - window.innerHeight > threshold || 
-                    window.outerWidth - window.innerWidth > threshold) {
-                    if (!devtools.open) {
-                        devtools.open = true;
-                        console.log('Developer tools detected');
-                        // Additional console-specific detection can be added here
-                    }
-                } else {
-                    devtools.open = false;
-                }
-            }, 1000);
-        }
-
-        // Start detection after page load
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                setInterval(checkDevTools, 1000);
-                detectConsole();
-            }, 2000); // Delay to avoid false positives during initial load
-        });
+        // Other desktop-only restrictions are handled above
 
         // Disable print screen
         document.addEventListener('keyup', function(e) {
@@ -1832,15 +1799,31 @@
         window.location.href = window.location.href.replace('view-source:', '');
     }
 
-    // Show device type for testing
+    // Show device type and DevTools detection status for testing
     document.addEventListener('DOMContentLoaded', function() {
         const deviceInfo = document.createElement('div');
         deviceInfo.style.cssText = 'position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000;';
-        deviceInfo.innerHTML = `
-            Device: ${isMobile ? 'Mobile' : isTablet ? 'Tablet' : 'Desktop'}<br>
-            Screen: ${window.screen.width}x${window.screen.height}<br>
-            Touch: ${('ontouchstart' in window) ? 'Yes' : 'No'}
-        `;
+        
+        function updateDeviceInfo() {
+            const widthDiff = window.outerWidth - window.innerWidth;
+            const heightDiff = window.outerHeight - window.innerHeight;
+            const devToolsOpen = widthDiff > 220 || heightDiff > 300;
+            
+            deviceInfo.innerHTML = `
+                Device: ${isMobile ? 'Mobile' : isTablet ? 'Tablet' : 'Desktop'}<br>
+                Screen: ${window.screen.width}x${window.screen.height}<br>
+                Touch: ${('ontouchstart' in window) ? 'Yes' : 'No'}<br>
+                DevTools: ${devToolsOpen ? '⚠️ DETECTED' : '✅ Clear'}<br>
+                Dimensions: ${widthDiff}x${heightDiff} diff<br>
+                Restrictions: ${(!isMobile && !isTablet) ? 'Active' : 'Limited'}<br>
+                DevTools Check: Always Active
+            `;
+        }
+        
+        updateDeviceInfo();
+        // Update device info every second
+        setInterval(updateDeviceInfo, 1000);
+        
         document.body.appendChild(deviceInfo);
     });
 </script>
