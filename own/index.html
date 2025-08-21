@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Compiler</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #252526;
+            border-radius: 5px;
+        }
+        .editor-container {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+            position: relative;
+        }
+        .question-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+            min-width: 250px;
+            max-width: 500px;
+        }
+        .editor-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+            min-width: 300px;
+        }
+        .resizer {
+            width: 4px;
+            background: #3e3e42;
+            cursor: col-resize;
+            position: relative;
+            margin: 0 5px;
+            border-radius: 2px;
+            transition: background 0.2s;
+        }
+        .resizer:hover {
+            background: #0e639c;
+        }
+        .resizer.dragging {
+            background: #0e639c;
+        }
+        .question-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+            color: #f4d03f;
+        }
+        .editor-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        #editor {
+            flex: 1;
+            min-height: 400px;
+        }
+        .output-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .output-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+                .question-content {
+            flex: 1;
+            background: #1e1e1e;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #d4d4d4;
+        }
+        .question-placeholder {
+            color: #888;
+            text-align: center;
+            margin-top: 50px;
+        }
+        .question-placeholder ul {
+            text-align: left;
+            display: inline-block;
+            margin: 15px 0;
+        }
+        .question-content h1, .question-content h2, .question-content h3 {
+            color: #ffffff;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .question-content h1 {
+            font-size: 20px;
+            border-bottom: 2px solid #0e639c;
+            padding-bottom: 5px;
+        }
+        .question-content h2 {
+            font-size: 18px;
+            color: #f4d03f;
+        }
+        .question-content h3 {
+            font-size: 16px;
+            color: #85c1e9;
+        }
+        .question-content pre {
+            background: #2d2d30;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #0e639c;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        .question-content code {
+            background: #2d2d30;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        .question-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .question-content .example {
+            background: #2d2d30;
+            border-left: 4px solid #27ae60;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .question-content .constraints {
+            background: #2d2d30;
+            border-left: 4px solid #e67e22;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .output {
+            flex: 1;
+            background: #1e1e1e;
+            padding: 15px;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            overflow-y: auto;
+            color: #d4d4d4;
+        }
+        .output.error {
+            color: #f48771;
+        }
+        button { 
+            padding: 10px 20px; 
+            background: #0e639c; 
+            color: white; 
+            border: none; 
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background 0.2s;
+        }
+        button:hover { 
+            background: #1177bb; 
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        select { 
+            padding: 8px 12px; 
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 3px;
+            margin: 0 5px;
+        }
+        .loading {
+            color: #ffd700;
+        }
+        h1 {
+            margin: 0;
+            color: #fff;
+        }
+        .api-link {
+            margin-left: auto;
+            color: #0e639c;
+            text-decoration: none;
+            padding: 8px 15px;
+            border: 1px solid #0e639c;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+        .api-link:hover {
+            background: #0e639c;
+            color: white;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-left: auto;
+        }
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+            margin-right: 15px;
+            padding: 8px 12px;
+            background: #2d2d30;
+            border-radius: 20px;
+            border: 1px solid #3e3e42;
+        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid #0e639c;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .user-info span {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .logout-btn {
+            padding: 4px 8px !important;
+            background: #e74c3c !important;
+            font-size: 12px !important;
+            margin: 0 !important;
+        }
+        .logout-btn:hover {
+            background: #c0392b !important;
+        }
+        .guest-mode {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+            margin-right: 15px;
+            color: #888;
+            font-size: 14px;
+        }
+        .login-link {
+            color: #0e639c;
+            text-decoration: none;
+            padding: 6px 12px;
+            border: 1px solid #0e639c;
+            border-radius: 15px;
+            transition: all 0.2s;
+            font-size: 12px;
+        }
+        .login-link:hover {
+            background: #0e639c;
+            color: white;
+        }
+        .stats-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .stats-content {
+            background: #252526;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid #3e3e42;
+        }
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .stats-header h2 {
+            color: #fff;
+            margin: 0;
+        }
+        .close-stats {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .stat-item {
+            background: #2d2d30;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #0e639c;
+        }
+        .stat-label {
+            color: #f4d03f;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            color: #fff;
+            font-size: 18px;
+        }
+        .language-tag {
+            display: inline-block;
+            background: #0e639c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+    <!-- <script src="../monaco-editor/vs/loader.js"></script> -->
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Online Compiler (FastAPI)</h1>
+            
+            <!-- User Profile Section -->
+            <div class="user-profile" id="userProfile" style="display: none;">
+                <img id="userPicture" class="user-avatar" alt="User Avatar">
+                <div class="user-info">
+                    <span id="userName">Guest User</span>
+                    <button onclick="logout()" class="logout-btn">🚪 Logout</button>
+                </div>
+            </div>
+            
+            <!-- Guest Mode Section -->
+            <div class="guest-mode" id="guestMode">
+                <span>👤 Guest Mode</span>
+                <a href="/auth" class="login-link">🔑 Sign In</a>
+            </div>
+            
+            <div class="controls">
+                <button onclick="loadQuestion()" id="loadQuestionBtn">📝 Load Question</button>
+                <button onclick="loadSampleQuestion()">📚 Sample Question</button>
+                <button onclick="clearQuestion()">🗑 Clear Question</button>
+                <label>Language:</label>
+                <select id="language">
+                    <option value="python">Python</option>
+                    <option value="cpp">C++</option>
+                    <option value="c">C</option>
+                    <option value="java">Java</option>
+                    <option value="kotlin">Kotlin</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="rust">Rust</option>
+                    <option value="sql">SQL</option>
+                    <option value="text">Text</option>
+                </select>
+                <button onclick="runCode()" id="runBtn">▶ Run Code</button>
+                <button onclick="clearOutput()">🗑 Clear Output</button>
+                <button onclick="showStats()" id="statsBtn" style="display: none;">📊 Stats</button>
+                <a href="/docs" target="_blank" class="api-link">📚 API Docs</a>
+            </div>
+        </div>
+        
+        <div class="editor-container">
+            <div class="question-panel">
+                <div class="question-header">Question</div>
+                <div id="question" class="question-content">
+                    <div class="question-placeholder">
+                        📝 Click "Load Question" to display a problem statement here.
+                        <br><br>
+                        Questions can contain:
+                        <ul>
+                            <li>Problem descriptions</li>
+                            <li>Input/Output examples</li>
+                            <li>Images and diagrams</li>
+                            <li>Constraints and notes</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="resizer" id="resizer1"></div>
+            
+            <div class="editor-panel">
+                <div class="editor-header">
+                    <span id="filename">main.py</span>
+                </div>
+                <div id="editor"></div>
+            </div>
+            
+            <div class="resizer" id="resizer2"></div>
+            
+            <div class="output-panel">
+                <div class="output-header">Output</div>
+                <div id="output" class="output">Output will appear here...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div class="stats-modal" id="statsModal">
+        <div class="stats-content">
+            <div class="stats-header">
+                <h2>📊 Your Coding Stats</h2>
+                <button class="close-stats" onclick="closeStats()">×</button>
+            </div>
+            <div id="statsContent">
+                <div class="stat-item">
+                    <div class="stat-label">Total Executions</div>
+                    <div class="stat-value" id="totalExecutions">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Languages Used</div>
+                    <div class="stat-value" id="languagesUsed">-</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Recent Activity</div>
+                    <div id="recentActivity">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let editor;
+        let currentUser = null;
+        let authToken = null;
+        
+        // Authentication functions
+        async function checkAuthentication() {
+            // Check for auth token from localStorage
+            authToken = localStorage.getItem('authToken');
+            
+            if (authToken) {
+                try {
+                    const response = await fetch('/auth/verify', {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        currentUser = data.user;
+                        updateUserInterface();
+                    } else {
+                        // Token invalid, clear it
+                        clearAuthToken();
+                    }
+                } catch (error) {
+                    console.log('Auth check failed:', error);
+                    clearAuthToken();
+                }
+            }
+            
+            updateUserInterface();
+        }
+        
+        function updateUserInterface() {
+            const userProfile = document.getElementById('userProfile');
+            const guestMode = document.getElementById('guestMode');
+            const statsBtn = document.getElementById('statsBtn');
+            
+            if (currentUser) {
+                // Show user profile
+                userProfile.style.display = 'flex';
+                guestMode.style.display = 'none';
+                statsBtn.style.display = 'inline-block';
+                
+                // Update user info
+                document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
+                if (currentUser.profile_picture) {
+                    document.getElementById('userPicture').src = currentUser.profile_picture;
+                } else {
+                    // Generate a simple avatar based on initials
+                    const initials = (currentUser.full_name || currentUser.username)
+                        .split(' ')
+                        .map(name => name.charAt(0))
+                        .join('')
+                        .toUpperCase()
+                        .substring(0, 2);
+                    
+                    document.getElementById('userPicture').src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background: %230e639c"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-family="Arial" font-size="40" fill="white">${initials}</text></svg>`;
+                }
+            } else {
+                // Show guest mode
+                userProfile.style.display = 'none';
+                guestMode.style.display = 'flex';
+                statsBtn.style.display = 'none';
+            }
+        }
+        
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+        
+        function clearAuthToken() {
+            authToken = null;
+            currentUser = null;
+            localStorage.removeItem('authToken');
+            document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        }
+        
+        async function logout() {
+            try {
+                await fetch('/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+            } catch (error) {
+                console.log('Logout request failed:', error);
+            }
+            
+            clearAuthToken();
+            updateUserInterface();
+            
+            // Redirect to auth page
+            window.location.href = '/auth';
+        }
+        
+        async function showStats() {
+            if (!currentUser) {
+                alert('Please sign in to view your stats.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/user/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const stats = await response.json();
+                    displayStats(stats);
+                } else {
+                    alert('Failed to load stats. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                alert('Failed to load stats. Please try again.');
+            }
+        }
+        
+        function displayStats(stats) {
+            document.getElementById('totalExecutions').textContent = stats.total_executions;
+            
+            // Display languages as tags
+            const languagesContainer = document.getElementById('languagesUsed');
+            languagesContainer.innerHTML = '';
+            stats.languages_used.forEach(lang => {
+                const tag = document.createElement('span');
+                tag.className = 'language-tag';
+                tag.textContent = lang;
+                languagesContainer.appendChild(tag);
+            });
+            
+            // Display recent activity
+            const activityContainer = document.getElementById('recentActivity');
+            activityContainer.innerHTML = '';
+            
+            if (stats.recent_activity.length === 0) {
+                activityContainer.innerHTML = '<p style="color: #888;">No recent activity</p>';
+            } else {
+                stats.recent_activity.forEach(activity => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'margin: 8px 0; padding: 8px; background: #1e1e1e; border-radius: 4px; font-size: 12px;';
+                    
+                    const statusColor = activity.status === 'success' ? '#27ae60' : '#e74c3c';
+                    const date = new Date(activity.created_at).toLocaleString();
+                    
+                    item.innerHTML = `
+                        <span style="color: ${statusColor};">●</span> 
+                        <strong>${activity.language}</strong> - ${activity.status} 
+                        <span style="color: #888; float: right;">${date}</span>
+                        <br>
+                        <span style="color: #888;">⏱ ${activity.execution_time}s</span>
+                    `;
+                    activityContainer.appendChild(item);
+                });
+            }
+            
+            // Show modal
+            document.getElementById('statsModal').style.display = 'flex';
+        }
+        
+        function closeStats() {
+            document.getElementById('statsModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('statsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeStats();
+            }
+        });
+
+        // Initialize Monaco Editor
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        // require.config({ paths: { vs: '../monaco-editor/vs' }});
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: `# Python example
+                    print("Hello, World!")
+                    for i in range(3):
+                        print(f"Count: {i}")`,
+                language: 'python',
+                theme: 'vs-dark',
+                fontSize: 14,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 4,
+                insertSpaces: true
+            });
+            
+            // Check authentication after editor is initialized
+            checkAuthentication();
+        });
+        
+        // Language examples
+        const examples = {
+            python: {
+                code: `# Python example
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
+                filename: 'main.py'
+            },
+            cpp: {
+                code: `// C++ example
+#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "Hello, World!" << endl;
+    for(int i = 0; i < 3; i++) {
+        cout << "Count: " << i << endl;
+    }
+    return 0;
+}`,
+                filename: 'main.cpp'
+            },
+            c: {
+                code: `// C example
+#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\\n");
+    for(int i = 0; i < 3; i++) {
+        printf("Count: %d\\n", i);
+    }
+    return 0;
+}`,
+                filename: 'main.c'
+            },
+            java: {
+                code: `// Java example
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        for(int i = 0; i < 3; i++) {
+            System.out.println("Count: " + i);
+        }
+    }
+}`,
+                filename: 'Main.java'
+            },
+            kotlin: {
+                code: `// Kotlin example
+fun main() {
+    println("Hello, World!")
+    for (i in 0..2) {
+        println("Count: $i")
+    }
+}`,
+                filename: 'Main.kt'
+            },
+            javascript: {
+                code: `// JavaScript example
+console.log("Hello, World!");
+for(let i = 0; i < 3; i++) {
+    console.log(\`Count: \${i}\`);
+}`,
+                filename: 'main.js'
+            },
+            rust: {
+                code: `// Rust example
+fn main() {
+    println!("Hello, World!");
+    for i in 0..3 {
+        println!("Count: {}", i);
+    }
+}`,
+                filename: 'main.rs'
+            },
+            text: {
+                code: `This is a text document.
+
+You can write any text content here:
+- Notes
+- Documentation
+- Plain text
+- Lists
+- Paragraphs
+
+Feel free to use this for writing and editing text documents!`,
+                filename: 'document.txt'
+            },
+            sql: {
+                code: `-- SQL example
+-- Create a sample table
+CREATE TABLE employees (
+    id INT PRIMARY KEY,
+    name VARCHAR(100),
+    department VARCHAR(50),
+    salary DECIMAL(10,2)
+);
+
+-- Insert sample data
+INSERT INTO employees VALUES (1, 'John Doe', 'Engineering', 75000.00);
+INSERT INTO employees VALUES (2, 'Jane Smith', 'Marketing', 65000.00);
+INSERT INTO employees VALUES (3, 'Bob Johnson', 'Engineering', 80000.00);
+
+-- Query the data
+SELECT * FROM employees;
+
+-- Group by department and show average salary
+SELECT department, AVG(salary) as avg_salary 
+FROM employees 
+GROUP BY department;
+
+-- Find employees with salary above average
+SELECT name, salary 
+FROM employees 
+WHERE salary > (SELECT AVG(salary) FROM employees);`,
+                filename: 'query.sql'
+            }
+        };
+        
+        // Handle language change
+        document.getElementById('language').addEventListener('change', function() {
+            const language = this.value;
+            const example = examples[language];
+            
+            if (editor) {
+                // Update editor language and content
+                monaco.editor.setModelLanguage(editor.getModel(), language);
+                editor.setValue(example.code);
+                
+                // Update filename
+                document.getElementById('filename').textContent = example.filename;
+            }
+        });
+        
+        async function runCode() {
+            if (!editor) {
+                alert('Editor not ready yet. Please wait a moment and try again.');
+                return;
+            }
+            
+            const code = editor.getValue();
+            const language = document.getElementById('language').value;
+            const output = document.getElementById('output');
+            const runBtn = document.getElementById('runBtn');
+            
+            // Update UI for running state
+            output.textContent = 'Running...';
+            output.className = 'output loading';
+            runBtn.disabled = true;
+            runBtn.textContent = '⏳ Running...';
+            
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ code: code, language: language })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    const executionTime = result.execution_time ? `\n\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = result.error + executionTime;
+                    output.className = 'output error';
+                } else {
+                    const executionTime = result.execution_time ? `\n\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = (result.output || 'Program executed successfully (no output)') + executionTime;
+                    output.className = 'output';
+                }
+            } catch (error) {
+                output.textContent = 'Network Error: ' + error.message;
+                output.className = 'output error';
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = '▶ Run Code';
+            }
+        }
+        
+        function clearOutput() {
+            const output = document.getElementById('output');
+            output.textContent = 'Output will appear here...';
+            output.className = 'output';
+        }
+        
+        // Question management functions
+        function loadQuestion() {
+            // Create a modal-like input for question
+            const questionText = prompt(
+                'Enter the question text (supports basic HTML and images):\n\n' +
+                'You can include:\n' +
+                '- HTML formatting\n' +
+                '- Images: <img src="url" alt="description">\n' +
+                '- Code blocks: <pre><code>your code here</code></pre>\n' +
+                '- Examples: <div class="example">example content</div>\n' +
+                '- Constraints: <div class="constraints">constraints here</div>\n\n' +
+                'Or paste a URL to load question from an image:'
+            );
+            
+            if (questionText) {
+                displayQuestion(questionText);
+            }
+        }
+        
+        function displayQuestion(questionText) {
+            const questionContainer = document.getElementById('question');
+            
+            // Check if it's a URL (simple check)
+            if (questionText.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+                // It's an image URL
+                questionContainer.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <h3>Problem Statement</h3>
+                        <img src="${questionText}" alt="Question Image" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                        <p style="margin-top: 15px; color: #888; font-size: 12px;">Image loaded from: ${questionText}</p>
+                    </div>
+                `;
+            } else {
+                // Process as HTML/text content
+                let processedContent = questionText
+                    // Convert markdown-style headers
+                    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                    .replace(/^## (.+)$/gm, '<h2>$2</h2>')
+                    .replace(/^### (.+)$/gm, '<h3>$3</h3>')
+                    // Convert line breaks
+                    .replace(/\n\n/g, '</p><p>')
+                    .replace(/\n/g, '<br>')
+                    // Wrap in paragraph tags
+                    .replace(/^(.)/gm, '<p>$1')
+                    .replace(/(.+)$/gm, '$1</p>')
+                    // Clean up header paragraphs
+                    .replace(/<p>(<h[1-6]>)/g, '$1')
+                    .replace(/(<\/h[1-6]>)<\/p>/g, '$1')
+                    // Clean up div paragraphs
+                    .replace(/<p>(<div)/g, '$1')
+                    .replace(/(<\/div>)<\/p>/g, '$1')
+                    // Clean up pre/code paragraphs
+                    .replace(/<p>(<pre>)/g, '$1')
+                    .replace(/(<\/pre>)<\/p>/g, '$1');
+                
+                questionContainer.innerHTML = processedContent;
+            }
+        }
+        
+        function clearQuestion() {
+            const questionContainer = document.getElementById('question');
+            questionContainer.innerHTML = `
+                <div class="question-placeholder">
+                    📝 Click "Load Question" to display a problem statement here.
+                    <br><br>
+                    Questions can contain:
+                    <ul>
+                        <li>Problem descriptions</li>
+                        <li>Input/Output examples</li>
+                        <li>Images and diagrams</li>
+                        <li>Constraints and notes</li>
+                    </ul>
+                </div>
+            `;
+        }
+        
+        // Sample question loader for demonstration
+        function loadSampleQuestion() {
+            const sampleQuestion = `
+                # Two Sum Problem
+                
+                Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.
+                
+                You may assume that each input would have exactly one solution, and you may not use the same element twice.
+                
+                ## Example 1:
+                <div class="example">
+                <strong>Input:</strong> nums = [2,7,11,15], target = 9<br>
+                <strong>Output:</strong> [0,1]<br>
+                <strong>Explanation:</strong> Because nums[0] + nums[1] == 9, we return [0, 1].
+                </div>
+                
+                ## Example 2:
+                <div class="example">
+                <strong>Input:</strong> nums = [3,2,4], target = 6<br>
+                <strong>Output:</strong> [1,2]
+                </div>
+                
+                ## Constraints:
+                <div class="constraints">
+                • 2 ≤ nums.length ≤ 10<sup>4</sup><br>
+                • -10<sup>9</sup> ≤ nums[i] ≤ 10<sup>9</sup><br>
+                • -10<sup>9</sup> ≤ target ≤ 10<sup>9</sup><br>
+                • Only one valid answer exists.
+                </div>
+            `;
+            displayQuestion(sampleQuestion);
+        }
+        
+        // Add keyboard shortcut for running code (Ctrl+Enter or Cmd+Enter)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+            // Shortcut to load sample question (Ctrl/Cmd + Q)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
+                e.preventDefault();
+                loadSampleQuestion();
+            }
+        });
+        
+        // Draggable resizer functionality
+        const resizer1 = document.getElementById('resizer1');
+        const resizer2 = document.getElementById('resizer2');
+        const questionPanel = document.querySelector('.question-panel');
+        const editorPanel = document.querySelector('.editor-panel');
+        const outputPanel = document.querySelector('.output-panel');
+        const container = document.querySelector('.editor-container');
+        
+        let isResizing = false;
+        let activeResizer = null;
+        let startX, startWidth;
+        
+        // Resizer 1 (between question and editor)
+        resizer1.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            activeResizer = 'resizer1';
+            startX = e.clientX;
+            startWidth = questionPanel.offsetWidth;
+            resizer1.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        // Resizer 2 (between editor and output)
+        resizer2.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            activeResizer = 'resizer2';
+            startX = e.clientX;
+            startWidth = editorPanel.offsetWidth;
+            resizer2.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            
+            const deltaX = e.clientX - startX;
+            
+            if (activeResizer === 'resizer1') {
+                // Resize question panel
+                const newWidth = Math.max(250, Math.min(startWidth + deltaX, 500));
+                questionPanel.style.width = newWidth + 'px';
+                questionPanel.style.flex = 'none';
+            } else if (activeResizer === 'resizer2') {
+                // Resize editor panel
+                const containerWidth = container.offsetWidth;
+                const questionWidth = questionPanel.offsetWidth || 350;
+                const maxEditorWidth = containerWidth - questionWidth - 250 - 18; // 18px for resizers and margins
+                const newWidth = Math.max(300, Math.min(startWidth + deltaX, maxEditorWidth));
+                
+                editorPanel.style.width = newWidth + 'px';
+                editorPanel.style.flex = 'none';
+                
+                // Trigger Monaco editor resize
+                if (editor) {
+                    editor.layout();
+                }
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                if (activeResizer === 'resizer1') {
+                    resizer1.classList.remove('dragging');
+                } else if (activeResizer === 'resizer2') {
+                    resizer2.classList.remove('dragging');
+                }
+                activeResizer = null;
+                document.body.style.cursor = '';
+            }
+        });
+    </script>
+</body>
+</html>

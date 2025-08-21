@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Compiler - Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d30 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: #252526;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 450px;
+            border: 1px solid #3e3e42;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .logo p {
+            color: #cccccc;
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        .login-form {
+            text-align: center;
+        }
+
+        .welcome-text {
+            margin-bottom: 30px;
+        }
+
+        .welcome-text h2 {
+            color: #ffffff;
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .welcome-text p {
+            color: #cccccc;
+            font-size: 14px;
+        }
+
+        .google-login-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #ffffff;
+            color: #333333;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            width: 100%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            margin-bottom: 20px;
+        }
+
+        .google-login-btn:hover {
+            background: #f8f8f8;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .google-login-btn:active {
+            transform: translateY(0);
+        }
+
+        .google-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 30px 0;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #3e3e42;
+        }
+
+        .divider span {
+            padding: 0 15px;
+        }
+
+        .features {
+            margin-top: 30px;
+        }
+
+        .features h3 {
+            color: #f4d03f;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        .feature-list {
+            list-style: none;
+            text-align: left;
+        }
+
+        .feature-list li {
+            color: #cccccc;
+            font-size: 14px;
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .feature-list li::before {
+            content: '✓';
+            color: #27ae60;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #3e3e42;
+            text-align: center;
+        }
+
+        .footer p {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .footer a {
+            color: #0e639c;
+            text-decoration: none;
+            font-size: 12px;
+            margin: 0 10px;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading-spinner {
+            border: 3px solid #3e3e42;
+            border-top: 3px solid #0e639c;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #e74c3c;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .success-message {
+            background: #27ae60;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 20px;
+                padding: 30px 25px;
+            }
+
+            .logo h1 {
+                font-size: 24px;
+            }
+
+            .welcome-text h2 {
+                font-size: 20px;
+            }
+        }
+
+        /* Skip login option */
+        .skip-login {
+            margin-top: 15px;
+        }
+
+        .skip-login a {
+            color: #888;
+            text-decoration: none;
+            font-size: 14px;
+            border-bottom: 1px dotted #888;
+        }
+
+        .skip-login a:hover {
+            color: #cccccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>💻 Online Compiler</h1>
+            <p>Code, Compile, Execute</p>
+        </div>
+
+        <div class="login-form">
+            <div class="welcome-text">
+                <h2>Welcome Back!</h2>
+                <p>Sign in to save your code, track progress, and access premium features</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <a href="/auth/google" class="google-login-btn" id="googleLoginBtn">
+                <svg class="google-icon" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+            </a>
+
+            <div class="divider">
+                <span>or</span>
+            </div>
+
+            <div class="skip-login">
+                <a href="/compiler" id="skipLoginBtn">Continue without signing in</a>
+            </div>
+
+            <div class="loading" id="loadingDiv">
+                <div class="loading-spinner"></div>
+                <p>Signing you in...</p>
+            </div>
+        </div>
+
+        <div class="features">
+            <h3>Why sign in?</h3>
+            <ul class="feature-list">
+                <li>Save and organize your code snippets</li>
+                <li>Track your coding progress and history</li>
+                <li>Access problem-solving challenges</li>
+                <li>Sync across devices</li>
+                <li>Get personalized recommendations</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>By continuing, you agree to our Terms of Service and Privacy Policy</p>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/support">Support</a>
+        </div>
+    </div>
+
+    <script>
+        // Handle login button clicks
+        document.getElementById('googleLoginBtn').addEventListener('click', function(e) {
+            showLoading();
+        });
+
+        document.getElementById('skipLoginBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Set a flag to indicate user chose to skip login
+            localStorage.setItem('skipLogin', 'true');
+            window.location.href = '/compiler';
+        });
+
+        function showLoading() {
+            document.getElementById('loadingDiv').style.display = 'block';
+            document.getElementById('googleLoginBtn').style.opacity = '0.6';
+            document.getElementById('googleLoginBtn').style.pointerEvents = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingDiv').style.display = 'none';
+            document.getElementById('googleLoginBtn').style.opacity = '1';
+            document.getElementById('googleLoginBtn').style.pointerEvents = 'auto';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Hide success message
+            document.getElementById('successMessage').style.display = 'none';
+            
+            hideLoading();
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            
+            // Hide error message
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // Check for error/success parameters in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const success = urlParams.get('success');
+
+        if (error) {
+            let errorMessage = 'Login failed. Please try again.';
+            if (error === 'access_denied') {
+                errorMessage = 'Login cancelled. Please try again if you want to sign in.';
+            } else if (error === 'server_error') {
+                errorMessage = 'Server error occurred. Please try again later.';
+            }
+            showError(errorMessage);
+        }
+
+        if (success) {
+            showSuccess('Login successful! Redirecting...');
+            setTimeout(() => {
+                window.location.href = '/compiler';
+            }, 2000);
+        }
+
+        // Handle authentication redirect
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+                showSuccess('Login successful! Redirecting...');
+                localStorage.setItem('authToken', event.data.token);
+                setTimeout(() => {
+                    window.location.href = '/compiler';
+                }, 2000);
+            } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
+                showError(event.data.message || 'Login failed. Please try again.');
+            }
+        });
+
+        // Auto-redirect if already logged in
+        const authToken = localStorage.getItem('authToken');
+        if (authToken) {
+            // Verify token is still valid
+            fetch('/api/verify-token', {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = '/compiler';
+                } else {
+                    // Token invalid, remove it
+                    localStorage.removeItem('authToken');
+                }
+            })
+            .catch(() => {
+                // Network error, assume token is still valid for offline use
+                // Remove token to force fresh login
+                localStorage.removeItem('authToken');
+            });
+        }
+
+        // Handle back button from compiler page
+        if (document.referrer && document.referrer.includes('/compiler')) {
+            showError('Please sign in to access all features.');
+        }
+
+        // Prevent back button after successful login
+        window.history.pushState(null, "", window.location.href);
+        window.onpopstate = function() {
+            window.history.pushState(null, "", window.location.href);
+        };
+    </script>
+</body>
+</html>

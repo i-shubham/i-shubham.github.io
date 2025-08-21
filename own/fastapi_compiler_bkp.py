@@ -13,7 +13,6 @@ import time
 import asyncio
 from threading import Timer
 from typing import Dict, Any
-from pathlib import Path
 
 app = FastAPI(
     title="Online Compiler API",
@@ -31,8 +30,451 @@ class CodeResponse(BaseModel):
     error: str = None
     execution_time: float
 
-# Get the directory where this script is located
-CURRENT_DIR = Path(__file__).parent
+# HTML template for the web interface with Monaco Editor
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Compiler</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #252526;
+            border-radius: 5px;
+        }
+        .editor-container {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+            position: relative;
+        }
+        .editor-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+            min-width: 200px;
+        }
+        .resizer {
+            width: 4px;
+            background: #3e3e42;
+            cursor: col-resize;
+            position: relative;
+            margin: 0 5px;
+            border-radius: 2px;
+            transition: background 0.2s;
+        }
+        .resizer:hover {
+            background: #0e639c;
+        }
+        .resizer.dragging {
+            background: #0e639c;
+        }
+        .editor-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        #editor {
+            flex: 1;
+            min-height: 400px;
+        }
+        .output-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #252526;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .output-header {
+            background: #2d2d30;
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .output { 
+            flex: 1;
+            background: #1e1e1e; 
+            padding: 15px; 
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            overflow-y: auto;
+            color: #d4d4d4;
+        }
+        .output.error {
+            color: #f48771;
+        }
+        button { 
+            padding: 10px 20px; 
+            background: #0e639c; 
+            color: white; 
+            border: none; 
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 5px;
+            transition: background 0.2s;
+        }
+        button:hover { 
+            background: #1177bb; 
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        select { 
+            padding: 8px 12px; 
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 3px;
+            margin: 0 5px;
+        }
+        .loading {
+            color: #ffd700;
+        }
+        h1 {
+            margin: 0;
+            color: #fff;
+        }
+        .api-link {
+            margin-left: auto;
+            color: #0e639c;
+            text-decoration: none;
+            padding: 8px 15px;
+            border: 1px solid #0e639c;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+        .api-link:hover {
+            background: #0e639c;
+            color: white;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Online Compiler (FastAPI)</h1>
+            <label>Language:</label>
+            <select id="language">
+                <option value="python">Python</option>
+                <option value="cpp">C++</option>
+                <option value="c">C</option>
+                <option value="java">Java</option>
+                <option value="kotlin">Kotlin</option>
+                <option value="javascript">JavaScript</option>
+                <option value="rust">Rust</option>
+                <option value="sql">SQL</option>
+                <option value="text">Text</option>
+            </select>
+            <button onclick="runCode()" id="runBtn">▶ Run Code</button>
+            <button onclick="clearOutput()">🗑 Clear Output</button>
+            <a href="/docs" target="_blank" class="api-link">📚 API Docs</a>
+        </div>
+        
+        <div class="editor-container">
+            <div class="editor-panel">
+                <div class="editor-header">
+                    <span id="filename">main.py</span>
+                </div>
+                <div id="editor"></div>
+            </div>
+            
+            <div class="resizer" id="resizer"></div>
+            
+            <div class="output-panel">
+                <div class="output-header">Output</div>
+                <div id="output" class="output">Output will appear here...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let editor;
+        
+        // Initialize Monaco Editor
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: `# Python example
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
+                language: 'python',
+                theme: 'vs-dark',
+                fontSize: 14,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 4,
+                insertSpaces: true
+            });
+        });
+        
+        // Language examples
+        const examples = {
+            python: {
+                code: `# Python example
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
+                filename: 'main.py'
+            },
+            cpp: {
+                code: `// C++ example
+#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "Hello, World!" << endl;
+    for(int i = 0; i < 3; i++) {
+        cout << "Count: " << i << endl;
+    }
+    return 0;
+}`,
+                filename: 'main.cpp'
+            },
+            c: {
+                code: `// C example
+#include <stdio.h>
+
+int main() {
+    printf("Hello, World!");
+    for(int i = 0; i < 3; i++) {
+        printf(" Count: ", i);
+    }
+    return 0;
+}`,
+                filename: 'main.c'
+            },
+            java: {
+                code: `// Java example
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        for(int i = 0; i < 3; i++) {
+            System.out.println("Count: " + i);
+        }
+    }
+}`,
+                filename: 'Main.java'
+            },
+            kotlin: {
+                code: `// Kotlin example
+fun main() {
+    println("Hello, World!")
+    for (i in 0..2) {
+        println("Count: $i")
+    }
+}`,
+                filename: 'Main.kt'
+            },
+            javascript: {
+                code: `// JavaScript example
+console.log("Hello, World!");
+for(let i = 0; i < 3; i++) {
+    console.log(\`Count: \${i}\`);
+}`,
+                filename: 'main.js'
+            },
+            rust: {
+                code: `// Rust example
+fn main() {
+    println!("Hello, World!");
+    for i in 0..3 {
+        println!("Count: {}", i);
+    }
+}`,
+                filename: 'main.rs'
+            },
+            text: {
+                code: `This is a text document.
+
+You can write any text content here:
+- Notes
+- Documentation
+- Plain text
+- Lists
+- Paragraphs
+
+Feel free to use this for writing and editing text documents!`,
+                filename: 'document.txt'
+            },
+            sql: {
+                code: `-- SQL example
+-- Create a sample table
+CREATE TABLE employees (
+    id INT PRIMARY KEY,
+    name VARCHAR(100),
+    department VARCHAR(50),
+    salary DECIMAL(10,2)
+);
+
+-- Insert sample data
+INSERT INTO employees VALUES (1, 'John Doe', 'Engineering', 75000.00);
+INSERT INTO employees VALUES (2, 'Jane Smith', 'Marketing', 65000.00);
+INSERT INTO employees VALUES (3, 'Bob Johnson', 'Engineering', 80000.00);
+
+-- Query the data
+SELECT * FROM employees;
+
+-- Group by department and show average salary
+SELECT department, AVG(salary) as avg_salary 
+FROM employees 
+GROUP BY department;
+
+-- Find employees with salary above average
+SELECT name, salary 
+FROM employees 
+WHERE salary > (SELECT AVG(salary) FROM employees);`,
+                filename: 'query.sql'
+            }
+        };
+        
+        // Handle language change
+        document.getElementById('language').addEventListener('change', function() {
+            const language = this.value;
+            const example = examples[language];
+            
+            if (editor) {
+                // Update editor language and content
+                monaco.editor.setModelLanguage(editor.getModel(), language);
+                editor.setValue(example.code);
+                
+                // Update filename
+                document.getElementById('filename').textContent = example.filename;
+            }
+        });
+        
+        async function runCode() {
+            if (!editor) {
+                alert('Editor not ready yet. Please wait a moment and try again.');
+                return;
+            }
+            
+            const code = editor.getValue();
+            const language = document.getElementById('language').value;
+            const output = document.getElementById('output');
+            const runBtn = document.getElementById('runBtn');
+            
+            // Update UI for running state
+            output.textContent = 'Running...';
+            output.className = 'output loading';
+            runBtn.disabled = true;
+            runBtn.textContent = '⏳ Running...';
+            
+            try {
+                const response = await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code, language: language })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    const executionTime = result.execution_time ? `\\n\\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = result.error + executionTime;
+                    output.className = 'output error';
+                } else {
+                    const executionTime = result.execution_time ? `\\n\\n⏱ Execution Time: ${result.execution_time.toFixed(3)} seconds` : '';
+                    output.textContent = (result.output || 'Program executed successfully (no output)') + executionTime;
+                    output.className = 'output';
+                }
+            } catch (error) {
+                output.textContent = 'Network Error: ' + error.message;
+                output.className = 'output error';
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = '▶ Run Code';
+            }
+        }
+        
+        function clearOutput() {
+            const output = document.getElementById('output');
+            output.textContent = 'Output will appear here...';
+            output.className = 'output';
+        }
+        
+        // Add keyboard shortcut for running code (Ctrl+Enter or Cmd+Enter)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+        });
+        
+        // Draggable resizer functionality
+        const resizer = document.getElementById('resizer');
+        const editorPanel = document.querySelector('.editor-panel');
+        const outputPanel = document.querySelector('.output-panel');
+        const container = document.querySelector('.editor-container');
+        
+        let isResizing = false;
+        let startX, startWidth;
+        
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = editorPanel.offsetWidth;
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            
+            const deltaX = e.clientX - startX;
+            const newWidth = Math.max(200, Math.min(startWidth + deltaX, container.offsetWidth - 250));
+            
+            editorPanel.style.width = newWidth + 'px';
+            editorPanel.style.flex = 'none';
+            
+            // Trigger Monaco editor resize
+            if (editor) {
+                editor.layout();
+            }
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('dragging');
+                document.body.style.cursor = '';
+            }
+        });
+    </script>
+</body>
+</html>
+'''
 
 def timeout_handler(process):
     """Kill process if it takes too long"""
@@ -317,14 +759,14 @@ async def run_rust_code(code: str) -> Dict[str, Any]:
         
         # Create Cargo.toml
         cargo_toml = f'''[package]
-        name = "{project_name}"
-        version = "0.1.0"
-        edition = "2021"
+name = "{project_name}"
+version = "0.1.0"
+edition = "2021"
 
-        [[bin]]
-        name = "main"
-        path = "src/main.rs"
-        '''
+[[bin]]
+name = "main"
+path = "src/main.rs"
+'''
         
         with open(os.path.join(project_dir, 'Cargo.toml'), 'w') as f:
             f.write(cargo_toml)
@@ -448,13 +890,10 @@ def run_text_code(code: str) -> Dict[str, Any]:
         return {'error': str(e), 'execution_time': 0.0}
 
 # Routes
-@app.get("/", response_class=FileResponse)
+@app.get("/", response_class=HTMLResponse)
 async def index():
     """Serve the main web interface"""
-    html_path = CURRENT_DIR / "index.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="HTML interface file not found")
-    return FileResponse(html_path, media_type="text/html")
+    return HTMLResponse(content=HTML_TEMPLATE)
 
 @app.post("/api/run", response_model=CodeResponse)
 async def run_code(request: CodeRequest):
