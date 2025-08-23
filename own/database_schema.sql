@@ -15,24 +15,31 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255) NOT NULL,
+    salt VARCHAR(32),
+
+    -- Profile fields
     first_name VARCHAR(100),
     last_name VARCHAR(100),
-    profile_picture VARCHAR(500),
-    email_verified BOOLEAN DEFAULT FALSE,
-    email_verification_token VARCHAR(255),
-    password_reset_token VARCHAR(255),
-    password_reset_expires TIMESTAMP NULL,
-    failed_login_attempts INT DEFAULT 0,
-    locked_until TIMESTAMP NULL,
-    last_password_change TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    last_login TIMESTAMP NULL,
-    last_activity TIMESTAMP NULL,
+    profile_picture_url VARCHAR(500),
+
+    -- Account status
     is_active BOOLEAN DEFAULT TRUE,
-    user_role ENUM('user', 'premium', 'admin') DEFAULT 'user',
-    timezone VARCHAR(50) DEFAULT 'UTC',
+    is_verified BOOLEAN DEFAULT FALSE,
+    email_verified BOOLEAN DEFAULT FALSE,
+    
+    -- Security
+    failed_login_attempts INT DEFAULT 0,
+    account_locked_until DATETIME NULL,
+    last_login DATETIME,
+    last_password_change DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Timestamps
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    -- User role
+    user_role ENUM('standard_user', 'premium_user', 'admin') DEFAULT 'standard_user',
+    timezone VARCHAR(50) DEFAULT 'Asia/Kolkata',
     
     -- Optimized indexes for millions of users
     INDEX idx_username (username),
@@ -41,7 +48,6 @@ CREATE TABLE users (
     INDEX idx_is_active (is_active),
     INDEX idx_last_login (last_login),
     INDEX idx_created_at (created_at),
-    INDEX idx_locked_until (locked_until),
     INDEX idx_composite_login (username, password_hash, is_active),
     INDEX idx_composite_email (email, email_verified, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
