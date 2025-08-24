@@ -73,6 +73,24 @@
             font-size: 14px;
             font-weight: bold;
             color: #f4d03f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .question-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .question-btn {
+            padding: 6px 12px !important;
+            font-size: 12px !important;
+            background: #0e639c !important;
+        }
+        
+        .question-btn:hover {
+            background: #1177bb !important;
         }
         .editor-header {
             background: #2d2d30;
@@ -295,7 +313,18 @@
             background: #0e639c;
             color: white;
         }
-        .stats-modal {
+        .language-tag {
+            display: inline-block;
+            background: #0e639c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        
+        /* Question Modal Styles */
+        .question-modal {
             position: fixed;
             top: 0;
             left: 0;
@@ -307,27 +336,33 @@
             justify-content: center;
             z-index: 1000;
         }
-        .stats-content {
+        
+        .question-modal-content {
             background: #252526;
             padding: 30px;
             border-radius: 10px;
-            max-width: 500px;
+            max-width: 600px;
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
             border: 1px solid #3e3e42;
         }
-        .stats-header {
+        
+        .question-modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 15px;
         }
-        .stats-header h2 {
+        
+        .question-modal-header h2 {
             color: #fff;
             margin: 0;
         }
-        .close-stats {
+        
+        .close-question-modal {
             background: #e74c3c;
             color: white;
             border: none;
@@ -337,30 +372,86 @@
             cursor: pointer;
             font-size: 16px;
         }
-        .stat-item {
+        
+        .category-section {
+            margin-bottom: 20px;
+        }
+        
+        .category-section label {
+            display: block;
+            color: #f4d03f;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .category-section select {
+            width: 100%;
+            padding: 10px;
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .questions-section {
+            margin-top: 20px;
+        }
+        
+        .questions-section h3 {
+            color: #fff;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 10px;
+        }
+        
+        .questions-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .question-item {
             background: #2d2d30;
             padding: 15px;
             margin: 10px 0;
             border-radius: 5px;
             border-left: 4px solid #0e639c;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .stat-label {
-            color: #f4d03f;
-            font-weight: bold;
-            margin-bottom: 5px;
+        
+        .question-item:hover {
+            background: #3e3e42;
+            border-left-color: #1177bb;
         }
-        .stat-value {
+        
+        .question-title {
             color: #fff;
-            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
         }
-        .language-tag {
+        
+        .question-difficulty {
             display: inline-block;
-            background: #0e639c;
-            color: white;
             padding: 2px 8px;
             border-radius: 12px;
-            font-size: 12px;
-            margin: 2px;
+            font-size: 11px;
+            margin-right: 8px;
+        }
+        
+        .difficulty-easy {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .difficulty-medium {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .difficulty-hard {
+            background: #e74c3c;
+            color: white;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
@@ -371,25 +462,7 @@
         <div class="header">
             <h1>Online Compiler (FastAPI)</h1>
             
-            <!-- User Profile Section -->
-            <div class="user-profile" id="userProfile" style="display: none;">
-                <img id="userPicture" class="user-avatar" alt="User Avatar">
-                <div class="user-info">
-                    <span id="userName">Guest User</span>
-                    <button onclick="logout()" class="logout-btn">🚪 Logout</button>
-                </div>
-            </div>
-            
-            <!-- Guest Mode Section -->
-            <div class="guest-mode" id="guestMode">
-                <span>👤 Guest Mode</span>
-                <a href="/auth" class="login-link">🔑 Sign In</a>
-            </div>
-            
             <div class="controls">
-                <button onclick="loadQuestion()" id="loadQuestionBtn">📝 Load Question</button>
-                <button onclick="loadSampleQuestion()">📚 Sample Question</button>
-                <button onclick="clearQuestion()">🗑 Clear Question</button>
                 <label>Language:</label>
                 <select id="language">
                     <option value="python">Python</option>
@@ -404,17 +477,35 @@
                 </select>
                 <button onclick="runCode()" id="runBtn">▶ Run Code</button>
                 <button onclick="clearOutput()">🗑 Clear Output</button>
-                <button onclick="showStats()" id="statsBtn" style="display: none;">📊 Stats</button>
-                <a href="/docs" target="_blank" class="api-link">📚 API Docs</a>
+            </div>
+            
+            <!-- User Profile Section - Top Right -->
+            <div class="user-profile" id="userProfile" style="display: none;">
+                <img id="userPicture" class="user-avatar" alt="User Avatar">
+                <div class="user-info">
+                    <span id="userName">User</span>
+                    <button onclick="logout()" class="logout-btn">🚪 Logout</button>
+                </div>
+            </div>
+            
+            <!-- Guest Mode Section - Top Right -->
+            <div class="guest-mode" id="guestMode">
+                <span>👤 Guest Mode</span>
             </div>
         </div>
         
         <div class="editor-container">
             <div class="question-panel">
-                <div class="question-header">Question</div>
+                <div class="question-header">
+                    <span>Question</span>
+                    <div class="question-controls">
+                        <button onclick="showQuestionPopup()" class="question-btn">📚 Sample Question</button>
+                        <button onclick="clearQuestion()" class="question-btn">🗑 Clear Question</button>
+                    </div>
+                </div>
                 <div id="question" class="question-content">
                     <div class="question-placeholder">
-                        📝 Click "Load Question" to display a problem statement here.
+                        📚 Click "Sample Question" to display a problem statement here.
                         <br><br>
                         Questions can contain:
                         <ul>
@@ -445,25 +536,35 @@
         </div>
     </div>
 
-    <!-- Stats Modal -->
-    <div class="stats-modal" id="statsModal">
-        <div class="stats-content">
-            <div class="stats-header">
-                <h2>📊 Your Coding Stats</h2>
-                <button class="close-stats" onclick="closeStats()">×</button>
+    <!-- Question Selection Modal -->
+    <div class="question-modal" id="questionModal">
+        <div class="question-modal-content">
+            <div class="question-modal-header">
+                <h2>📚 Select a Question</h2>
+                <button class="close-question-modal" onclick="closeQuestionModal()">×</button>
             </div>
-            <div id="statsContent">
-                <div class="stat-item">
-                    <div class="stat-label">Total Executions</div>
-                    <div class="stat-value" id="totalExecutions">-</div>
+            <div class="question-modal-body">
+                <div class="category-section">
+                    <label for="mainCategory">Main Category:</label>
+                    <select id="mainCategory" onchange="loadSubCategories()">
+                        <option value="">Select Main Category</option>
+                        <option value="DataStructure">Data Structure</option>
+                        <option value="SystemDesign">System Design</option>
+                    </select>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Languages Used</div>
-                    <div class="stat-value" id="languagesUsed">-</div>
+                
+                <div class="category-section">
+                    <label for="subCategory">Sub Category:</label>
+                    <select id="subCategory" onchange="loadQuestions()">
+                        <option value="">Select Sub Category</option>
+                    </select>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-label">Recent Activity</div>
-                    <div id="recentActivity">Loading...</div>
+                
+                <div class="questions-section" id="questionsSection" style="display: none;">
+                    <h3>Available Questions:</h3>
+                    <div id="questionsList" class="questions-list">
+                        <!-- Questions will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -476,65 +577,86 @@
         
         // Authentication functions
         async function checkAuthentication() {
+            // Log current location for debugging
+            console.log('🔍 Current location:', window.location.href);
+            console.log('🔍 Current origin:', window.location.origin);
+            console.log('🔍 Current pathname:', window.location.pathname);
+            
             // Check for auth token from localStorage
             authToken = localStorage.getItem('authToken');
+            console.log('🔍 Auth token found:', !!authToken); // Debug log
+            console.log('🔍 Auth token value:', authToken); // Debug log
             
             if (authToken) {
                 try {
+                    console.log('🔍 Making request to /auth/verify...'); // Debug log
                     const response = await fetch('/auth/verify', {
+                        method: 'POST', // Changed to POST as per backend
                         headers: {
-                            'Authorization': `Bearer ${authToken}`
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
                         }
                     });
                     
+                    console.log('🔍 Auth verify response status:', response.status); // Debug log
+                    console.log('🔍 Auth verify response ok:', response.ok); // Debug log
+                    
                     if (response.ok) {
                         const data = await response.json();
+                        console.log('🔍 Response data:', data); // Debug log
                         currentUser = data.user;
+                        console.log('🔍 User authenticated:', currentUser); // Debug log
                         updateUserInterface();
                     } else {
                         // Token invalid, clear it
+                        console.log('❌ Token invalid, clearing auth'); // Debug log
                         clearAuthToken();
+                        updateUserInterface();
                     }
                 } catch (error) {
-                    console.log('Auth check failed:', error);
+                    console.log('❌ Auth check failed:', error);
                     clearAuthToken();
+                    updateUserInterface();
                 }
+            } else {
+                // No token, update interface to show guest mode
+                console.log('❌ No auth token, showing guest mode'); // Debug log
+                updateUserInterface();
             }
-            
-            updateUserInterface();
         }
         
         function updateUserInterface() {
             const userProfile = document.getElementById('userProfile');
             const guestMode = document.getElementById('guestMode');
-            const statsBtn = document.getElementById('statsBtn');
             
-            if (currentUser) {
-                // Show user profile
+            console.log('🎨 Updating UI - currentUser:', currentUser); // Debug log
+            console.log('🎨 currentUser.username:', currentUser?.username); // Debug log
+            
+            if (currentUser && currentUser.username) {
+                // Show user profile - hide guest mode completely
+                console.log('✅ Showing user profile for:', currentUser.username); // Debug log
                 userProfile.style.display = 'flex';
                 guestMode.style.display = 'none';
-                statsBtn.style.display = 'inline-block';
                 
-                // Update user info
-                document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
+                // Update user info - show username
+                document.getElementById('userName').textContent = currentUser.username;
+                console.log('✅ Set username to:', currentUser.username); // Debug log
+                
                 if (currentUser.profile_picture) {
                     document.getElementById('userPicture').src = currentUser.profile_picture;
                 } else {
-                    // Generate a simple avatar based on initials
-                    const initials = (currentUser.full_name || currentUser.username)
-                        .split(' ')
-                        .map(name => name.charAt(0))
-                        .join('')
-                        .toUpperCase()
-                        .substring(0, 2);
+                    // Generate a simple avatar based on username initials
+                    const initials = currentUser.username
+                        .substring(0, 2)
+                        .toUpperCase();
                     
                     document.getElementById('userPicture').src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background: %230e639c"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-family="Arial" font-size="40" fill="white">${initials}</text></svg>`;
                 }
             } else {
-                // Show guest mode
+                // Show guest mode - hide user profile completely
+                console.log('❌ Showing guest mode - no user authenticated'); // Debug log
                 userProfile.style.display = 'none';
                 guestMode.style.display = 'flex';
-                statsBtn.style.display = 'none';
             }
         }
         
@@ -550,6 +672,8 @@
             localStorage.removeItem('authToken');
             document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         }
+        
+
         
         async function logout() {
             try {
@@ -570,83 +694,7 @@
             window.location.href = '/auth';
         }
         
-        async function showStats() {
-            if (!currentUser) {
-                alert('Please sign in to view your stats.');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/user/stats', {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
-                });
-                
-                if (response.ok) {
-                    const stats = await response.json();
-                    displayStats(stats);
-                } else {
-                    alert('Failed to load stats. Please try again.');
-                }
-            } catch (error) {
-                console.error('Error loading stats:', error);
-                alert('Failed to load stats. Please try again.');
-            }
-        }
-        
-        function displayStats(stats) {
-            document.getElementById('totalExecutions').textContent = stats.total_executions;
-            
-            // Display languages as tags
-            const languagesContainer = document.getElementById('languagesUsed');
-            languagesContainer.innerHTML = '';
-            stats.languages_used.forEach(lang => {
-                const tag = document.createElement('span');
-                tag.className = 'language-tag';
-                tag.textContent = lang;
-                languagesContainer.appendChild(tag);
-            });
-            
-            // Display recent activity
-            const activityContainer = document.getElementById('recentActivity');
-            activityContainer.innerHTML = '';
-            
-            if (stats.recent_activity.length === 0) {
-                activityContainer.innerHTML = '<p style="color: #888;">No recent activity</p>';
-            } else {
-                stats.recent_activity.forEach(activity => {
-                    const item = document.createElement('div');
-                    item.style.cssText = 'margin: 8px 0; padding: 8px; background: #1e1e1e; border-radius: 4px; font-size: 12px;';
-                    
-                    const statusColor = activity.status === 'success' ? '#27ae60' : '#e74c3c';
-                    const date = new Date(activity.created_at).toLocaleString();
-                    
-                    item.innerHTML = `
-                        <span style="color: ${statusColor};">●</span> 
-                        <strong>${activity.language}</strong> - ${activity.status} 
-                        <span style="color: #888; float: right;">${date}</span>
-                        <br>
-                        <span style="color: #888;">⏱ ${activity.execution_time}s</span>
-                    `;
-                    activityContainer.appendChild(item);
-                });
-            }
-            
-            // Show modal
-            document.getElementById('statsModal').style.display = 'flex';
-        }
-        
-        function closeStats() {
-            document.getElementById('statsModal').style.display = 'none';
-        }
-        
-        // Close modal when clicking outside
-        document.getElementById('statsModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeStats();
-            }
-        });
+
 
         // Initialize Monaco Editor
         require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
@@ -654,9 +702,9 @@
         require(['vs/editor/editor.main'], function () {
             editor = monaco.editor.create(document.getElementById('editor'), {
                 value: `# Python example
-                    print("Hello, World!")
-                    for i in range(3):
-                        print(f"Count: {i}")`,
+print("Hello, World!")
+for i in range(3):
+    print(f"Count: {i}")`,
                 language: 'python',
                 theme: 'vs-dark',
                 fontSize: 14,
@@ -669,7 +717,12 @@
             });
             
             // Check authentication after editor is initialized
-            checkAuthentication();
+            console.log('🚀 Editor initialized, checking authentication...'); // Debug log
+            
+            // Add a small delay to ensure everything is loaded
+            setTimeout(() => {
+                checkAuthentication();
+            }, 100);
         });
         
         // Language examples
@@ -863,24 +916,6 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
         }
         
         // Question management functions
-        function loadQuestion() {
-            // Create a modal-like input for question
-            const questionText = prompt(
-                'Enter the question text (supports basic HTML and images):\n\n' +
-                'You can include:\n' +
-                '- HTML formatting\n' +
-                '- Images: <img src="url" alt="description">\n' +
-                '- Code blocks: <pre><code>your code here</code></pre>\n' +
-                '- Examples: <div class="example">example content</div>\n' +
-                '- Constraints: <div class="constraints">constraints here</div>\n\n' +
-                'Or paste a URL to load question from an image:'
-            );
-            
-            if (questionText) {
-                displayQuestion(questionText);
-            }
-        }
-        
         function displayQuestion(questionText) {
             const questionContainer = document.getElementById('question');
             
@@ -925,7 +960,7 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
             const questionContainer = document.getElementById('question');
             questionContainer.innerHTML = `
                 <div class="question-placeholder">
-                    📝 Click "Load Question" to display a problem statement here.
+                    📚 Click "Sample Question" to display a problem statement here.
                     <br><br>
                     Questions can contain:
                     <ul>
@@ -938,37 +973,109 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
             `;
         }
         
-        // Sample question loader for demonstration
+        // Question modal functions
+        function showQuestionPopup() {
+            document.getElementById('questionModal').style.display = 'flex';
+            // Reset selections
+            document.getElementById('mainCategory').value = '';
+            document.getElementById('subCategory').value = '';
+            document.getElementById('subCategory').innerHTML = '<option value="">Select Sub Category</option>';
+            document.getElementById('questionsSection').style.display = 'none';
+        }
+        
+        function closeQuestionModal() {
+            document.getElementById('questionModal').style.display = 'none';
+        }
+        
+        async function loadSubCategories() {
+            const mainCategory = document.getElementById('mainCategory').value;
+            const subCategorySelect = document.getElementById('subCategory');
+            
+            if (!mainCategory) {
+                subCategorySelect.innerHTML = '<option value="">Select Sub Category</option>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/questions/subcategories?main_category=${mainCategory}`);
+                if (response.ok) {
+                    const subCategories = await response.json();
+                    subCategorySelect.innerHTML = '<option value="">Select Sub Category</option>';
+                    subCategories.forEach(subCat => {
+                        const option = document.createElement('option');
+                        option.value = subCat;
+                        option.textContent = subCat;
+                        subCategorySelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading subcategories:', error);
+            }
+        }
+        
+        async function loadQuestions() {
+            const mainCategory = document.getElementById('mainCategory').value;
+            const subCategory = document.getElementById('subCategory').value;
+            
+            if (!mainCategory || !subCategory) {
+                document.getElementById('questionsSection').style.display = 'none';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/questions?main_category=${mainCategory}&sub_category=${subCategory}`);
+                if (response.ok) {
+                    const questions = await response.json();
+                    displayQuestionsList(questions);
+                    document.getElementById('questionsSection').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading questions:', error);
+            }
+        }
+        
+        function displayQuestionsList(questions) {
+            const questionsList = document.getElementById('questionsList');
+            questionsList.innerHTML = '';
+            
+            if (questions.length === 0) {
+                questionsList.innerHTML = '<p style="color: #888; text-align: center;">No questions available for this category.</p>';
+                return;
+            }
+            
+            questions.forEach(question => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question-item';
+                questionDiv.onclick = () => selectQuestion(question);
+                
+                const difficultyClass = `difficulty-${question.difficulty.toLowerCase()}`;
+                
+                questionDiv.innerHTML = `
+                    <div class="question-title">${question.title}</div>
+                    <span class="question-difficulty ${difficultyClass}">${question.difficulty}</span>
+                    <span style="color: #888; font-size: 12px;">${question.description.substring(0, 100)}...</span>
+                `;
+                
+                questionsList.appendChild(questionDiv);
+            });
+        }
+        
+        async function selectQuestion(question) {
+            try {
+                const response = await fetch(`/api/questions/${question.id}`);
+                if (response.ok) {
+                    const questionData = await response.json();
+                    displayQuestion(questionData.content);
+                    closeQuestionModal();
+                }
+            } catch (error) {
+                console.error('Error loading question:', error);
+            }
+        }
+        
+        // Legacy function for backward compatibility
         function loadSampleQuestion() {
-            const sampleQuestion = `
-                # Two Sum Problem
-                
-                Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.
-                
-                You may assume that each input would have exactly one solution, and you may not use the same element twice.
-                
-                ## Example 1:
-                <div class="example">
-                <strong>Input:</strong> nums = [2,7,11,15], target = 9<br>
-                <strong>Output:</strong> [0,1]<br>
-                <strong>Explanation:</strong> Because nums[0] + nums[1] == 9, we return [0, 1].
-                </div>
-                
-                ## Example 2:
-                <div class="example">
-                <strong>Input:</strong> nums = [3,2,4], target = 6<br>
-                <strong>Output:</strong> [1,2]
-                </div>
-                
-                ## Constraints:
-                <div class="constraints">
-                • 2 ≤ nums.length ≤ 10<sup>4</sup><br>
-                • -10<sup>9</sup> ≤ nums[i] ≤ 10<sup>9</sup><br>
-                • -10<sup>9</sup> ≤ target ≤ 10<sup>9</sup><br>
-                • Only one valid answer exists.
-                </div>
-            `;
-            displayQuestion(sampleQuestion);
+            showQuestionPopup();
         }
         
         // Add keyboard shortcut for running code (Ctrl+Enter or Cmd+Enter)
@@ -980,7 +1087,14 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
             // Shortcut to load sample question (Ctrl/Cmd + Q)
             if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
                 e.preventDefault();
-                loadSampleQuestion();
+                showQuestionPopup();
+            }
+        });
+        
+        // Close question modal when clicking outside
+        document.getElementById('questionModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQuestionModal();
             }
         });
         
