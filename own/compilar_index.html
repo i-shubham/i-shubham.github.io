@@ -499,7 +499,7 @@
                 <div class="question-header">
                     <span>Question</span>
                     <div class="question-controls">
-                        <button onclick="showQuestionPopup()" class="question-btn">📚 Sample Question</button>
+                        <button onclick="showQuestionPopup()" class="question-btn">📚 Load Question</button>
                         <button onclick="clearQuestion()" class="question-btn">🗑 Clear Question</button>
                     </div>
                 </div>
@@ -582,8 +582,9 @@
             console.log('🔍 Current origin:', window.location.origin);
             console.log('🔍 Current pathname:', window.location.pathname);
             
-            // Check for auth token from localStorage
-            authToken = localStorage.getItem('authToken');
+            // Check for auth token from localStorage/sessionStorage
+            // authToken = localStorage.getItem('authToken');
+            authToken = sessionStorage.getItem('authToken');
             console.log('🔍 Auth token found:', !!authToken); // Debug log
             console.log('🔍 Auth token value:', authToken); // Debug log
             
@@ -669,7 +670,8 @@
         function clearAuthToken() {
             authToken = null;
             currentUser = null;
-            localStorage.removeItem('authToken');
+            // localStorage.removeItem('authToken');
+            sessionStorage.removeItem('authToken');
             document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         }
         
