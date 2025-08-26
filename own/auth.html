@@ -827,6 +827,7 @@
 
             <div class="footer">
                 <p>🔒 Secure authentication powered by bcrypt encryption</p>
+                <button onclick="testCookieManually()" style="margin: 10px; padding: 8px 16px; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer;">🧪 Test Cookies</button>
                 <a href="/privacy">Privacy Policy</a>
                 <a href="/terms">Terms of Service</a>
                 <a href="/support">Support</a>
@@ -977,13 +978,19 @@
                     console.log("response.ok is true");
                     showSuccess('Login successful! Redirecting to compiler...');
                     
-                    // // Store token
-                    console.log("storing token");
-                    // localStorage.setItem('authToken', result.access_token);
-                    sessionStorage.setItem('authToken', result.access_token);
-                    console.log("storing user info");
-                    // localStorage.setItem('userInfo', JSON.stringify(result.user));
-                    sessionStorage.setItem('userInfo', JSON.stringify(result.user));
+                    //                     // Store token in cookie
+                    console.log("storing token in cookie");
+                    setCookie('authToken', result.access_token, data.remember_me ? 30 : 1);
+                    console.log("storing user info in cookie");
+                    setCookie('userInfo', JSON.stringify(result.user), data.remember_me ? 30 : 1);
+                    
+                    // Verify cookies were set
+                    console.log("🍪 Verifying cookies were set...");
+                    setTimeout(() => {
+                        console.log("🍪 authToken cookie:", getCookie('authToken'));
+                        console.log("🍪 userInfo cookie:", getCookie('userInfo'));
+                        console.log("🍪 All cookies:", document.cookie);
+                    }, 100);
                     
                     console.log("redirecting to compiler page in 1 Seconds");
                     console.log("Current location:", window.location.href);
@@ -991,6 +998,10 @@
                     setTimeout(() => {
                         // Redirect to compiler page
                         console.log("redirecting to compiler page");
+                        console.log("🍪 Final cookie check before redirect:");
+                        console.log("🍪 authToken:", getCookie('authToken'));
+                        console.log("🍪 userInfo:", getCookie('userInfo'));
+                        console.log("🍪 All cookies:", document.cookie);
                         window.location.href = '/compiler_index.html';
                     }, 1000);
                 } else {
@@ -1091,13 +1102,76 @@
         // Skip login
         document.getElementById('skipLoginBtn').addEventListener('click', function(e) {
             e.preventDefault();
-            localStorage.setItem('skipLogin', 'true');
+            setCookie('skipLogin', 'true', 1);
             // Redirect to compiler page
             window.location.href = '/compiler_index.html';
         });
 
+        // Cookie utility functions - Simplified version
+        function setCookie(name, value, days) {
+            console.log('🍪 setCookie called with:', name, value, days);
+            
+            let expires = "";
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            
+            // Simple cookie without encoding first
+            const cookieValue = `${name}=${value}${expires}; path=/`;
+            document.cookie = cookieValue;
+            
+            console.log('🍪 Cookie set:', cookieValue);
+            console.log('🍪 Document.cookie after setting:', document.cookie);
+            
+            // Test immediate retrieval
+            const retrieved = getCookie(name);
+            console.log('🍪 Immediate retrieval test:', retrieved);
+        }
+
+        function getCookie(name) {
+            console.log('🍪 getCookie called for:', name);
+            console.log('🍪 Current document.cookie:', document.cookie);
+            
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            
+            console.log('🍪 Cookie array:', ca);
+            
+            for(let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                console.log('🍪 Checking cookie part:', c);
+                if (c.indexOf(nameEQ) === 0) {
+                    const value = c.substring(nameEQ.length, c.length);
+                    console.log('🍪 Found cookie value:', value);
+                    return value;
+                }
+            }
+            console.log('🍪 Cookie not found');
+            return null;
+        }
+
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/`;
+        }
+
+        // Test basic cookie functionality on page load
+        console.log('🧪 Testing basic cookie functionality...');
+        setCookie('testAuth', 'testValue123', 1);
+        const testResult = getCookie('testAuth');
+        console.log('🧪 Test result:', testResult);
+        
+        if (testResult === 'testValue123') {
+            console.log('✅ Basic cookie functionality works!');
+        } else {
+            console.log('❌ Basic cookie functionality failed!');
+            console.log('❌ This might be a browser security issue');
+        }
+
         // Check for existing authentication
-        const authToken = localStorage.getItem('authToken');
+        const authToken = getCookie('authToken');
         if (authToken) {
             fetch('/auth/verify', {
                 method: 'POST',
@@ -1110,13 +1184,13 @@
                     // Redirect to compiler page
                     window.location.href = '/compiler_index.html';
                 } else {
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('userInfo');
+                    deleteCookie('authToken');
+                    deleteCookie('userInfo');
                 }
             })
             .catch(() => {
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('userInfo');
+                deleteCookie('authToken');
+                deleteCookie('userInfo');
             });
         }
 
@@ -1131,6 +1205,33 @@
 
         if (success) {
             showSuccess(decodeURIComponent(success));
+        }
+
+        // Manual cookie test function
+        function testCookieManually() {
+            console.log('🧪 Manual cookie test started...');
+            
+            // Clear any existing test cookies
+            deleteCookie('manualTest');
+            
+            // Set a test cookie
+            const testValue = 'manual_test_' + Date.now();
+            console.log('🧪 Setting test cookie with value:', testValue);
+            setCookie('manualTest', testValue, 1);
+            
+            // Try to read it back
+            setTimeout(() => {
+                const retrieved = getCookie('manualTest');
+                console.log('🧪 Retrieved value:', retrieved);
+                
+                if (retrieved === testValue) {
+                    alert('✅ Cookie test PASSED! Cookies are working.');
+                    console.log('✅ Manual cookie test PASSED');
+                } else {
+                    alert('❌ Cookie test FAILED! Retrieved: ' + retrieved + ', Expected: ' + testValue);
+                    console.log('❌ Manual cookie test FAILED');
+                }
+            }, 100);
         }
     </script>
 </body>

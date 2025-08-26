@@ -582,14 +582,26 @@
             console.log('🔍 Current origin:', window.location.origin);
             console.log('🔍 Current pathname:', window.location.pathname);
             
-            // Check for auth token from localStorage/sessionStorage
-            // authToken = localStorage.getItem('authToken');
-            authToken = sessionStorage.getItem('authToken');
+            // Check for auth token from cookies
+            authToken = getCookie('authToken');
             console.log('🔍 Auth token found:', !!authToken); // Debug log
             console.log('🔍 Auth token value:', authToken); // Debug log
             
             if (authToken) {
                 try {
+                    // First, try to get user info from cookies
+                    const userInfoCookie = getCookie('userInfo');
+                    if (userInfoCookie) {
+                        try {
+                            currentUser = JSON.parse(userInfoCookie);
+                            console.log('🔍 User info from cookie:', currentUser); // Debug log
+                        } catch (e) {
+                            console.log('❌ Failed to parse user info from cookie:', e);
+                            currentUser = null;
+                        }
+                    }
+                    
+                    // Verify token with backend
                     console.log('🔍 Making request to /auth/verify...'); // Debug log
                     const response = await fetch('/auth/verify', {
                         method: 'POST', // Changed to POST as per backend
@@ -605,7 +617,24 @@
                     if (response.ok) {
                         const data = await response.json();
                         console.log('🔍 Response data:', data); // Debug log
-                        currentUser = data.user;
+                        console.log('🔍 Response data type:', typeof data); // Debug log
+                        console.log('🔍 Response data keys:', Object.keys(data)); // Debug log
+                        
+                        // Update currentUser with fresh data from backend
+                        if (data.user) {
+                            currentUser = data.user;
+                            console.log('🔍 Set currentUser from data.user:', currentUser); // Debug log
+                            // Update the cookie with fresh user info
+                            setCookie('userInfo', JSON.stringify(data.user), 30);
+                        } else if (data.username) {
+                            // Backend might be returning user data directly
+                            currentUser = data;
+                            console.log('🔍 Set currentUser from data directly:', currentUser); // Debug log
+                            setCookie('userInfo', JSON.stringify(data), 30);
+                        } else {
+                            console.log('❌ No user data found in response'); // Debug log
+                        }
+                        
                         console.log('🔍 User authenticated:', currentUser); // Debug log
                         updateUserInterface();
                     } else {
@@ -631,7 +660,9 @@
             const guestMode = document.getElementById('guestMode');
             
             console.log('🎨 Updating UI - currentUser:', currentUser); // Debug log
+            console.log('🎨 currentUser type:', typeof currentUser); // Debug log
             console.log('🎨 currentUser.username:', currentUser?.username); // Debug log
+            console.log('🎨 currentUser keys:', currentUser ? Object.keys(currentUser) : 'null'); // Debug log
             
             if (currentUser && currentUser.username) {
                 // Show user profile - hide guest mode completely
@@ -651,28 +682,72 @@
                         .substring(0, 2)
                         .toUpperCase();
                     
-                    document.getElementById('userPicture').src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background: %230e639c"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-family="Arial" font-size="40" fill="white">${initials}</text></svg>`;
+                    document.getElementById('userPicture').src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="background: %230e639c"><text x="50%" y="50%" fill="white">${initials}</text></svg>`;
                 }
             } else {
                 // Show guest mode - hide user profile completely
                 console.log('❌ Showing guest mode - no user authenticated'); // Debug log
+                console.log('❌ currentUser is falsy or missing username'); // Debug log
                 userProfile.style.display = 'none';
                 guestMode.style.display = 'flex';
             }
         }
         
+        // Cookie utility functions - Simplified version (matching auth.html)
+        function setCookie(name, value, days) {
+            console.log('🍪 setCookie called with:', name, value, days);
+            
+            let expires = "";
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = "; expires=" + date.toUTCString();
+            }
+            
+            // Simple cookie without encoding first
+            const cookieValue = `${name}=${value}${expires}; path=/`;
+            document.cookie = cookieValue;
+            
+            console.log('🍪 Cookie set:', cookieValue);
+            console.log('🍪 Document.cookie after setting:', document.cookie);
+            
+            // Test immediate retrieval
+            const retrieved = getCookie(name);
+            console.log('🍪 Immediate retrieval test:', retrieved);
+        }
+
         function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
+            console.log('🍪 getCookie called for:', name);
+            console.log('🍪 Current document.cookie:', document.cookie);
+            
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            
+            console.log('🍪 Cookie array:', ca);
+            
+            for(let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                console.log('🍪 Checking cookie part:', c);
+                if (c.indexOf(nameEQ) === 0) {
+                    const value = c.substring(nameEQ.length, c.length);
+                    console.log('🍪 Found cookie value:', value);
+                    return value;
+                }
+            }
+            console.log('🍪 Cookie not found');
+            return null;
+        }
+        
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/`;
         }
         
         function clearAuthToken() {
             authToken = null;
             currentUser = null;
-            // localStorage.removeItem('authToken');
-            sessionStorage.removeItem('authToken');
-            document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            deleteCookie('authToken');
+            deleteCookie('userInfo');
         }
         
 
@@ -1092,6 +1167,51 @@ WHERE salary > (SELECT AVG(salary) FROM employees);`,
                 showQuestionPopup();
             }
         });
+        
+        // Debug function to check cookies
+        function debugCookies() {
+            console.log('🍪 All cookies:', document.cookie);
+            console.log('🍪 Auth token:', getCookie('authToken'));
+            console.log('🍪 User info:', getCookie('userInfo'));
+            console.log('🍪 Current domain:', window.location.hostname);
+            console.log('🍪 Current path:', window.location.pathname);
+            console.log('🍪 Cookie string length:', document.cookie.length);
+            
+            // Check if cookies are being set at all
+            if (document.cookie.length === 0) {
+                console.log('🍪 No cookies found at all!');
+            }
+            
+            try {
+                const userInfo = getCookie('userInfo');
+                if (userInfo) {
+                    const parsed = JSON.parse(userInfo);
+                    console.log('🍪 Parsed user info:', parsed);
+                    console.log('🍪 Username from cookie:', parsed.username);
+                }
+            } catch (e) {
+                console.log('🍪 Error parsing user info:', e);
+            }
+        }
+        
+        // Call debug function immediately and after a delay
+        debugCookies();
+        setTimeout(debugCookies, 2000);
+        setTimeout(debugCookies, 5000);
+        
+        // Test cookie functionality
+        console.log('🧪 Testing cookie functionality...');
+        setCookie('testCookie', 'testValue', 1);
+        console.log('🧪 Test cookie set, now checking...');
+        setTimeout(() => {
+            const testValue = getCookie('testCookie');
+            console.log('🧪 Test cookie retrieved:', testValue);
+            if (testValue === 'testValue') {
+                console.log('✅ Cookie functionality working!');
+            } else {
+                console.log('❌ Cookie functionality not working!');
+            }
+        }, 100);
         
         // Close question modal when clicking outside
         document.getElementById('questionModal').addEventListener('click', function(e) {
