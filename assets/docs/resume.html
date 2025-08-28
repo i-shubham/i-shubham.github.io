@@ -1827,6 +1827,137 @@
         document.body.appendChild(deviceInfo);
     });
 </script>
+
+
+<!--    Disable Print Shortcut (Cmd+P / Ctrl+P)-->
+    <script>
+document.addEventListener("keydown", function (e) {
+  // For Mac Command + P
+  if (e.metaKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    alert("Printing is disabled on this page!");
+  }
+
+  // For Windows/Linux Ctrl + P (optional)
+  if (e.ctrlKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    alert("Printing is disabled on this page!");
+  }
+});
+</script>
+
+<!--    Disable Right-Click Menu (so user can’t right-click → Print)-->
+<script>
+document.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  alert("Right click is disabled on this page!");
+});
+</script>
+
+<!--    Disable Print from Browser Menu: You can’t fully block the browser’s built-in menu (e.g., Chrome’s File → Print), but you can make the page unprintable by hiding everything when a print is triggered:-->
+<style>
+@media print {
+  body {
+    display: none !important;
+  }
+}
+</style>
+    <style>
+@media save {
+  body {
+    display: none !important;
+  }
+}
+</style>
+
+
+<!--    Disable Save Shortcut (Cmd+S / Ctrl+S)-->
+<script>
+document.addEventListener("keydown", function (e) {
+  // Block Command + S (Mac)
+  if (e.metaKey && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    alert("Saving this page is disabled!");
+  }
+
+  // Block Ctrl + S (Windows/Linux)
+  if (e.ctrlKey && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    alert("Saving this page is disabled!");
+  }
+});
+</script>
+
+
+
+<!--    Disable Browser “Save As” (Menu → File → Save Page As)-->
+    <style>
+/* If someone tries to Save/Print the page, hide content */
+@media print {
+  body {
+    display: none !important;
+  }
+}
+</style>
+
+<script>
+// Optional: Clear DOM when user tries to leave with Save As
+window.addEventListener("beforeprint", () => {
+  document.body.innerHTML = "";
+});
+</script>
+
+
+<!--    Disable Right-Click “Save As” for Images/Media-->
+<script>
+document.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  alert("Right click is disabled on this page!");
+});
+</script>
+
+
+<!--    Blank out content on save/print events:-->
+<script>
+window.addEventListener("beforeprint", () => {
+  document.body.innerHTML = "";
+});
+</script>
+
+
+<!--    Use @media print to hide content:-->
+    <style>
+@media print {
+  body {
+    display: none !important;
+  }
+}
+</style>
+
+<script>
+<!--    // Disable right-click-->
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+});
+
+<!--// Disable common keyboard shortcuts-->
+document.addEventListener('keydown', function(e) {
+    // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+S
+    if (e.keyCode == 123 || // F12
+        (e.ctrlKey && e.shiftKey && e.keyCode == 73) || // Ctrl+Shift+I
+        (e.ctrlKey && e.shiftKey && e.keyCode == 74) || // Ctrl+Shift+J
+        (e.ctrlKey && e.keyCode == 85) || // Ctrl+U
+        (e.ctrlKey && e.keyCode == 83)) { // Ctrl+S
+        e.preventDefault();
+        return false;
+    }
+});
+
+<!--// Disable drag and drop-->
+document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+});
+</script>
 </head>
 <body>
 
