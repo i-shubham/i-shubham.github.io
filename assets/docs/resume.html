@@ -1940,7 +1940,7 @@ document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
 });
 
-<!--// Disable common keyboard shortcuts-->
+// Disable common keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+S
     if (e.keyCode == 123 || // F12
@@ -1953,7 +1953,7 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-<!--// Disable drag and drop-->
+// Disable drag and drop
 document.addEventListener('dragstart', function(e) {
     e.preventDefault();
 });
@@ -2254,7 +2254,7 @@ document.addEventListener('dragstart', function(e) {
                         </div>
                         <div class="skill-group-item">
                             <div class="skill-group-title">
-                                <span class="skill-text">Programming Languages</span>
+                                <span class="skill-text">Programming</span>
                                 <span class="skill-icon">👨🏻‍💻</span>
                             </div>
                             <div class="skill-tags">
@@ -2450,13 +2450,13 @@ document.addEventListener('dragstart', function(e) {
                 }
             });
             
-            // PDF options - NO MARGINS with better color preservation
+            // PDF options - Optimized for quality vs file size balance
             const opt = {
                 margin: [0, 0, 0, 0],
                 filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                image: { type: 'jpeg', quality: 1.0, pixelRatio: 4, dpi: 900 },
+                image: { type: 'jpeg', quality: 0.90, pixelRatio: 4, dpi: 900 },
                 html2canvas: { 
-                    scale: 4,
+                    scale: 2,
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
@@ -2471,9 +2471,36 @@ document.addEventListener('dragstart', function(e) {
                     unit: 'mm', 
                     format: 'a4', 
                     orientation: 'portrait',
-                    compress: false
+                    compress: true
                 }
             };
+
+            // Alternative aggressive compression settings (uncomment if needed for smaller files)
+            /*
+            const opt = {
+                margin: [0, 0, 0, 0],
+                filename: 'Shubham Mallick - Data and Application Architect.pdf',
+                image: { type: 'jpeg', quality: 0.75, pixelRatio: 1.5, dpi: 200 },
+                html2canvas: { 
+                    scale: 1.5,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: document.documentElement.offsetWidth,
+                    windowHeight: document.documentElement.offsetHeight,
+                    logging: false,
+                    removeContainer: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: true
+                }
+            };
+            */
             
             // Generate and download PDF
             html2pdf().set(opt).from(element).save().then(() => {
