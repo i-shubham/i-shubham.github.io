@@ -2414,7 +2414,7 @@ document.addEventListener("keydown", function (e) {
             });
         });
 
-        function downloadResume() {
+        async function downloadResume() {
             // Hide the download button temporarily
             const downloadBtn = document.querySelector('.download-btn');
             downloadBtn.style.display = 'none';
@@ -2437,8 +2437,6 @@ document.addEventListener("keydown", function (e) {
             element.style.borderRadius = '0';
             element.style.border = 'none';
             element.style.overflow = 'visible';
-            
-
             
             gradientElements.forEach((el, index) => {
                 originalStyles[index] = {
@@ -2477,60 +2475,45 @@ document.addEventListener("keydown", function (e) {
                 }
             });
             
-            // PDF options - Optimized for quality vs file size balance
-            const opt = {
-                margin: [0, 0, 0, 0],
-                filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                image: { type: 'jpeg', quality: 0.90, pixelRatio: 4, dpi: 900 },
-                html2canvas: { 
-                    scale: 2,
-                    useCORS: true,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: document.documentElement.offsetWidth,
-                    windowHeight: document.documentElement.offsetHeight,
-                    logging: false,
-                    removeContainer: true
-                },
-                jsPDF: { 
-                    unit: 'mm', 
-                    format: 'a4', 
-                    orientation: 'portrait',
-                    compress: true
-                }
-            };
-
-            // Alternative aggressive compression settings (uncomment if needed for smaller files)
-            /*
-            const opt = {
-                margin: [0, 0, 0, 0],
-                filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                image: { type: 'jpeg', quality: 0.75, pixelRatio: 1.5, dpi: 200 },
-                html2canvas: { 
-                    scale: 1.5,
-                    useCORS: true,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: document.documentElement.offsetWidth,
-                    windowHeight: document.documentElement.offsetHeight,
-                    logging: false,
-                    removeContainer: true
-                },
-                jsPDF: { 
-                    unit: 'mm', 
-                    format: 'a4', 
-                    orientation: 'portrait',
-                    compress: true
-                }
-            };
-            */
-            
-            // Generate and download PDF
-            html2pdf().set(opt).from(element).save().then(() => {
+            try {
+                // Get the actual dimensions of the container
+                const containerWidth = element.offsetWidth;
+                const containerHeight = element.offsetHeight;
+                
+                // Calculate aspect ratio and create custom page size
+                // Convert pixels to mm (assuming 96 DPI: 1 inch = 25.4mm, 1 inch = 96px)
+                const pxToMm = 25.4 / 96;
+                const pageWidthMm = containerWidth * pxToMm;
+                const pageHeightMm = containerHeight * pxToMm;
+                
+                // PDF options - Single page with exact dimensions
+                const opt = {
+                    margin: 0,
+                    filename: 'Shubham Mallick - Data and Application Architect.pdf',
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { 
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: true,
+                        backgroundColor: '#ffffff',
+                        scrollX: 0,
+                        scrollY: 0,
+                        width: containerWidth,
+                        height: containerHeight,
+                        logging: false
+                    },
+                    jsPDF: { 
+                        unit: 'mm', 
+                        format: [pageWidthMm, pageHeightMm],
+                        orientation: 'portrait',
+                        compress: true
+                    },
+                    pagebreak: { mode: 'avoid-all' }
+                };
+                
+                // Generate and download PDF
+                await html2pdf().set(opt).from(element).save();
+                
                 // Restore original styles
                 gradientElements.forEach((el, index) => {
                     if (originalStyles[index]) {
@@ -2544,8 +2527,6 @@ document.addEventListener("keydown", function (e) {
                     }
                 });
                 
-
-                
                 // Restore container styles
                 element.style.borderRadius = originalContainerStyles.borderRadius;
                 element.style.border = originalContainerStyles.border;
@@ -2553,8 +2534,10 @@ document.addEventListener("keydown", function (e) {
                 
                 // Show the download button again
                 downloadBtn.style.display = 'flex';
-            }).catch(error => {
+                
+            } catch (error) {
                 console.error('PDF generation failed:', error);
+                alert('PDF generation failed. Please try again or use Cmd+P / Ctrl+P to print.');
                 
                 // Restore original styles on error too
                 gradientElements.forEach((el, index) => {
@@ -2575,7 +2558,7 @@ document.addEventListener("keydown", function (e) {
                 element.style.overflow = originalContainerStyles.overflow;
                 
                 downloadBtn.style.display = 'flex';
-            });
+            }
         }
     </script>
 </body>
