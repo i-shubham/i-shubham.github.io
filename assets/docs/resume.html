@@ -2399,8 +2399,8 @@ document.addEventListener("keydown", function (e) {
     </div>
 
     <!-- PDF Generation Script -->
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script> -->
-     <script src="../../assets/js/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- <script src="../../assets/js/html2pdf.bundle.min.js"></script> -->
     <script>
         // Remove all CSS from skill icons at runtime
         document.addEventListener('DOMContentLoaded', function() {
@@ -2430,6 +2430,24 @@ document.addEventListener("keydown", function (e) {
             
             // Get the resume container
             const element = document.querySelector('.container');
+            
+            // Check if element exists
+            if (!element) {
+                console.error('Container element not found');
+                alert('Error: Could not find resume container');
+                downloadBtn.style.display = 'flex';
+                return;
+            }
+            
+            // Wait for all images to load
+            const images = element.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise((resolve) => {
+                    img.onload = resolve;
+                    img.onerror = resolve; // Continue even if image fails
+                });
+            }));
             
             // Temporarily fix gradient text elements for PDF
             const gradientElements = element.querySelectorAll('.company, .job-title, .degree, .grade, .award-title');
@@ -2485,17 +2503,28 @@ document.addEventListener("keydown", function (e) {
             });
             
             try {
-                // Get the actual dimensions of the container
+                // Check if html2pdf is loaded
+                if (typeof html2pdf === 'undefined') {
+                    throw new Error('html2pdf library not loaded. Please check script path.');
+                }
+                
+                console.log('html2pdf loaded successfully');
+                console.log('Element:', element);
+                console.log('Element dimensions:', element.offsetWidth, 'x', element.offsetHeight);
+                
+                // Get container dimensions
                 const containerWidth = element.offsetWidth;
                 const containerHeight = element.offsetHeight;
                 
-                // Calculate aspect ratio and create custom page size
-                // Convert pixels to mm (assuming 96 DPI: 1 inch = 25.4mm, 1 inch = 96px)
+                // Convert pixels to mm (96 DPI) - add small buffer to prevent page overflow
                 const pxToMm = 25.4 / 96;
-                const pageWidthMm = containerWidth * pxToMm;
-                const pageHeightMm = containerHeight * pxToMm;
+                const widthMm = Math.ceil(containerWidth * pxToMm) + 1;
+                const heightMm = Math.ceil(containerHeight * pxToMm) + 1;
                 
-                // PDF options - Single page with exact dimensions
+                console.log('Container size:', containerWidth, 'x', containerHeight, 'px');
+                console.log('PDF size:', widthMm, 'x', heightMm, 'mm');
+                
+                // PDF options - custom size matching container (single page)
                 const opt = {
                     margin: 0,
                     filename: 'Shubham Mallick - Data and Application Architect.pdf',
@@ -2505,23 +2534,54 @@ document.addEventListener("keydown", function (e) {
                         useCORS: true,
                         allowTaint: true,
                         backgroundColor: '#ffffff',
-                        scrollX: 0,
-                        scrollY: 0,
+                        logging: false,
                         width: containerWidth,
                         height: containerHeight,
-                        logging: false
+                        onclone: function(clonedDoc) {
+                            // Add comprehensive reset styles
+                            var style = clonedDoc.createElement('style');
+                            style.textContent = `
+                                * { box-sizing: border-box !important; }
+                                html, body { 
+                                    margin: 0 !important; 
+                                    padding: 0 !important; 
+                                    background: white !important;
+                                }
+                                .container::before { display: none !important; }
+                                .container {
+                                    margin: 0 !important;
+                                    margin-left: 0 !important;
+                                    padding: 0 !important;
+                                    position: absolute !important;
+                                    left: 0 !important;
+                                    top: 0 !important;
+                                    border-radius: 0 !important;
+                                    border: none !important;
+                                    box-shadow: none !important;
+                                    overflow: visible !important;
+                                }
+                                .header {
+                                    border-radius: 0 !important;
+                                    margin: 0 !important;
+                                }
+                            `;
+                            clonedDoc.head.appendChild(style);
+                        }
                     },
                     jsPDF: { 
                         unit: 'mm', 
-                        format: [pageWidthMm, pageHeightMm],
-                        orientation: 'portrait',
-                        compress: true
+                        format: [widthMm, heightMm],
+                        orientation: 'portrait'
                     },
                     pagebreak: { mode: 'avoid-all' }
                 };
                 
+                console.log('Starting PDF generation...');
+                
                 // Generate and download PDF
                 await html2pdf().set(opt).from(element).save();
+                
+                console.log('PDF generation complete');
                 
                 // Restore original styles
                 gradientElements.forEach((el, index) => {
