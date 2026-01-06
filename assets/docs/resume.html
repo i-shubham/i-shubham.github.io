@@ -2524,19 +2524,21 @@ document.addEventListener("keydown", function (e) {
                 console.log('Container size:', containerWidth, 'x', containerHeight, 'px');
                 console.log('PDF size:', widthMm, 'x', heightMm, 'mm');
                 
-                // PDF options - custom size matching container (single page)
+                // PDF options - optimized for quality AND small file size
                 const opt = {
                     margin: 0,
                     filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                    image: { type: 'jpeg', quality: 0.98 },
+                    image: { type: 'png' },  // PNG for sharper text, better compression for graphics
                     html2canvas: { 
-                        scale: 2,
+                        scale: 2,  // High resolution for crisp output
                         useCORS: true,
                         allowTaint: true,
                         backgroundColor: '#ffffff',
                         logging: false,
                         width: containerWidth,
                         height: containerHeight,
+                        imageTimeout: 0,
+                        removeContainer: true,
                         onclone: function(clonedDoc) {
                             // Add comprehensive reset styles
                             var style = clonedDoc.createElement('style');
@@ -2571,7 +2573,9 @@ document.addEventListener("keydown", function (e) {
                     jsPDF: { 
                         unit: 'mm', 
                         format: [widthMm, heightMm],
-                        orientation: 'portrait'
+                        orientation: 'portrait',
+                        compress: true,  // Enable PDF compression
+                        putOnlyUsedFonts: true
                     },
                     pagebreak: { mode: 'avoid-all' }
                 };
