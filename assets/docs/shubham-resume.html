@@ -232,6 +232,11 @@
             margin-bottom: 3.5mm;
         }
 
+        .awards-section .simple-list li::before {
+            content: '🏆  ';
+            font-size: 5pt;
+        }
+
         /* Right Content */
         .right-content {
             padding: 2mm 3mm 2mm 5mm;
@@ -326,6 +331,19 @@
             display: flex;
             justify-content: space-between;
             align-items: baseline;
+        }
+
+        .company-info {
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+        }
+
+        .company-logo {
+            width: 5mm;
+            height: 5mm;
+            object-fit: contain;
+            flex-shrink: 0;
         }
 
         .company-name {
@@ -539,7 +557,7 @@
             <section class="summary-section">
                 <h2 class="content-section-title">Professional Summary</h2>
                 <p class="summary-text">
-                    Senior Data/Application Architect with 13+ years of experience specializing in large-scale distributed data systems, data governance (lineage, quality, compliance), and cloud-native platforms. Delivered enterprise solutions processing 50TB+ daily with 70% latency reduction and 99.9% SLA. Expertise in orchestration (Airflow/Kubernetes), observability (Datadog/Prometheus), CI/CD, multi-cloud, and AI/ML integration across Salesforce, Apple, Qualcomm, IBM, and PwC.
+                    Senior Data/Application Architect with 13+ years of experience specializing in large-scale distributed data systems, data governance (lineage, quality, compliance), and cloud-native platforms. Delivered enterprise solutions processing 50TB+ daily with 70% latency reduction and 99.9% SLA. Expertise in orchestration (Airflow/Kubernetes), observability (Splunk/Datadog/Prometheus), CI/CD, multi-cloud, and AI/ML integration across Salesforce, Apple, Qualcomm, IBM, and PwC.
                 </p>
             </section>
 
@@ -549,14 +567,17 @@
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">Atlassian</div>
+                        <div class="company-info">
+                            <img src="../img/org/atlassian.png" alt="Atlassian" class="company-logo">
+                            <div class="company-name">Atlassian</div>
+                        </div>
                         <div class="duration">Sep 2025 - Present</div>
                     </div>
                     <div class="position-title">Lead Engineering</div>
                     <div class="experience-description">
                         <ul>
                             <li>Leading data platform initiatives with Databricks/Spark for enterprise analytics and AI/ML workloads for Go To Market product</li>
-                            <li>Establishing data governance standards including quality frameworks and pipeline observability</li>
+                            <li>Establishing data governance standards including quality frameworks and pipeline observability among teams</li>
                             <li>Building AI-ready data infrastructure on Databricks enabling GenAI model deployment and ML feature engineering</li>
                         </ul>
                     </div>
@@ -564,23 +585,29 @@
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">Salesforce</div>
+                        <div class="company-info">
+                            <img src="../img/org/salesforce.jpeg" alt="Salesforce" class="company-logo">
+                            <div class="company-name">Salesforce</div>
+                        </div>
                         <div class="duration">Jul 2022 - Aug 2025</div>
                     </div>
                     <div class="position-title">Staff Engineering, Performance Engineering, Sales AI</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Architected cloud-native data platform with event-driven pipelines, achieving 70% latency reduction using Spark/EKS/Kafka orchestration</li>
-                            <li>Implemented platform observability with Datadog/Prometheus; established SLAs and data quality monitoring for CI/CD systems</li>
-                            <li>Built IaC automation (Terraform/EKS/Jenkins) reducing deployment time by 70%; enabled developer self-service patterns</li>
-                            <li>Led GenAI/AI integration into data infrastructure achieving 25-40% performance improvement</li>
+                            <li>Architected cloud-native data platform with event-driven ticketing-system, achieving 70% latency reduction using Spark/EKS/Kafka orchestration</li>
+                            <li>Implemented platform observability with Grafana/Splunk; established SLAs and data quality monitoring for CI/CD systems</li>
+                            <li>Built IaC automation (Terraform/EKS/Jenkins) reducing deployment time by 70%; enabled developer self-service solutions</li>
+                            <li>Led GenAI/AI integration with Agentforce into data infrastructure achieving 25-40% performance improvement</li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">Apple Inc.</div>
+                        <div class="company-info">
+                            <img src="../img/org/apple.png" alt="Apple" class="company-logo">
+                            <div class="company-name">Apple Inc.</div>
+                        </div>
                         <div class="duration">Jun 2020 - Jul 2022</div>
                     </div>
                     <div class="position-title">Technical Lead, Module Owner</div>
@@ -597,7 +624,10 @@
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">Qualcomm</div>
+                        <div class="company-info">
+                            <img src="../img/org/qualcomm.jpeg" alt="Qualcomm" class="company-logo">
+                            <div class="company-name">Qualcomm</div>
+                        </div>
                         <div class="duration">Nov 2017 - May 2020</div>
                     </div>
                     <div class="position-title">Senior ML, Distributed System Engineer</div>
@@ -605,24 +635,27 @@
                         <ul>
                             <li>Architected large-scale distributed data platform processing 20TB+ daily with Spark/HIVE/MapR DB in Hadoop ecosystem</li>
                             <li>Built AI/ML data pipelines with 92% model accuracy; optimized data infrastructure reducing resource usage 25%</li>
-                            <li>Implemented data quality and monitoring frameworks ensuring data reliability across enterprise analytics workloads</li>
-                            <li>Won Innovation Maestro, HaQkathon; presented distributed platform architecture to CxO leadership</li>
-                            <li>Designed orchestration workflows (Airflow) and data transformation frameworks improving pipeline efficiency by 35%</li>
-                            <li>Partnered with engineering and analytics teams enabling developer self-service access to 15+ data products</li>
+                            <li>Implemented data quality & monitoring frameworks ensuring data reliability across enterprise analytics workloads</li>
+                            <li>Won Innovation Maestro, HaQkathon; presented the innovative solutions to CxO leadership</li>
+                            <li>Designed orchestration workflows (Airflow) & data transformation frameworks improving pipeline efficiency by 35%</li>
+                            <li>Partnered with engineering & analytics teams enabling developer self-service access to 15+ data products</li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">IBM</div>
+                        <div class="company-info">
+                            <img src="../img/org/ibm.png" alt="IBM" class="company-logo">
+                            <div class="company-name">IBM</div>
+                        </div>
                         <div class="duration">Dec 2016 - Nov 2017</div>
                     </div>
                     <div class="position-title">Advisory Analyst, Azure Cloud SME</div>
                     <div class="experience-description">
                         <ul>
                             <li>Led 6-member team architecting multi-cloud data platform on Azure, delivered ahead of schedule</li>
-                            <li>Migrated 500GB+ data with 99.9% integrity using Azure Data Factory; established data quality SLAs</li>
+                            <li>Migrated 500GB+ data with 99.9% integrity using Azure Data Factory, Service Bus; established data quality SLAs</li>
                             <li>Implemented IaC automation and compliance frameworks meeting regulatory requirements across 3 geographic regions</li>
                         </ul>
                     </div>
@@ -630,30 +663,37 @@
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">PwC</div>
+                        <div class="company-info">
+                            <img src="../img/org/pwc.jpeg" alt="PwC" class="company-logo">
+                            <div class="company-name">PwC</div>
+                        </div>
                         <div class="duration">Oct 2014 - Dec 2016</div>
                     </div>
                     <div class="position-title">Senior Developer / Consultant</div>
                     <div class="experience-description">
                         <ul>
                             <li>Architected BI platform with OLTP/OLAP optimization querying billion+ rows in 2-5 sec; delivered dashboards for business analytics</li>
-                            <li>Built scalable ETL pipelines processing 50M+ rows daily; Won STAR Performer for data platform excellence</li>
-                            <li>Implemented logical data modeling and schema versioning improving data consistency by 40% across analytics workloads</li>
-                            <li>Collaborated with business stakeholders across Sales, Finance enabling data-driven decision-making for 20+ teams</li>
+                            <li>Built scalable ETL pipelines processing 50M+ rows daily</li>
+                            <li>Implemented logical data modeling & schema versioning improving data consistency by 40%, across analytics workloads</li>
+                            <li>Collaborated with business stakeholders across Sales, Finance enabling data-driven decision-making</li>
+                            <li>Won STAR Performer for data platform excellence & multiple client appreciation awards</li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="experience-item">
                     <div class="experience-header">
-                        <div class="company-name">Cognizant</div>
+                        <div class="company-info">
+                            <img src="../img/org/cognizant.png" alt="Cognizant" class="company-logo">
+                            <div class="company-name">Cognizant</div>
+                        </div>
                         <div class="duration">Apr 2012 - Oct 2014</div>
                     </div>
                     <div class="position-title">Application Developer</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Managed 24x7 production support for MetLife bulk data processing, and application support</li>
-                            <li>Automated processes reducing manual effort by 60%</li>
+                            <li>Managed 24x7 production support for MetLife backend processing, and application support</li>
+                            <li>Automated processes reducing manual effort by 60%, across 5+ applications</li>
                         </ul>
                     </div>
                 </div>
