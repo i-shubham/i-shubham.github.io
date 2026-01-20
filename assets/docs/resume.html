@@ -4,2635 +4,700 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shubham Mallick - Data and Application Architect</title>
-    <link href="../img/profile-img.jpg" rel="icon">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Download Button Styles */
-        .download-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
-            z-index: 1000;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        :root {
+            --primary-dark: #1a2332;
+            --accent-gold: #d4af37;
+            --accent-blue: #2c5f8d;
+            --text-gray: #4a5568;
+            --bg-light: #f8f9fa;
+            --border-color: #e2e8f0;
         }
 
-        .download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
-        }
-
-        .download-btn:active {
-            transform: translateY(0);
-        }
-
-        .download-btn::before {
-            content: '📄';
-            font-size: 16px;
-        }
-
-        /* Disable text selection */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
         }
 
-        /* PDF Generation Styles */
-        @media print {
-            /* Ensure profile image stays round in print */
-            .profile-image {
-                border-radius: 50% !important;
-                width: 65px !important;
-                height: 70px !important;
-                object-fit: cover !important;
-                border: 3px solid rgba(255,255,255,0.3) !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix awards ribbon for CMD+P printing */
-            .awards-ribbon {
-                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
-                color: white !important;
-                padding: 3px 18px !important;
-                text-align: center !important;
-                font-weight: 700 !important;
-                font-size: 0.7em !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                margin: 0 25px 1px 25px !important;
-                border-radius: 8px !important;
-                position: relative !important;
-                overflow: hidden !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix skill tags for CMD+P printing */
-            .skill-tag {
-                background: rgba(52, 152, 219, 0.1) !important;
-                color: #2c3e50 !important;
-                padding: 3px 3px !important;
-                border-radius: 8px !important;
-                font-size: 0.65em !important;
-                font-weight: 500 !important;
-                border: 1px solid rgba(52, 152, 219, 0.2) !important;
-                display: inline-block !important;
-                margin: 1px !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix visa badge for CMD+P printing */
-            .visa-badge {
-                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
-                color: white !important;
-                padding: 5px 10px !important;
-                border-radius: 20px !important;
-                font-size: 0.65em !important;
-                font-weight: 600 !important;
-                box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3) !important;
-                position: relative !important;
-                overflow: hidden !important;
-                display: inline-block !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix company and education images for CMD+P printing */
-            .experience-item img,
-            .education-item img {
-                border-radius: 8px !important;
-                object-fit: contain !important;
-                max-width: 100% !important;
-                height: auto !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            body {
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            
-            .container {
-                margin: 0 !important;
-                box-shadow: none !important;
-                border-radius: 0 !important;
-                border: none !important;
-                overflow: visible !important;
-            }
-            
-            /* Preserve border radius for specific elements in PDF */
-            .container {
-                border-radius: 15px !important;
-                border: none !important;
-                overflow: hidden !important;
-                box-shadow: none !important;
-            }
-            
-            /* Preserve border radius for specific elements */
-            .profile-image {
-                border-radius: 50% !important;
-            }
-            
-            .visa-badge {
-                border-radius: 20px !important;
-            }
-            
-            .awards-ribbon {
-                border-radius: 8px !important;
-            }
-            
-            .metric {
-                border-radius: 8px !important;
-            }
-            
-            .experience-item {
-                border-radius: 10px !important;
-            }
-            
-            .skills-container {
-                border-radius: 12px !important;
-            }
-            
-            .skill-tag {
-                border-radius: 10px !important;
-            }
-            
-            .education-item {
-                border-radius: 8px !important;
-            }
-            
-            .award-item {
-                border-radius: 8px !important;
-            }
-            
-            .summary {
-                border-radius: 10px !important;
-            }
-            
-            .leadership-container {
-                border-radius: 10px !important;
-            }
-            
-            /* Preserve profile image round shape in PDF */
-            .profile-image {
-                border-radius: 50% !important;
-                width: 65px !important;
-                height: 70px !important;
-                object-fit: cover !important;
-                border: 3px solid rgba(255,255,255,0.3) !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
-            }
-            
-            /* Fix awards ribbon for PDF printing */
-            .awards-ribbon {
-                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
-                color: white !important;
-                padding: 3px 18px !important;
-                text-align: center !important;
-                font-weight: 700 !important;
-                font-size: 0.7em !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                margin: 0 25px 1px 25px !important;
-                border-radius: 8px !important;
-                position: relative !important;
-                overflow: hidden !important;
-            }
-            
-            /* Fix skill tags for PDF printing */
-            .skill-tag {
-                background: rgba(52, 152, 219, 0.1) !important;
-                color: #2c3e50 !important;
-                padding: 3px 3px !important;
-                border-radius: 8px !important;
-                font-size: 0.65em !important;
-                font-weight: 500 !important;
-                border: 1px solid rgba(52, 152, 219, 0.2) !important;
-                display: inline-block !important;
-                margin: 1px !important;
-            }
-            
-            /* Fix visa badge for PDF printing */
-            .visa-badge {
-                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
-                color: white !important;
-                padding: 5px 10px !important;
-                border-radius: 20px !important;
-                font-size: 0.65em !important;
-                font-weight: 600 !important;
-                box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3) !important;
-                position: relative !important;
-                overflow: hidden !important;
-                display: inline-block !important;
-            }
-            
-            /* Fix company and education images for PDF printing */
-            .experience-item img,
-            .education-item img {
-                border-radius: 8px !important;
-                object-fit: contain !important;
-                max-width: 100% !important;
-                height: auto !important;
-            }
-            
-            .download-btn {
-                display: none !important;
-            }
-            
-            /* Preserve all gradients and colors in PDF */
-            .header {
-                background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
-                border-radius: 8px 8px 0 0 !important;
-            }
-            
-            .content {
-                border-radius: 0 0 15px 15px !important;
-            }
-            
-            .visa-badge {
-                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
-            }
-            
-            .awards-ribbon {
-                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b35) !important;
-            }
-            
-            .metric {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) !important;
-            }
-            
-            .experience-item {
-                background: linear-gradient(135deg, #f8f9fa 0%, #cfd7e0 100%) !important;
-            }
-            
-            /* .skills-container {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            } */
-            
-            /* .education-item {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            } */
-            
-            /* .award-item {
-                background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
-            } */
-            
-            .leadership-container {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            }
-            
-            .summary {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            }
-            
-            /* Preserve all other gradients and colors */
-            .container::before {
-                background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff, #5f27cd, #00d2d3, #ff6b6b) !important;
-            }
-            
-            .name {
-                color: white !important;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important;
-            }
-            
-            .title {
-                color: white !important;
-                opacity: 0.9 !important;
-            }
-            
-            .contact-item a {
-                color: white !important;
-            }
-            
-            .contact-item {
-                color: white !important;
-            }
-            
-            .metric-number {
-                color: white !important;
-                font-weight: 700 !important;
-            }
-            
-            .metric-label {
-                color: white !important;
-                font-size: 0.7em !important;
-                display: block !important;
-                line-height: 1 !important;
-            }
-            
-            .metric {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-                color: white !important;
-                padding: 2px !important;
-                border-radius: 8px !important;
-                text-align: center !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
-                position: relative !important;
-                overflow: hidden !important;
-                color-adjust: exact !important;
-            }
-            
-            .metric-number {
-                font-size: 1.2em !important;
-                font-weight: 800 !important;
-                display: block !important;
-                line-height: 1 !important;
-                text-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
-                filter: drop-shadow(0 0 3px rgba(255,255,255,0.3)) !important;
-                color: white !important;
-                color-adjust: exact !important;
-                margin-bottom: 1px !important;
-            }
-            
-            .company {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #3498db !important;
-                font-weight: 600 !important;
-                font-size: 1.2em !important;
-                text-shadow: none !important;
-                color-adjust: exact !important;
-            }
-            
-            .job-title {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #704da6 !important;
-                font-weight: 700 !important;
-                font-size: 1em !important;
-                text-shadow: none !important;
-                color-adjust: exact !important;
-            }
-            
-            .degree {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #2c3e50 !important;
-                font-size: 0.8em !important;
-                line-height: 1.2 !important;
-                text-shadow: none !important;
-                color-adjust: exact !important;
-            }
-            
-            .awards-ribbon {
-                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3) !important;
-                color: white !important;
-                padding: 4px 20px !important;
-                text-align: center !important;
-                font-weight: 700 !important;
-                font-size: 0.75em !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                margin: 0 25px 2px 25px !important;
-                border-radius: 8px !important;
-                position: relative !important;
-                overflow: hidden !important;
-                color-adjust: exact !important;
-            }
-            
-            .awards-ribbon::before {
-                content: '🏆' !important;
-                position: absolute !important;
-                left: 10px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                font-size: 1.2em !important;
-                filter: drop-shadow(0 0 3px rgba(255,255,255,0.5)) !important;
-                color-adjust: exact !important;
-            }
-            
-            .awards-ribbon::after {
-                content: '🏆' !important;
-                position: absolute !important;
-                right: 10px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                font-size: 1.2em !important;
-                filter: drop-shadow(0 0 3px rgba(255,255,255,0.5)) !important;
-                color-adjust: exact !important;
-            }
-            
-            .awards-ribbon span {
-                padding-left: 25px !important;
-                padding-right: 25px !important;
-                color: white !important;
-                color-adjust: exact !important;
-            }
-            
-            .section-title {
-                color: #2c3e50 !important;
-                border-bottom: 3px solid #3498db !important;
-            }
-            
-            .achievements li {
-                color: #2c3e50 !important;
-            }
-            
-            .tech-stack {
-                color: #000000 !important;
-            }
-            
-            .institution {
-                color: #7f8c8d !important;
-            }
-            
-            .award-item {
-                color: #2c3e50 !important;
-            }
-            
-            .skill-tag {
-                color: #2c3e50 !important;
-                background: rgba(52, 152, 219, 0.1) !important;
-            }
-            
-            /* Preserve text colors */
-            .name {
-                color: white !important;
-            }
-            
-            /* Remove gradient backgrounds for clean PDF printing */
-            .company {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #2c3e50 !important;
-                font-weight: 700 !important;
-                text-shadow: none !important;
-            }
-            
-            .job-title {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #e74c3c !important;
-                font-weight: 600 !important;
-                text-shadow: none !important;
-            }
-            
-            .degree {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #9b59b6 !important;
-                /* font-weight: 600 !important; */
-                text-shadow: none !important;
-            }
-            
-            .grade {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #27ae60 !important;
-                font-weight: 600 !important;
-                text-shadow: none !important;
-            }
-            
-            .award-title {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #e74c3c !important;
-                font-weight: 700 !important;
-                text-shadow: none !important;
-            }
-            
-            .skill-category h4 {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #27ae60 !important;
-                font-weight: 700 !important;
-                text-shadow: none !important;
-            }
-            
-            /* Force override for gradient text elements */
-            [class*="company"], [class*="job-title"], [class*="degree"], [class*="grade"], [class*="award-title"] {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                text-shadow: none !important;
-            }
-            
-            /* Specific override for skill category headers */
-            .skill-category h4, .skill-category h4 * {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #2c3e50 !important;
-                font-weight: 700 !important;
-                text-shadow: none !important;
-            }
-        }
-        
-        /* Allow selection only for specific elements if needed */
-        .allow-select {
-            -webkit-user-select: text;
-            -moz-user-select: text;
-            -ms-user-select: text;
-            user-select: text;
+        @page {
+            size: A4;
+            margin: 0;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.2;
-            color: #2c3e50;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-size: 11px;
-            position: relative;
+            font-family: 'Work Sans', sans-serif;
+            color: var(--primary-dark);
+            background: white;
+            line-height: 1.6;
         }
 
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: 
-                radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
-                radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: -1;
-        }
-
-        .container {
-            max-width: 850px;
+        .resume-container {
+            width: 210mm;
+            height: 297mm;
             margin: 0 auto;
             background: white;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
-            border-radius: 15px;
+            display: grid;
+            grid-template-columns: 55mm 155mm;
             overflow: hidden;
-            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.1);
         }
 
-        .container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 6px;
-            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff, #5f27cd, #00d2d3);
-        }
-
-        .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        /* Left Sidebar */
+        .left-sidebar {
+            background: linear-gradient(180deg, var(--primary-dark) 0%, #2d3748 100%);
             color: white;
-            padding: 8px 35px 5px 25px;
+            padding: 2mm 2mm 2mm 3mm;
             position: relative;
             overflow: hidden;
         }
 
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                radial-gradient(circle at 30% 70%, rgba(52, 152, 219, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 70% 30%, rgba(155, 89, 182, 0.1) 0%, transparent 50%);
-            pointer-events: none;
-        }
-
-        .header::after {
+        .left-sidebar::before {
             content: '';
             position: absolute;
             top: -50%;
-            right: -20px;
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.05);
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(212,175,55,0.08) 0%, transparent 70%);
+            animation: pulse 15s ease-in-out infinite;
         }
 
-        .header-content {
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .sidebar-content {
             position: relative;
-            z-index: 2;
+            z-index: 1;
         }
 
-        .name-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .name-left {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        /* Profile Image */
+        .profile-image-container {
+            width: 32mm;
+            height: 32mm;
+            margin: 0 auto 4mm;
+            position: relative;
         }
 
         .profile-image {
-            width: 65px;
-            height: 70px;
+            width: 100%;
+            height: 100%;
             border-radius: 50%;
+            border: 2.5px solid var(--accent-gold);
             object-fit: cover;
-            border: 3px solid rgba(255,255,255,0.3);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            flex-shrink: 0;
-            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            display: block;
         }
 
-        .name-content {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            justify-content: center;
+
+        /* Contact Section */
+        .contact-section {
+            margin-bottom: 3.5mm;
         }
 
-        .name-content {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .name-right {
-            display: flex;
-            align-items: flex-start;
-            gap: 15px;
-        }
-
-        .name {
-            font-size: 2.2em;
-            font-weight: 800;
-            letter-spacing: -1px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            padding-top: 10px;
-            color: white;
-        }
-
-        .visa-badge {
-            background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c);
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.7em;
-            font-weight: 600;
-            box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3);
+        .section-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 8.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8pt;
+            margin-bottom: 2mm;
+            color: var(--accent-gold);
             position: relative;
-            overflow: hidden;
+            padding-bottom: 1mm;
         }
 
-        .visa-badge::before {
+        .section-title::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
             bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-
-        .title {
-            font-size: 0.9em;
-            opacity: 0.9;
-            font-weight: 500;
-        }
-
-        .contact-column {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            font-size: 0.82em;
+            left: 0;
+            width: 15mm;
+            height: 2px;
+            background: var(--accent-gold);
         }
 
         .contact-item {
             display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.5mm;
+            font-size: 6.5pt;
+            line-height: 1.2;
+        }
+
+        .contact-icon {
+            width: 3.5mm;
+            height: 3.5mm;
+            margin-right: 1.2mm;
+            flex-shrink: 0;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: center;
+            font-size: 5pt;
         }
 
-        .contact-item a {
-            transition: color 0.2s ease;
+        .contact-text {
+            color: rgba(255,255,255,0.9);
+            word-break: break-word;
+            font-size: 6.5pt;
         }
 
-        .contact-item a:hover {
-            color: #3498db !important;
-            text-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+        .contact-text a {
+            color: rgba(255,255,255,0.9);
+            text-decoration: none;
         }
 
-        .awards-ribbon {
-            background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3);
-            color: white;
-            padding: 4px 10px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 0.75em;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            margin: 0 25px 2px 25px;
-            border-radius: 8px;
-            position: relative;
-            overflow: hidden;
+        /* Skills Section */
+        .skills-section {
+            margin-bottom: 3.5mm;
         }
 
-        .awards-ribbon::before {
-            content: '🏆';
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 1.2em;
-            filter: drop-shadow(0 0 3px rgba(255,255,255,0.5));
-        }
-
-        .awards-ribbon::after {
-            content: '🏆';
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 1.2em;
-            filter: drop-shadow(0 0 3px rgba(255,255,255,0.5));
-        }
-
-        .awards-ribbon span {
-            text-align: center;
-        }
-
-        .content {
-            display: grid;
-            grid-template-columns: 2.1fr 0.9fr;
-            gap: 5px;
-            padding: 10px 3px 2px 4px
-        }
-
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .section-title {
-            color: #2c3e50;
-            font-size: 1.2em;
-            font-weight: 800;
-            border-bottom: 3px solid;
-            border-image: linear-gradient(90deg, #3498db, #9b59b6, #e74c3c, #f39c12) 1;
-            padding-bottom: 2px;
-            padding-left: 8px;
-            margin-bottom: 2px;
+        .skill-category-title {
+            font-size: 7pt;
+            font-weight: 600;
+            color: var(--accent-gold);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            position: relative;
+            letter-spacing: 0.4pt;
+            margin-top: 2mm;
+            /* margin-bottom: 1mm; */
         }
 
-        .section-title::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(180deg, #3498db, #9b59b6);
-            border-radius: 2px;
-        }
-
-        .summary {
-            font-size: 0.9em;
-            line-height: 1.4;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 5px;
-            border-radius: 10px;
-            border-left: 4px solid #3498db;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .summary::before {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 1.5em;
-            opacity: 0.2;
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 5px;
-            margin: 3px 0 0 0;
-        }
-
-        .metric {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 2px;
-            border-radius: 8px;
-            text-align: center;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .metric::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-
-        @keyframes shimmer {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-
-        .metric-number {
-            font-size: 1.2em;
-            font-weight: 800;
-            display: block;
-            line-height: 1;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            filter: drop-shadow(0 0 3px rgba(255,255,255,0.3));
-            margin-bottom: 1px;
-        }
-
-        .metric-label {
-            font-size: 0.7em;
-            opacity: 0.9;
-            font-weight: 500;
-            display: block;
-            line-height: 1;
-        }
-
-        .experience-item {
-            background: linear-gradient(135deg, #f8f9fa 0%, #cfd7e0 100%);
-            border-radius: 10px;
-            padding: 3px;
-            margin-bottom: 5px;
-            border-left: 4px solid #27ae60;
-            position: relative;
-            /* box-shadow: 0 2px 8px rgba(0,0,0,0.08); */
-            overflow: hidden;
-        }
-
-        .experience-item::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(39, 174, 96, 0.05), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-
-        .experience-item::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 0 20px 20px 0;
-            border-color: transparent #27ae60 transparent transparent;
-            border-radius: 0 10px 0 0;
-        }
-        
-        .job-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            /* margin-bottom: 6px; */
-        }
-        
-        .job-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .company-logo {
-            width: 35px;
-            height: 100%;
-            border-radius: 8px;
-            object-fit: contain;
-            background: white;
-            padding: 3px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
-            filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
-        }
-
-        .job-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            /* margin-bottom: 6px; */
-        }
-
-        .job-title {
-            font-size: 1em;
-            font-weight: 700;
-            background: linear-gradient(45deg, #704da6, #9b59b6, #8e44ad);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            line-height: 1.1;
-        }
-
-        .company {
-            font-size: 1.2em;
-            background: linear-gradient(45deg, #3498db, #2980b9, #5dade2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 600;
-        }
-
-        .duration {
-            color: #7f8c8d;
-            font-size: 0.75em;
-            font-weight: 600;
-            background: white;
-            padding: 2px 15px 2px 6px;
-            border-radius: 10px;
-        }
-
-        .tech-stack {
-            background: linear-gradient(270deg, #a4baba 0%, #bde0e0 100%);
-            padding: 1px 5px 1px 5px;
-            border-radius: 15px;
-            font-size: 0.7em;
-            color: #000000;
-            margin: 4px 0;
-            font-style: italic;
-            border-left: 3px solid #3498db;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .achievements {
-            list-style: none;
-            margin-top: 6px;
-        }
-
-        .achievements li {
-            padding: 2px 0;
-            position: relative;
-            padding-left: 12px;
-            font-size: 0.8em;
-            line-height: 1.3;
-        }
-
-        .achievements li::before {
-            content: '▸';
-            color: #27ae60;
-            font-weight: bold;
-            position: absolute;
-            left: 0;
-            font-size: 1.1em;
-            text-shadow: 0 0 3px rgba(39, 174, 96, 0.5);
-        }
-
-        .highlight {
-            background: linear-gradient(120deg, #ffecd2 0%, #fcb69f 100%);
-            padding: 2px 2px 2px 2px;
-            border-radius: 4px;
-            font-weight: 700;
-            color: #d35400;
-            box-shadow: 0 1px 3px rgba(211, 84, 0, 0.2);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .highlight::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-
-        .skills-container {
-            /* background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); */
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .skills-container::before {
-            position: absolute;
-            right: 15px;
-            top: 15px;
-            font-size: 2em;
-            opacity: 0.1;
-        }
-
-        .leadership-container {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 6px;
-            border-radius: 10px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .leadership-container::before {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 1.5em;
-            opacity: 0.2;
-        }
-
-        .skill-group-item {
-            padding: 2px;
-            margin-bottom: 3px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-            /* box-shadow: 0 2px 6px rgba(0,0,0,0.08); */
-            position: relative;
-            overflow: hidden;
-        }
-
-        .skill-group-item::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(52, 152, 219, 0.05), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-
-        .skill-group-title {
-            font-size: 0.9em;
-            margin-bottom: 4px;
-            font-weight: 800;
-            letter-spacing: 0.8px;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .skill-text {
-            color: #e74c3c;
-            font-weight: 800;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-
-        .skill-group-title::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, #e74c3c, #c0392b, #8e44ad);
-            border-radius: 1px;
-        }
-
-        .skill-icon {
-            font-size: 1.2em;
-            margin-left: auto;
+        .skill-category-title:first-of-type {
+            margin-top: 0;
         }
 
         .skill-tags {
             display: flex;
             flex-wrap: wrap;
-            gap: 3px;
+            gap: 1mm;
+            margin-bottom: 0.3mm;
         }
 
         .skill-tag {
-            background: linear-gradient(45deg, #3498db, #2980b9, #9b59b6);
-            color: white;
-            padding: 3px 3px;
-            border-radius: 8px;
-            font-size: 0.65em;
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 6pt;
+            font-weight: 500;
+            padding: 0.6mm 1.2mm;
+            border-radius: 2mm;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .skill-tag:hover {
+            background: rgba(212, 175, 55, 0.25);
+            border-color: var(--accent-gold);
+            transform: translateY(-1px);
+        }
+
+        /* Languages/Certifications */
+        .simple-list {
+            font-size: 6.5pt;
+            line-height: 1.3;
+            color: rgba(255,255,255,0.85);
+        }
+
+        .simple-list li {
+            list-style: none;
+            padding-left: 2.5mm;
+            position: relative;
+            margin-bottom: 0.7mm;
+        }
+
+        .simple-list li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--accent-gold);
+            font-weight: bold;
+        }
+
+        .simple-list li strong {
+            color: var(--accent-gold);
             font-weight: 600;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
         }
 
-        .skill-tag::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transform: skewX(-15deg) translateX(-100%);
+        .simple-list li br {
+            line-height: 1.6;
         }
 
-        .education-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 4px;
-            margin-bottom: 3px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 8px;
-            border-left: 4px solid #e74c3c;
-            /* box-shadow: 0 2px 6px rgba(0,0,0,0.08); */
-            position: relative;
-            overflow: hidden;
+        /* Awards section */
+        .awards-section {
+            margin-bottom: 3.5mm;
         }
 
-        .education-item::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(231, 76, 60, 0.05), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-        
-        .institute-logo {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            object-fit: contain;
-            background: white;
-            padding: 3px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.12);
-            filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
-        }
-
-        .degree {
-            /* font-weight: 700; */
-            background: linear-gradient(45deg, #2c3e50, #34495e);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 0.8em;
-            line-height: 1.2;
-        }
-
-        .institution {
-            color: #7f8c8d;
-            font-size: 0.7em;
-        }
-
-        .grade {
-            font-weight: 700;
-            background: linear-gradient(45deg, #27ae60, #2ecc71);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 0.75em;
-        }
-
-        .awards-grid {
-            display: grid;
-            gap: 4px;
-        }
-
-        .award-item {
-            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-            padding: 5px 8px;
-            border-radius: 8px;
-            border-left: 4px solid #fdcb6e;
-            font-size: 0.7em;
-            /* box-shadow: 0 2px 6px rgba(0,0,0,0.08); */
-            position: relative;
-            overflow: hidden;
-        }
-
-        .award-item::before {
-            content: '🏆';
-            position: absolute;
-            right: 8px;
+        .awards-section .simple-list li::before {
+            content: '🏆  ';
+            font-size: 5pt;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 1.2em;
-            opacity: 0.3;
-            filter: drop-shadow(0 0 2px rgba(253, 203, 110, 0.5));
         }
 
-        .award-item::after {
+        /* Right Content */
+        .right-content {
+            padding: 2mm 3mm 2mm 5mm;
+            background: white;
+        }
+
+        /* Name Header */
+        .name-header {
+            margin-bottom: 3.5mm;
+            border-bottom: 2px solid var(--accent-gold);
+            padding-bottom: 2mm;
+        }
+
+        .full-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 22pt;
+            font-weight: 900;
+            color: var(--primary-dark);
+            margin-bottom: 1mm;
+            letter-spacing: -0.5pt;
+            line-height: 1.1;
+        }
+
+        .job-title {
+            font-size: 9pt;
+            font-weight: 500;
+            color: var(--accent-blue);
+            letter-spacing: 0.5pt;
+            text-transform: uppercase;
+        }
+
+        /* Summary Section */
+        .summary-section {
+            margin-bottom: 3.5mm;
+        }
+
+        .content-section-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 10.5pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 2mm;
+            text-transform: uppercase;
+            letter-spacing: 0.5pt;
+            position: relative;
+            padding-bottom: 1mm;
+        }
+
+        .content-section-title::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
             bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(253, 203, 110, 0.1), transparent);
-            transform: skewX(-15deg) translateX(-100%);
-        }
-        
-        /* Override link styling for awards grid */
-        .awards-grid a {
-            text-decoration: none;
-            color: inherit;
-        }
-        
-        .awards-grid a:hover {
-            text-decoration: none;
-            color: inherit;
-        }
-        
-        .awards-grid a:visited {
-            text-decoration: none;
-            color: inherit;
+            left: 0;
+            width: 10mm;
+            height: 2px;
+            background: var(--accent-gold);
         }
 
-        .award-title {
-            font-weight: 700;
-            background: linear-gradient(45deg, #d35400, #e67e22, #f39c12);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 1.1em;
+        .summary-text {
+            font-size: 7.5pt;
+            line-height: 1.4;
+            color: var(--text-gray);
+            text-align: justify;
         }
 
+        /* Experience Section */
+        .experience-section {
+            margin-bottom: 3mm;
+        }
+
+        .experience-item {
+            margin-bottom: 2.5mm;
+            padding-left: 4mm;
+            border-left: 2px solid var(--accent-gold);
+            position: relative;
+        }
+
+        .experience-item::before {
+            content: '';
+            position: absolute;
+            left: -3.5px;
+            top: 1mm;
+            width: 5px;
+            height: 5px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            box-shadow: 0 0 0 1.5px white, 0 0 0 3.5px var(--accent-gold);
+        }
+
+        .experience-header {
+            margin-bottom: 0.5mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .company-info {
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+        }
+
+        .company-logo {
+            width: 5mm;
+            height: 5mm;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .company-name {
+            font-size: 8.5pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 0.2mm;
+        }
+
+        .position-title {
+            font-size: 7.5pt;
+            font-weight: 600;
+            color: var(--accent-blue);
+            margin-bottom: 0.2mm;
+            margin-top: 0.2mm;
+        }
+
+        .duration {
+            font-size: 6.5pt;
+            color: var(--text-gray);
+            font-style: italic;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .experience-description {
+            font-size: 6.8pt;
+            line-height: 1.35;
+            color: var(--text-gray);
+            margin-top: 0.5mm;
+        }
+
+        .experience-description ul {
+            margin-left: 3mm;
+            margin-top: 0.3mm;
+        }
+
+        .experience-description li {
+            margin-bottom: 0.5mm;
+        }
+
+
+        /* Print Styles */
         @media print {
             body {
-                background: white !important;
-                background-image: none !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
-            .container {
-                margin: 0;
+            .resume-container {
                 box-shadow: none;
-                border-radius: 0;
-                background: white !important;
-                background-image: none !important;
             }
-            .header {
-                background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
-                color: white !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .awards-ribbon {
-                background: linear-gradient(45deg, #ff6b35, #f7931e, #ff9ff3, #54a0ff, #5f27cd, #00d2d3) !important;
-                color: white !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .summary {
-                background: #f8f9fa !important;
-                border-left: 4px solid #3498db !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .metric {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-                color: white !important;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .experience-item {
-                background: linear-gradient(135deg, #f8f9fa 0%, #cfd7e0 100%) !important;
-                border-left: 4px solid #27ae60 !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .skills-container {
-                /* background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important; */
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .skill-group-item {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-                border-left: 4px solid #3498db !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-
-
-            .skill-group-title {
-                color: #e74c3c !important;
-                font-weight: 800 !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-
-            .skill-text {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #e74c3c !important;
-                text-shadow: none !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-
-            .skill-group-title::after {
-                content: '' !important;
-                position: absolute !important;
-                bottom: -2px !important;
-                left: 0 !important;
-                width: 100% !important;
-                height: 2px !important;
-                background: linear-gradient(90deg, #e74c3c, #c0392b, #8e44ad) !important;
-                border-radius: 1px !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-
-            .skill-icon {
-                /* No CSS styling - let emojis display naturally */
-            }
-
-            .skill-tag {
-                background: linear-gradient(45deg, #3498db, #2980b9, #9b59b6) !important;
-                color: white !important;
-                font-weight: 700 !important;
-                font-size: 0.65em !important;
-                padding: 3px 3px !important;
-                border-radius: 8px !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .education-item {
-                /* background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important; */
-                border-left: 3px solid #e74c3c !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .award-item {
-                /* background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important; */
-                border-left: 3px solid #fdcb6e !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            .summary {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-                border-left: 4px solid #3498db !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            a {
-                color: inherit !important;
-                text-decoration: none !important;
-            }
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix for gradient text and pseudo-elements in PDF */
-            .name {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: white !important;
-                filter: none !important;
-            }
-            
-            .company {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #3498db !important;
-            }
-            
-            .job-title {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #9b59b6 !important;
-            }
-            
-            .degree {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #2c3e50 !important;
-            }
-            
-            .grade {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #27ae60 !important;
-            }
-            
-            .award-title {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #d35400 !important;
-            }
-            
-            .skill-category h4 {
-                background: none !important;
-                -webkit-background-clip: unset !important;
-                -webkit-text-fill-color: unset !important;
-                background-clip: unset !important;
-                color: #2c3e50 !important;
-            }
-            
-            /* Remove all pseudo-elements in print */
-            .visa-badge::before,
-            .awards-ribbon::before,
-            .awards-ribbon::after,
-            .metric::before,
-            .highlight::before,
-            .skill-tag::before,
-            .award-item::before,
-            .award-item::after,
-            .experience-item::after,
-            .education-item::after,
-            .section-title::before {
-                display: none !important;
-            }
-            
-            /* Preserve achievements li::before for CMD+P printing */
-            .achievements li::before {
-                display: block !important;
-                content: '▸' !important;
-                color: #27ae60 !important;
-                font-weight: bold !important;
-                position: absolute !important;
-                left: 0 !important;
-                font-size: 1.1em !important;
-                text-shadow: none !important;
-            }
-            
-            /* Fix awards ribbon trophies for CMD+P printing */
-            .awards-ribbon::before {
-                display: block !important;
-                content: '🏆' !important;
-                color: white !important;
-                font-weight: bold !important;
-                position: absolute !important;
-                left: 10px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                font-size: 1.2em !important;
-                text-shadow: none !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .awards-ribbon::after {
-                display: block !important;
-                content: '🏆' !important;
-                color: white !important;
-                font-weight: bold !important;
-                position: absolute !important;
-                right: 10px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                font-size: 1.2em !important;
-                text-shadow: none !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Fix award item trophies for CMD+P printing */
-            .award-item::before {
-                display: block !important;
-                content: '🏆' !important;
-                color: #fdcb6e !important;
-                font-weight: bold !important;
-                position: absolute !important;
-                right: 8px !important;
-                top: 50% !important;
-                transform: translateY(-50%) !important;
-                font-size: 1.2em !important;
-                opacity: 0.3 !important;
-                text-shadow: none !important;
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            /* Remove all filters and shadows in print */
-            .profile-image,
-            .company-logo,
-            .institute-logo,
-            .metric-number,
-            .achievements li::before,
-            .award-item::before {
-                filter: none !important;
-                text-shadow: none !important;
-            }
-            
-            /* Ensure clean borders */
-            .section-title {
-                border-bottom: 2px solid #3498db !important;
-                border-image: none !important;
-            }
-            
-            /* Remove container rainbow border */
-            .container::before {
-                display: none !important;
-            }
-            
-            /* Remove all background gradients and images */
-            body::before {
-                display: none !important;
-            }
-            
-            .header::before {
-                content: '' !important;
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                background: 
-                    radial-gradient(circle at 30% 70%, rgba(52, 152, 219, 0.1) 0%, transparent 50%),
-                    radial-gradient(circle at 70% 30%, rgba(155, 89, 182, 0.1) 0%, transparent 50%) !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            
-            .header::after {
-                content: '' !important;
-                position: absolute !important;
-                top: -50% !important;
-                right: -20px !important;
-                width: 200px !important;
-                height: 200px !important;
-                border-radius: 50% !important;
-                background: rgba(255,255,255,0.05) !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
+            .profile-image {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
-  <!-- URL Cleanup Script -->
-  <script src="../../assets/js/url-cleanup.js"></script>
-  
-<!--   Code Protection Script -->
-<!-- <script>
-    // Function to detect if device is mobile
-    function isMobileDevice() {
-        // Check for touch capability
-        const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-        // Check user agent for mobile indicators
-        const mobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // Check screen size (mobile-like dimensions)
-        const smallScreen = window.screen.width <= 768 || window.screen.height <= 768;
-
-        // Check if orientation API is available (typically mobile)
-        const hasOrientationAPI = typeof window.orientation !== 'undefined';
-
-        return hasTouch || mobileUserAgent || (smallScreen && hasOrientationAPI);
-    }
-
-    // Function to detect if likely a tablet in landscape
-    function isTabletLandscape() {
-        return window.screen.width > 768 && window.screen.width <= 1024 &&
-               'ontouchstart' in window;
-    }
-
-    // Check device types
-    const isMobile = isMobileDevice();
-    const isTablet = isTabletLandscape();
-
-    // DevTools detection - runs ALWAYS (even with mobile emulation)
-    function showWarning() {
-        document.body.innerHTML =  '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
-    }
-
-    function checkDevTools() {
-        const widthThreshold = 200;
-        const heightThreshold = 200;
-
-        const widthDiff = window.outerWidth - window.innerWidth;
-        const heightDiff = window.outerHeight - window.innerHeight;
-
-        // Account for normal browser chrome
-        const normalChromeHeight = 100;
-        const normalChromeWidth = 20;
-
-        const suspiciousWidth = widthDiff > (normalChromeWidth + widthThreshold);
-        const suspiciousHeight = heightDiff > (normalChromeHeight + heightThreshold);
-
-        if (suspiciousWidth || suspiciousHeight) {
-            showWarning();
-        }
-    }
-
-    // Start DevTools detection immediately (works regardless of mobile emulation)
-    let devToolsCheckInterval;
-    window.addEventListener('load', () => {
-        setTimeout(() => {
-            devToolsCheckInterval = setInterval(checkDevTools, 1000);
-        }, 2000);
-    });
-
-    // Apply other desktop restrictions only if not on mobile/tablet
-    if (!isMobile && !isTablet) {
-        // Desktop-only restrictions (excluding DevTools detection which runs above)
-
-        // Disable right-click context menu
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Disable Ctrl+U (View Source)
-            if (e.ctrlKey && e.key.toLowerCase() === 'u') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable F12 (Developer Tools)
-            if (e.key === 'F12') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+I (Developer Tools)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+C (Developer Tools)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+J (Console)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'j') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+S (Save Page)
-            if (e.ctrlKey && e.key.toLowerCase() === 's') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+P (Print) - COMMENTED OUT TO ALLOW PRINTING
-            // if (e.ctrlKey && e.key.toLowerCase() === 'p') {
-            //     e.preventDefault();
-            //     return false;
-            // }
-            // Disable Ctrl+A (Select All)
-            if (e.ctrlKey && e.key.toLowerCase() === 'a') {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-        // Disable text selection
-        document.addEventListener('selectstart', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable copy
-        document.addEventListener('copy', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable cut
-        document.addEventListener('cut', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable paste
-        document.addEventListener('paste', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable drag and drop
-        document.addEventListener('dragstart', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Other desktop-only restrictions are handled above
-
-        // Disable print screen
-        document.addEventListener('keyup', function(e) {
-            if (e.key === 'PrintScreen') {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-    } else {
-        // Mobile/Tablet - Only disable some features that make sense
-        console.log('Mobile/Tablet device detected - Limited restrictions applied');
-
-        // Still disable right-click context menu on tablets
-        if (isTablet) {
-            document.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                return false;
-            });
-        }
-    }
-
-    // Disable view source via URL (applies to all devices)
-    if (window.location.href.includes('view-source:')) {
-        window.location.href = window.location.href.replace('view-source:', '');
-    }
-
-    // Show device type and DevTools detection status for testing
-    document.addEventListener('DOMContentLoaded', function() {
-        const deviceInfo = document.createElement('div');
-        deviceInfo.style.cssText = 'position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000;';
-
-        function updateDeviceInfo() {
-            const widthDiff = window.outerWidth - window.innerWidth;
-            const heightDiff = window.outerHeight - window.innerHeight;
-            const devToolsOpen = widthDiff > 220 || heightDiff > 300;
-
-            deviceInfo.innerHTML = `
-                Device: ${isMobile ? 'Mobile' : isTablet ? 'Tablet' : 'Desktop'}<br>
-                Screen: ${window.screen.width}x${window.screen.height}<br>
-                Touch: ${('ontouchstart' in window) ? 'Yes' : 'No'}<br>
-                DevTools: ${devToolsOpen ? '⚠️ DETECTED' : '✅ Clear'}<br>
-                Dimensions: ${widthDiff}x${heightDiff} diff<br>
-                Restrictions: ${(!isMobile && !isTablet) ? 'Active' : 'Limited'}<br>
-                DevTools Check: Always Active
-            `;
-        }
-
-        // updateDeviceInfo();
-        // // Update device info every second
-        // setInterval(updateDeviceInfo, 1000);
-
-        // document.body.appendChild(deviceInfo);
-    });
-</script> -->
-
-
-<!--&lt;!&ndash;    Disable Print Shortcut (Cmd+P / Ctrl+P)&ndash;&gt;-->
-<!--<script>-->
-<!--document.addEventListener("keydown", function (e) {-->
-<!--  // For Mac Command + P-->
-<!--  if (e.metaKey && e.key.toLowerCase() === "p") {-->
-<!--    e.preventDefault();-->
-<!--    alert("Printing is disabled on this page!");-->
-<!--  }-->
-
-<!--  // For Windows/Linux Ctrl + P (optional)-->
-<!--  if (e.ctrlKey && e.key.toLowerCase() === "p") {-->
-<!--    e.preventDefault();-->
-<!--    alert("Printing is disabled on this page!");-->
-<!--  }-->
-<!--});-->
-<!--</script>-->
-
-
-
-<!--&lt;!&ndash;    Disable Right-Click Menu (so user can’t right-click → Print)&ndash;&gt;-->
-<!--<script>-->
-<!--document.addEventListener("contextmenu", function (e) {-->
-<!--  e.preventDefault();-->
-<!--  alert("Right click is disabled on this page!");-->
-<!--});-->
-<!--</script>-->
-
-
-<!--&lt;!&ndash;    Disable Print from Browser Menu: You can’t fully block the browser’s built-in menu (e.g., Chrome’s File → Print), but you can make the page unprintable by hiding everything when a print is triggered:&ndash;&gt;-->
-<!--<style>-->
-<!--@media print {-->
-<!--  body {-->
-<!--    display: none !important;-->
-<!--  }-->
-<!--}-->
-<!--</style>-->
-<!--    <style>-->
-<!--@media save {-->
-<!--  body {-->
-<!--    display: none !important;-->
-<!--  }-->
-<!--}-->
-<!--</style>-->
-
-
-<!--    Disable Save Shortcut (Cmd+S / Ctrl+S)-->
-<script>
-document.addEventListener("keydown", function (e) {
-  // Block Command + S (Mac)
-  if (e.metaKey && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    alert("Saving this page is disabled!");
-  }
-
-  // Block Ctrl + S (Windows/Linux)
-  if (e.ctrlKey && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    alert("Saving this page is disabled!");
-  }
-});
-</script>
-
-
-
-<!--    Disable Browser "Save As" (Menu → File → Save Page As)-->
-<!--    <style>-->
-<!--/* If someone tries to Save/Print the page, hide content */-->
-<!--@media print {-->
-<!--  body {-->
-<!--    display: none !important;-->
-<!--  }-->
-<!--}-->
-<!--</style>-->
-
-<!--<script>-->
-<!--// Optional: Clear DOM when user tries to leave with Save As-->
-<!--window.addEventListener("beforeprint", () => {-->
-<!--  document.body.innerHTML = "";-->
-<!--});-->
-<!--</script>-->
-
-
-<!--    Disable Right-Click "Save As" for Images/Media-->
-<!--<script>-->
-<!--document.addEventListener("contextmenu", function (e) {-->
-<!--  e.preventDefault();-->
-<!--  alert("Right click is disabled on this page!");-->
-<!--});-->
-<!--</script>-->
-
-
-<!--    Blank out content on save/print events:-->
-<!--<script>-->
-<!--window.addEventListener("beforeprint", () => {-->
-<!--  document.body.innerHTML = "";-->
-<!--});-->
-<!--</script>-->
-
-
-<!--    Use @media print to hide content:-->
-<!--    <style>-->
-<!--@media print {-->
-<!--  body {-->
-<!--    display: none !important;-->
-<!--  }-->
-<!--}-->
-<!--</style>-->
-
-<!--<script>-->
-<!--    // Disable right-click-->
-<!--document.addEventListener('contextmenu', function(e) {-->
-<!--    e.preventDefault();-->
-<!--});-->
-
-<!--// Disable common keyboard shortcuts-->
-<!--document.addEventListener('keydown', function(e) {-->
-<!--    // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+S-->
-<!--    if (e.keyCode == 123 || // F12-->
-<!--        (e.ctrlKey && e.shiftKey && e.keyCode == 73) || // Ctrl+Shift+I-->
-<!--        (e.ctrlKey && e.shiftKey && e.keyCode == 74) || // Ctrl+Shift+J-->
-<!--        (e.ctrlKey && e.keyCode == 85) || // Ctrl+U-->
-<!--        (e.ctrlKey && e.keyCode == 83)) { // Ctrl+S-->
-<!--        e.preventDefault();-->
-<!--        return false;-->
-<!--    }-->
-<!--});-->
-
-<!--// Disable drag and drop-->
-<!--document.addEventListener('dragstart', function(e) {-->
-<!--    e.preventDefault();-->
-<!--});-->
-<!--</script>-->
 </head>
 <body>
-
-    <!-- Download Resume Button -->
-    <button class="download-btn" onclick="downloadResume()">Download Resume</button>
-    
-    <div class="container">
-        <header class="header">
-            <div class="header-content">
-                <div class="name-section">
-                    <div class="name-left">
-                        <img src="../../assets/img/profile-img-2.png" alt="Shubham Mallick" class="profile-image">
-                        <div class="name-content">
-                            <h1 class="name">Shubham Mallick</h1>
-                            <p class="title">13+ Years Experience | Data & Application Architect | Distributed Systems & Performance Engineering</p>
-                        </div>
-                    </div>
-                    <div class="name-right">
-                        <div class="contact-column">
-                            <div class="contact-item">📩 <a href="mailto:shubham.kolkata@gmail.com" target="_blank" style="color: white; text-decoration: none;">shubham.kolkata@gmail.com</a></div>
-                            <div class="contact-item">☏ <a href="tel:+91-9734389354" target="_blank" style="color: white; text-decoration: none;">+91-9734389354</a></div>
-                            <div class="contact-item">🌐 <a href="https://www.i-shubham.in/" target="_blank" style="color: white; text-decoration: none;">www.i-shubham.in</a></div>
-                            <div class="contact-item">💼 <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" style="color: white; text-decoration: none;">www.linkedin.com/in/i-shubham</a></div>
-                            <div class="contact-item">📍 Hyderabad, India</div>
-                        </div>
-                        <div class="visa-badge">🇺🇸 US B1/B2 Visa</div>
-                    </div>
+    <div class="resume-container">
+        <!-- Left Sidebar -->
+        <aside class="left-sidebar">
+            <div class="sidebar-content">
+                <!-- Profile Image -->
+                <div class="profile-image-container">
+                    <img src="../img/profile-img-2.png" alt="Shubham Mallick" class="profile-image">
                 </div>
-            </div>
-        </header>
 
-        <div class="awards-ribbon">
-            <span>Qualcomm Hackathon, Innovation Maestro, & Super-Qualstar Winner, Top 3 ML Contestant Worldwide | Apple / PwC Awardee | Microsoft / IBM Certified</span>
-        </div>
-
-        <div class="content">
-            <div class="main-content">
-                <section>
-                    <h2 class="section-title">Executive Summary 💡</h2>
-                    <div class="summary">
-                        <strong>13+ years</strong> Senior Data / Application Architect specializing in <strong>large-scale distributed data systems</strong>, data governance (lineage, quality, compliance), & cloud-native platforms. Delivered enterprise solutions processing <strong>50TB+ daily</strong> with <strong>70% latency reduction</strong> and <strong>99.9% SLA</strong>. Expertise in orchestration (Airflow/Kubernetes), observability (Datadog/Prometheus), CI/CD, multi-cloud, and AI/ML integration across Salesforce, Apple, Qualcomm, IBM, PwC.
+                <!-- Contact Information -->
+                <section class="contact-section">
+                    <h2 class="section-title">Contact</h2>
+                    <div class="contact-item">
+                        <div class="contact-icon">📧</div>
+                        <div class="contact-text"><a href="mailto:shubham.kolkata@gmail.com" target="_blank" style="color: white; text-decoration: none;">shubham.kolkata@gmail.com</a></div>
                     </div>
-
+                    <div class="contact-item">
+                        <div class="contact-icon">📱</div>
+                        <div class="contact-text"><a href="tel:+91-9734389354" target="_blank" style="color: white; text-decoration: none;">+91-9734389354</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">🔗</div>
+                        <div class="contact-text"><a href="https://www.linkedin.com/in/i-shubham/" target="_blank" style="color: white; text-decoration: none;">www.linkedin.com/in/i-shubham</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">🌎</div>
+                        <div class="contact-text"><a href="https://www.i-shubham.in/" target="_blank" style="color: white; text-decoration: none;">www.i-shubham.in</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">📍</div>
+                        <div class="contact-text">Hyderabad, India</div>
+                    </div>
                 </section>
 
-                <section>
-                    <h2 class="section-title">Professional Experience 💼</h2>
+                <!-- Skills -->
+                <section class="skills-section">
+                    <h2 class="section-title">Skills</h2>
+                    
+                    <div class="skill-category-title">Data Platform & Governance</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Databricks</span>
+                        <span class="skill-tag">Snowflake</span>
+                        <span class="skill-tag">Spark</span>
+                        <span class="skill-tag">Kafka</span>
+                        <span class="skill-tag">Airflow</span>
+                        <span class="skill-tag">Data Lakehouse</span>
+                        <span class="skill-tag">ETL / ELT</span>
+                        <span class="skill-tag">SQL / NoSQL</span>
+                        <span class="skill-tag">BI / DW</span>
+                    </div>
+                    
+                    <div class="skill-category-title">ML & AI</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">TensorFlow</span>
+                        <span class="skill-tag">Torch</span>
+                        <span class="skill-tag">Scikit-Learn</span>
+                        <span class="skill-tag">NLP</span>
+                        <span class="skill-tag">LLM / GenAI</span>
+                        <span class="skill-tag">Neural Nets</span>
+                        <span class="skill-tag">Langchain / Agentforce</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Cloud & Orchestration</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">AWS / Azure / GCP</span>
+                        <span class="skill-tag">Kubernetes</span>
+                        <span class="skill-tag">Docker</span>
+                        <span class="skill-tag">Terraform</span>
+                        <span class="skill-tag">CI / CD</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Observability</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Splunk</span>
+                        <span class="skill-tag">Grafana</span>
+                        <span class="skill-tag">Datadog</span>
+                        <span class="skill-tag">Prometheus</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Programming</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Python</span>
+                        <span class="skill-tag">Rust</span>
+                        <span class="skill-tag">Java</span>
+                        <span class="skill-tag">SQL</span>
+                        <span class="skill-tag">Go</span>
+                        <span class="skill-tag">Scala</span>
+                        <span class="skill-tag">C#</span>
+                        <span class="skill-tag">GraphQL</span>
+                        <span class="skill-tag">REST APIs</span>
+                    </div>
+                </section>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.atlassian.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/atlassian.png" alt="Atlassian" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.atlassian.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            Atlassian
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Lead Engineering</div>
-                                </div>
-                            </div>
-                            <div class="duration">Sep 2025 - Present</div>
+                <!-- Certifications -->
+                <section class="contact-section">
+                    <h2 class="section-title">Certifications</h2>
+                    <ul class="simple-list">
+                        <li>Microsoft Certified Professional</li>
+                        <li>IBM Certified Professional</li>
+                    </ul>
+                </section>
+
+                <!-- Awards -->
+                <section class="awards-section">
+                    <h2 class="section-title">Awards</h2>
+                    <ul class="simple-list">
+                        <li>Salesforce Hackathon Winner</li>
+                        <li>Apple Supply-Chain Recognition</li>
+                        <li>Qualcomm Innovation Maestro</li>
+                        <li>Qualcomm HaQkathon Winner</li>
+                        <li>Qualcomm Super-Qualstar</li>
+                        <li>Qualcomm Top 3 ML Worldwide</li>
+                        <li>PwC STAR Performer</li>
+                    </ul>
+                </section>
+
+                <!-- Education -->
+                <section class="contact-section">
+                    <h2 class="section-title">Education</h2>
+                    <ul class="simple-list">
+                        <li><strong>M. Tech</strong> Data Science & Engineering<br>BITS Pilani, India - with Distinction</li>
+                        <li><strong>B. Tech</strong> Computer Science<br>WBUT, Kolkata - with Distinction</li>
+                    </ul>
+                </section>
+
+                <!-- Leadership -->
+                <section class="contact-section">
+                    <h2 class="section-title">Leadership</h2>
+                    <ul class="simple-list">
+                        <li>Led 12+ member engineering teams</li>
+                        <li>Coached 50+ engineers</li>
+                        <li>Core technical interviewer</li>
+                        <li>Drive technical roadmaps</li>
+                        <li>Built high-performance teams</li>
+                    </ul>
+                </section>
+            </div>
+        </aside>
+
+        <!-- Right Content -->
+        <main class="right-content">
+            <!-- Name Header -->
+            <header class="name-header">
+                <h1 class="full-name">Shubham Mallick</h1>
+                <p class="job-title">Data & Application Architect</p>
+            </header>
+
+            <!-- Professional Summary -->
+            <section class="summary-section">
+                <h2 class="content-section-title">Professional Summary</h2>
+                <p class="summary-text">
+                    Senior Data/Application Architect with 13+ years of experience specializing in large-scale distributed data systems, data governance (lineage, quality, compliance), and cloud-native platforms. Delivered enterprise solutions processing 50TB+ daily with 70% latency reduction and 99.9% SLA. Expertise in orchestration (Airflow/Kubernetes), observability (Splunk/Datadog/Prometheus), CI/CD, multi-cloud, and AI/ML integration across Salesforce, Apple, Qualcomm, IBM, and PwC.
+                </p>
+            </section>
+
+            <!-- Professional Experience -->
+            <section class="experience-section">
+                <h2 class="content-section-title">Professional Experience</h2>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/atlassian.png" alt="Atlassian" class="company-logo">
+                            <div class="company-name">Atlassian</div>
                         </div>
-                        <div class="tech-stack">Databricks • Spark • Python • Data Platform Engineering • Data Governance • AI/ML Pipelines • Orchestration</div>
-                        <ul class="achievements">
-                            <li>Leading data platform initiatives with Databricks / Spark for enterprise analytics and AI/ML workloads for Go To Market product</li>
-                            <li>Establishing data governance standards including quality frameworks and pipeline observability</li>
+                        <div class="duration">Sep 2025 - Present</div>
+                    </div>
+                    <div class="position-title">Lead Engineering</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Leading data platform initiatives with Databricks/Spark for enterprise analytics and AI/ML workloads for Go To Market product</li>
+                            <li>Establishing data governance standards including quality frameworks and pipeline observability among teams</li>
                             <li>Building AI-ready data infrastructure on Databricks enabling GenAI model deployment and ML feature engineering</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.salesforce.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/salesforce.jpeg" alt="Salesforce" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.salesforce.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            Salesforce
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Staff Engineering, Performance Engineering, Sales AI</div>
-                                </div>
-                            </div>
-                            <div class="duration">Jul 2022 - Aug 2025</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/salesforce.jpeg" alt="Salesforce" class="company-logo">
+                            <div class="company-name">Salesforce</div>
                         </div>
-                        <div class="tech-stack">AWS • Spark • Kafka • Python • Airflow • Terraform • Kubernetes • Datadog • Prometheus • GenAI • GraphDB</div>
-                        <ul class="achievements">
-                            <li>Architected cloud-native data platform with event-driven pipelines, achieving <span class="highlight">70% latency reduction</span> using Spark/EKS/Kafka orchestration</li>
-                            <li>Implemented platform observability with Datadog/Prometheus; established SLAs and data quality monitoring for CI/CD systems</li>
-                            <li>Built IaC automation (Terraform/EKS/Jenkins) reducing deployment time by <span class="highlight">70%</span>; enabled developer self-service patterns</li>
-                            <li>Led GenAI/AI integration into data infrastructure achieving <span class="highlight">25-40%</span> performance improvement</li>
+                        <div class="duration">Jul 2022 - Aug 2025</div>
+                    </div>
+                    <div class="position-title">Staff Engineering, Performance Engineering, Sales AI</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected cloud-native data platform with event-driven ticketing-system, achieving 70% latency reduction using Spark/EKS/Kafka orchestration</li>
+                            <li>Implemented platform observability with Grafana/Splunk; established SLAs and data quality monitoring for CI/CD systems</li>
+                            <li>Built IaC automation (Terraform/EKS/Jenkins) reducing deployment time by 70%; enabled developer self-service solutions</li>
+                            <li>Led GenAI/AI integration with Agentforce into data infrastructure achieving 25-40% performance improvement</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.apple.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/apple.png" alt="Apple" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.apple.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            Apple Inc.
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Technical Lead, Module Owner</div>
-                                </div>
-                            </div>
-                            <div class="duration">Jun 2020 - Jul 2022</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/apple.png" alt="Apple" class="company-logo">
+                            <div class="company-name">Apple Inc.</div>
                         </div>
-                        <div class="tech-stack">Apple Cloud • AWS • Python • Kafka • PySpark • Snowflake • Docker • Kubernetes • EMR • Multi-Cloud Migration</div>
-                        <ul class="achievements">
-                            <li>Led <span class="highlight">12-member engineering team</span> architecting enterprise data platform processing <span class="highlight">100GB+ daily</span> with <span class="highlight">99.9% SLA</span></li>
-                            <li>Built real-time data pipelines (Kafka) handling <span class="highlight">1M+ msgs/hour</span> with comprehensive data quality and lineage tracking</li>
-                            <li>Led cloud migration (on-prem to AWS) with Data Mesh principles, reducing costs <span class="highlight">50%</span> and improving scalability <span class="highlight">300%</span></li>
+                        <div class="duration">Jun 2020 - Jul 2022</div>
+                    </div>
+                    <div class="position-title">Technical Lead, Module Owner</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Led 12-member engineering team architecting enterprise data platform processing 100GB+ daily with 99.9% SLA</li>
+                            <li>Built real-time data pipelines (Kafka) handling 1M+ msgs/hour with comprehensive data quality and lineage tracking</li>
+                            <li>Led cloud migration (on-prem to AWS) with Data Mesh principles, reducing costs 50% and improving scalability 300%</li>
                             <li>Established data governance standards for data discovery, quality controls, and compliance across supply-chain domain</li>
-                            <li>Built data APIs with semantic models and metadata management serving <span class="highlight">10+ internal analytics teams</span></li>
+                            <li>Built data APIs with semantic models and metadata management serving 10+ internal analytics teams</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.qualcomm.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/qualcomm.jpeg" alt="Qualcomm" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.qualcomm.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            Qualcomm
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Senior ML, Distributed System Engineer</div>
-                                </div>
-                            </div>
-                            <div class="duration">Nov 2017 - May 2020</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/qualcomm.jpeg" alt="Qualcomm" class="company-logo">
+                            <div class="company-name">Qualcomm</div>
                         </div>
-                        <div class="tech-stack">Big-Data Platforms • Spark • Python • HIVE • MapR • Kafka • Airflow • TensorFlow • Hadoop • Data Lakehouse</div>
-                        <ul class="achievements">
-                            <li>Architected large-scale distributed data platform processing <span class="highlight">20TB+ daily</span> with Spark/HIVE/MapR DB in Hadoop ecosystem</li>
-                            <li>Built AI/ML data pipelines with <span class="highlight">92% model accuracy</span>; optimized data infrastructure reducing resource usage <span class="highlight">25%</span></li>
-                            <li>Implemented data quality and monitoring frameworks ensuring data reliability across enterprise analytics workloads</li>
-                            <li>Won Innovation Maestro, HaQkathon; presented distributed platform architecture to CxO leadership</li>
-                            <li>Designed orchestration workflows (Airflow) and data transformation frameworks improving pipeline efficiency by <span class="highlight">35%</span></li>
-                            <li>Partnered with engineering and analytics teams enabling developer self-service access to <span class="highlight">15+ data products</span></li>
+                        <div class="duration">Nov 2017 - May 2020</div>
+                    </div>
+                    <div class="position-title">Senior ML, Distributed System Engineer</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected large-scale distributed data platform processing 20TB+ daily with Spark/HIVE/MapR DB in Hadoop ecosystem</li>
+                            <li>Built AI/ML data pipelines with 92% model accuracy; optimized data infrastructure reducing resource usage 25%</li>
+                            <li>Implemented data quality & monitoring frameworks ensuring data reliability across enterprise analytics workloads</li>
+                            <li>Won Innovation Maestro, HaQkathon; presented the innovative solutions to CxO leadership</li>
+                            <li>Designed orchestration workflows (Airflow) & data transformation frameworks improving pipeline efficiency by 35%</li>
+                            <li>Partnered with engineering & analytics teams enabling developer self-service access to 15+ data products</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.ibm.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/ibm.png" alt="IBM" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.ibm.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            IBM
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Advisory Analyst, Azure Cloud SME</div>
-                                </div>
-                            </div>
-                            <div class="duration">Dec 2016 - Nov 2017</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/ibm.png" alt="IBM" class="company-logo">
+                            <div class="company-name">IBM</div>
                         </div>
-                        <div class="tech-stack">Azure • Multi-Cloud • Data Factory • MongoDB • Python • Cloud Migration • Data Integration</div>
-                        <ul class="achievements">
-                            <li>Led <span class="highlight">6-member team</span> architecting multi-cloud data platform on Azure, delivered ahead of schedule</li>
-                            <li>Migrated <span class="highlight">500GB+ data</span> with <span class="highlight">99.9% integrity</span> using Azure Data Factory; established data quality SLAs</li>
-                            <li>Implemented IaC automation and compliance frameworks meeting regulatory requirements across <span class="highlight">3 geographic regions</span></li>
+                        <div class="duration">Dec 2016 - Nov 2017</div>
+                    </div>
+                    <div class="position-title">Advisory Analyst, Azure Cloud SME</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Led 6-member team architecting multi-cloud data platform on Azure, delivered ahead of schedule</li>
+                            <li>Migrated 500GB+ data with 99.9% integrity using Azure Data Factory, Service Bus; established data quality SLAs</li>
+                            <li>Implemented IaC automation and compliance frameworks meeting regulatory requirements across 3 geographic regions</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.pwc.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/pwc.jpeg" alt="PwC" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.pwc.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            PwC
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Senior Developer / Consultant</div>
-                                </div>
-                            </div>
-                            <div class="duration">Oct 2014 - Dec 2016</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/pwc.jpeg" alt="PwC" class="company-logo">
+                            <div class="company-name">PwC</div>
                         </div>
-                        <div class="tech-stack">BI • Data Warehouse • SQL Server • Oracle • SSIS • ETL • Python • Data Visualization • Dashboards</div>
-                        <ul class="achievements">
-                            <li>Architected BI platform with OLTP/OLAP optimization querying <span class="highlight">billion+ rows</span> in 2-5 sec; delivered dashboards for business analytics</li>
-                            <li>Built scalable ETL pipelines processing <span class="highlight">50M+ rows daily</span>; Won STAR Performer for data platform excellence</li>
-                            <li>Implemented logical data modeling and schema versioning improving data consistency by <span class="highlight">40%</span> across analytics workloads</li>
-                            <li>Collaborated with business stakeholders across Sales, Finance enabling data-driven decision-making for <span class="highlight">20+ teams</span></li>
+                        <div class="duration">Oct 2014 - Dec 2016</div>
+                    </div>
+                    <div class="position-title">Senior Developer / Consultant</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected BI platform with OLTP/OLAP optimization querying billion+ rows in 2-5 sec; delivered dashboards for business analytics</li>
+                            <li>Built scalable ETL pipelines processing 50M+ rows daily</li>
+                            <li>Implemented logical data modeling & schema versioning improving data consistency by 40%, across analytics workloads</li>
+                            <li>Collaborated with business stakeholders across Sales, Finance enabling data-driven decision-making</li>
+                            <li>Won STAR Performer for data platform excellence & multiple client appreciation awards</li>
                         </ul>
                     </div>
+                </div>
 
-                    <div class="experience-item">
-                        <div class="job-header">
-                            <div class="job-info">
-                                <a href="https://www.cognizant.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    <img src="../../assets/img/org/cognizant.png" alt="Cognizant" class="company-logo">
-                                </a>
-                                <div>
-                                    <div class="company">
-                                        <a href="https://www.cognizant.com/" target="_blank" style="text-decoration: none; color: inherit;">
-                                            Cognizant
-                                        </a>
-                                    </div>
-                                    <div class="job-title">Application Developer</div>
-                                </div>
-                            </div>
-                            <div class="duration">Apr 2012 - Oct 2014</div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/cognizant.png" alt="Cognizant" class="company-logo">
+                            <div class="company-name">Cognizant</div>
                         </div>
-                        <div class="tech-stack">SQL Server • SSIS • C# • ADO.NET • JavaScript • Angular • Java</div>
-                        <ul class="achievements">
-                            <li>Managed <span class="highlight">24x7</span> production support for MetLife bulk data processing, and application support</li>
-                            <li>Automated processes reducing manual effort by <span class="highlight">60%</span></li>
+                        <div class="duration">Apr 2012 - Oct 2014</div>
+                    </div>
+                    <div class="position-title">Application Developer</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Managed 24x7 production support for MetLife backend processing, and application support</li>
+                            <li>Automated processes reducing manual effort by 60%, across 5+ applications</li>
                         </ul>
                     </div>
-                </section>
-            </div>
-
-            <div class="sidebar">
-                <section>
-                    <h2 class="section-title">Key Metrics 📊</h2>
-                    <div class="metrics-grid">
-                        <div class="metric">
-                            <span class="metric-number">13+</span>
-                            <span class="metric-label">Years Exp</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-number">12+</span>
-                            <span class="metric-label">Members Led</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-number">99.9%</span>
-                            <span class="metric-label">SLA / Uptime</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-number">50TB+</span>
-                            <span class="metric-label">Data / Day</span>
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 class="section-title">Core Skills ⚡</h2>
-                    <div class="skills-container">
-                        <div class="skill-group-item">
-                            <div class="skill-group-title">
-                                <span class="skill-text">Data Platform & Governance</span>
-                                <span class="skill-icon">⛁</span>
-                            </div>
-                            <div class="skill-tags">
-                                <span class="skill-tag">Distributed Data Systems</span>
-                                <span class="skill-tag">Data Governance</span>
-                                <span class="skill-tag">Databricks</span>
-                                <span class="skill-tag">Snowflake</span>
-                                <span class="skill-tag">Spark</span>
-                                <span class="skill-tag">Kafka</span>
-                                <span class="skill-tag">Airflow</span>
-                                <span class="skill-tag">Data Lakehouse</span>
-                                <span class="skill-tag">ETL/ELT</span>
-                                <span class="skill-tag">SQL/NoSQL</span>
-                                <span class="skill-tag">BI & Data Warehousing</span>
-                                <span class="skill-tag">OLTP/OLAP Optimization</span>
-                            </div>
-                        </div>
-                        <div class="skill-group-item">
-                            <div class="skill-group-title">
-                                <span class="skill-text">ML & AI</span>
-                                <span class="skill-icon">🤖</span>
-                            </div>
-                            <div class="skill-tags">
-                                <span class="skill-tag">TensorFlow / Torch</span>
-                                <span class="skill-tag">Scikit-Learn</span>
-                                <span class="skill-tag">NLP</span>
-                                <span class="skill-tag">LLM / GenAI</span>
-                                <span class="skill-tag">Langchain</span>
-                                <span class="skill-tag">Neural Networks</span>
-                                <span class="skill-tag">GAN</span>
-                                <span class="skill-tag">LSTM</span>
-                                <span class="skill-tag">Agentforce</span>
-                                <span class="skill-tag">Supervised / Unsupervised / Reinforcement Learning</span>
-                            </div>
-                        </div>
-                        <div class="skill-group-item">
-                            <div class="skill-group-title">
-                                <span class="skill-text">Cloud-Native & Orchestration</span>
-                                <span class="skill-icon">☁️</span>
-                            </div>
-                            <div class="skill-tags">
-                                <span class="skill-tag">Multi-Cloud (AWS/Azure/GCP)</span>
-                                <span class="skill-tag">Event-Driven Architecture</span>
-                                <span class="skill-tag">AWS (EKS, EMR, S3, RDS, Lambda)</span>
-                                <span class="skill-tag">Kubernetes</span>
-                                <span class="skill-tag">Docker</span>
-                                <span class="skill-tag">Terraform</span>
-                                <span class="skill-tag">Airflow</span>
-                                <span class="skill-tag">CI/CD</span>
-                                <span class="skill-tag">Microservices</span>
-                            </div>
-                        </div>
-                        <div class="skill-group-item">
-                            <div class="skill-group-title">
-                                <span class="skill-text">Observability & DevOps</span>
-                                <span class="skill-icon">📊</span>
-                            </div>
-                            <div class="skill-tags">
-                                <span class="skill-tag">Datadog</span>
-                                <span class="skill-tag">Prometheus</span>
-                                <span class="skill-tag">OpenTelemetry</span>
-                                <span class="skill-tag">Grafana</span>
-                                <span class="skill-tag">SLA/SLO</span>
-                                <span class="skill-tag">Data Quality & Lineage</span>
-                            </div>
-                        </div>
-                        <div class="skill-group-item">
-                            <div class="skill-group-title">
-                                <span class="skill-text">Programming & APIs</span>
-                                <span class="skill-icon">👨🏻‍💻</span>
-                            </div>
-                            <div class="skill-tags">
-                                <span class="skill-tag">Python</span>
-                                <span class="skill-tag">Java</span>
-                                <span class="skill-tag">SQL</span>
-                                <span class="skill-tag">Go</span>
-                                <span class="skill-tag">Scala</span>
-                                <span class="skill-tag">Rust</span>
-                                <span class="skill-tag">REST APIs</span>
-                                <span class="skill-tag">GraphQL</span>
-                                <span class="skill-tag">API Gateway</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 class="section-title">Education 🎓</h2>
-                    <div class="education-item">
-                        <a href="https://www.bits-pilani.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">
-                            <img src="../../assets/img/org/bits-pilani.png" alt="BITS Pilani" class="institute-logo">
-                        </a>
-                        <div>
-                            <div class="degree"><strong>M. Tech</strong> in <strong>Data Science & Engineering</strong></div>
-                            <div class="institution">
-                                <a href="https://www.bits-pilani.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    BITS - Pilani, Hyderabad, India
-                                </a>
-                            </div>
-                            <div class="grade">With distinction</div>
-                        </div>
-                    </div>
-                    <div class="education-item">
-                        <a href="https://makautwb.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">
-                            <img src="../../assets/img/org/wbut.jpeg" alt="WBUT" class="institute-logo">
-                        </a>
-                        <div>
-                            <div class="degree"><strong>B. Tech</strong> in <strong>Computer Science & Engineering</strong></div>
-                            <div class="institution">
-                                <a href="https://makautwb.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">
-                                    WBUT, Kolkata, India
-                                </a>
-                            </div>
-                            <div class="grade">With distinction</div>
-                        </div>
-                    </div>
-                    <div class="education-item">
-                        <img src="../../assets/img/org/microsoft.jpeg" alt="Microsoft" class="institute-logo">
-                        <div>
-                            <div class="degree"><strong>Microsoft Certified Professional</strong></div>
-                            <div class="institution">SQL Server (70-463)</div>
-                            <div class="grade">✓ Certified</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 class="section-title">Awards & Recognitions 🏅</h2>
-                    <a href="https://www.i-shubham.in/#portfolio" target="_blank">
-                        <div class="awards-grid">
-                            <div class="award-item">
-                                <div class="award-title">Salesforce Hackathon Winner</div>
-                                Hackathon Winner & Best CoP Team in AI/ML
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">Apple Recognition</div>
-                                Key Contribution in Supply-Chain Project Go-live
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">Qualcomm Innovation Maestro</div>
-                                Qualcomm OneIT Innovation Maestro Winner
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">Qualcomm HaQkathon Winner</div>
-                                HaQkathon Winner, and Prototype Presentation to CxO
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">Qualcomm Super-Qualstar</div>
-                                Winner of Super-Qualstar and multiple Qualstars
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">Qualcomm Top 3</div>
-                                Stood in Top 3 in Worldwide ML Contest
-                            </div>
-                            <div class="award-item">
-                                <div class="award-title">PwC STAR</div>
-                                Outstanding Performance, & Key Contributor in Project
-                            </div>
-                        </div>
-                    </a>
-                </section>
-
-                <section>
-                    <h2 class="section-title">Leadership 👥</h2>
-                    <div class="leadership-container">
-                        <div style="font-size: 0.7em; line-height: 1.2;">
-                            • <strong>Team Leadership:</strong> Led 12+ member engineering teams across Apple, Salesforce, Qualcomm<br>
-                            • <strong>Mentorship:</strong> Coached 50+ engineers on data platform architecture and operational excellence<br>
-                            • <strong>Strategic Influence:</strong> Drive technical roadmaps, stakeholder alignment, and platform adoption<br>
-                            • <strong>Hiring & Scaling:</strong> Core technical interviewer; built and scaled high-performance teams
-                        </div>
-                    </div>
-                </section>
-            </div>
-        </div>
+                </div>
+            </section>
+        </main>
     </div>
-
-    <!-- PDF Generation Script -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <!-- <script src="../../assets/js/html2pdf.bundle.min.js"></script> -->
-    <script>
-        // Remove all CSS from skill icons at runtime
-        document.addEventListener('DOMContentLoaded', function() {
-            const skillIcons = document.querySelectorAll('.skill-icon');
-            skillIcons.forEach(function(icon) {
-                // Remove all computed styles
-                icon.style.cssText = '';
-                // Force natural emoji display
-                icon.style.color = '';
-                icon.style.background = '';
-                icon.style.webkitBackgroundClip = '';
-                icon.style.webkitTextFillColor = '';
-                icon.style.backgroundClip = '';
-                icon.style.filter = '';
-                icon.style.textShadow = '';
-                icon.style.fontSize = '';
-                icon.style.margin = '';
-                icon.style.display = '';
-                icon.style.verticalAlign = '';
-            });
-        });
-
-        async function downloadResume() {
-            // Hide the download button temporarily
-            const downloadBtn = document.querySelector('.download-btn');
-            downloadBtn.style.display = 'none';
-            
-            // Get the resume container
-            const element = document.querySelector('.container');
-            
-            // Check if element exists
-            if (!element) {
-                console.error('Container element not found');
-                alert('Error: Could not find resume container');
-                downloadBtn.style.display = 'flex';
-                return;
-            }
-            
-            // Wait for all images to load
-            const images = element.querySelectorAll('img');
-            await Promise.all(Array.from(images).map(img => {
-                if (img.complete) return Promise.resolve();
-                return new Promise((resolve) => {
-                    img.onload = resolve;
-                    img.onerror = resolve; // Continue even if image fails
-                });
-            }));
-            
-            // Temporarily fix gradient text elements for PDF
-            const gradientElements = element.querySelectorAll('.company, .job-title, .degree, .grade, .award-title');
-            const originalStyles = [];
-            
-            // Store original container styles
-            const originalContainerStyles = {
-                borderRadius: element.style.borderRadius,
-                border: element.style.border,
-                overflow: element.style.overflow
-            };
-            
-            // Remove border radius from container for PDF
-            element.style.borderRadius = '0';
-            element.style.border = 'none';
-            element.style.overflow = 'visible';
-            
-            gradientElements.forEach((el, index) => {
-                originalStyles[index] = {
-                    background: el.style.background,
-                    webkitBackgroundClip: el.style.webkitBackgroundClip,
-                    webkitTextFillColor: el.style.webkitTextFillColor,
-                    backgroundClip: el.style.backgroundClip
-                };
-                
-                // Force solid colors for PDF
-                el.style.background = 'none';
-                el.style.webkitBackgroundClip = 'unset';
-                el.style.webkitTextFillColor = 'unset';
-                el.style.backgroundClip = 'unset';
-                el.style.textShadow = 'none';
-                
-                // Set appropriate solid colors
-                if (el.classList.contains('company')) {
-                    el.style.color = '#3498db';
-                    el.style.fontWeight = '600';
-                    el.style.fontSize = '1.2em';
-                } else if (el.classList.contains('job-title')) {
-                    el.style.color = '#704da6';
-                    el.style.fontWeight = '700';
-                    el.style.fontSize = '1em';
-                } else if (el.classList.contains('degree')) {
-                    el.style.color = '#2c3e50';
-                    el.style.fontSize = '0.8em';
-                    el.style.lineHeight = '1.2';
-                } else if (el.classList.contains('grade')) {
-                    el.style.color = '#27ae60';
-                    el.style.fontWeight = '600';
-                } else if (el.classList.contains('award-title')) {
-                    el.style.color = '#e74c3c';
-                    el.style.fontWeight = '700';
-                }
-            });
-            
-            try {
-                // Check if html2pdf is loaded
-                if (typeof html2pdf === 'undefined') {
-                    throw new Error('html2pdf library not loaded. Please check script path.');
-                }
-                
-                console.log('html2pdf loaded successfully');
-                console.log('Element:', element);
-                console.log('Element dimensions:', element.offsetWidth, 'x', element.offsetHeight);
-                
-                // Get container dimensions
-                const containerWidth = element.offsetWidth;
-                const containerHeight = element.offsetHeight;
-                
-                // Convert pixels to mm (96 DPI) - add small buffer to prevent page overflow
-                const pxToMm = 25.4 / 96;
-                const widthMm = Math.ceil(containerWidth * pxToMm) + 1;
-                const heightMm = Math.ceil(containerHeight * pxToMm) + 1;
-                
-                console.log('Container size:', containerWidth, 'x', containerHeight, 'px');
-                console.log('PDF size:', widthMm, 'x', heightMm, 'mm');
-                
-                // PDF options - optimized for quality AND small file size
-                const opt = {
-                    margin: 0,
-                    filename: 'Shubham Mallick - Data and Application Architect.pdf',
-                    image: { type: 'png' },  // PNG for sharper text, better compression for graphics
-                    html2canvas: { 
-                        scale: 2,  // High resolution for crisp output
-                        useCORS: true,
-                        allowTaint: true,
-                        backgroundColor: '#ffffff',
-                        logging: false,
-                        width: containerWidth,
-                        height: containerHeight,
-                        imageTimeout: 0,
-                        removeContainer: true,
-                        onclone: function(clonedDoc) {
-                            // Add comprehensive reset styles
-                            var style = clonedDoc.createElement('style');
-                            style.textContent = `
-                                * { box-sizing: border-box !important; }
-                                html, body { 
-                                    margin: 0 !important; 
-                                    padding: 0 !important; 
-                                    background: white !important;
-                                }
-                                .container::before { display: none !important; }
-                                .container {
-                                    margin: 0 !important;
-                                    margin-left: 0 !important;
-                                    padding: 0 !important;
-                                    position: absolute !important;
-                                    left: 0 !important;
-                                    top: 0 !important;
-                                    border-radius: 0 !important;
-                                    border: none !important;
-                                    box-shadow: none !important;
-                                    overflow: visible !important;
-                                }
-                                .header {
-                                    border-radius: 0 !important;
-                                    margin: 0 !important;
-                                }
-                            `;
-                            clonedDoc.head.appendChild(style);
-                        }
-                    },
-                    jsPDF: { 
-                        unit: 'mm', 
-                        format: [widthMm, heightMm],
-                        orientation: 'portrait',
-                        compress: true,  // Enable PDF compression
-                        putOnlyUsedFonts: true
-                    },
-                    pagebreak: { mode: 'avoid-all' }
-                };
-                
-                console.log('Starting PDF generation...');
-                
-                // Generate and download PDF
-                await html2pdf().set(opt).from(element).save();
-                
-                console.log('PDF generation complete');
-                
-                // Restore original styles
-                gradientElements.forEach((el, index) => {
-                    if (originalStyles[index]) {
-                        el.style.background = originalStyles[index].background;
-                        el.style.webkitBackgroundClip = originalStyles[index].webkitBackgroundClip;
-                        el.style.webkitTextFillColor = originalStyles[index].webkitTextFillColor;
-                        el.style.backgroundClip = originalStyles[index].backgroundClip;
-                        el.style.color = '';
-                        el.style.fontWeight = '';
-                        el.style.textShadow = '';
-                    }
-                });
-                
-                // Restore container styles
-                element.style.borderRadius = originalContainerStyles.borderRadius;
-                element.style.border = originalContainerStyles.border;
-                element.style.overflow = originalContainerStyles.overflow;
-                
-                // Show the download button again
-                downloadBtn.style.display = 'flex';
-                
-            } catch (error) {
-                console.error('PDF generation failed:', error);
-                alert('PDF generation failed. Please try again or use Cmd+P / Ctrl+P to print.');
-                
-                // Restore original styles on error too
-                gradientElements.forEach((el, index) => {
-                    if (originalStyles[index]) {
-                        el.style.background = originalStyles[index].background;
-                        el.style.webkitBackgroundClip = originalStyles[index].webkitBackgroundClip;
-                        el.style.webkitTextFillColor = originalStyles[index].webkitTextFillColor;
-                        el.style.backgroundClip = originalStyles[index].backgroundClip;
-                        el.style.color = '';
-                        el.style.fontWeight = '';
-                        el.style.textShadow = '';
-                    }
-                });
-                
-                // Restore container styles on error too
-                element.style.borderRadius = originalContainerStyles.borderRadius;
-                element.style.border = originalContainerStyles.border;
-                element.style.overflow = originalContainerStyles.overflow;
-                
-                downloadBtn.style.display = 'flex';
-            }
-        }
-    </script>
 </body>
 </html>
