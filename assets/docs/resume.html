@@ -226,6 +226,33 @@
             line-height: 1.6;
         }
 
+        /* Visa Badge */
+        .visa-badge {
+            background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c);
+            padding: 2px 4px;
+            border-radius: 4mm;
+            font-size: 6.5pt;
+            font-weight: 600;
+            color: white;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+            margin-top: 5px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .visa-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: skewX(-15deg) translateX(-100%);
+        }
+
         /* Awards section */
         .awards-section {
             margin-bottom: 3.5mm;
@@ -266,7 +293,6 @@
             font-weight: 500;
             color: var(--accent-blue);
             letter-spacing: 0.5pt;
-            text-transform: uppercase;
         }
 
         /* Summary Section */
@@ -400,6 +426,17 @@
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
+            .visa-badge {
+                /* background: linear-gradient(45deg, #8cab99, #85d0a4, #68b4a5, #72c4b3) !important; */
+                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                box-shadow: none;
+            }
+            .visa-badge::before {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -415,6 +452,7 @@
 
                 <!-- Contact Information -->
                 <section class="contact-section">
+                    <div class="visa-badge">🇺🇸 USA B1/B2 Visa</div>
                     <h2 class="section-title">Contact</h2>
                     <div class="contact-item">
                         <div class="contact-icon">📧</div>
@@ -436,6 +474,7 @@
                         <div class="contact-icon">📍</div>
                         <div class="contact-text">Hyderabad, India</div>
                     </div>
+                    
                 </section>
 
                 <!-- Skills -->
