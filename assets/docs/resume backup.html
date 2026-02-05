@@ -416,46 +416,8 @@
         }
 
 
-        /* Download Button Styles */
-        .download-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
-            z-index: 1000;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
-        }
-
-        .download-btn:active {
-            transform: translateY(0);
-        }
-
-        .download-btn::before {
-            content: '📄';
-            font-size: 16px;
-        }
-
         /* Print Styles */
         @media print {
-            .download-btn {
-                display: none !important;
-            }
             body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
@@ -483,9 +445,6 @@
     <script src="../js/url-cleanup.js"></script>
 </head>
 <body>
-    <!-- Download Resume Button -->
-    <button class="download-btn" onclick="downloadResume()">Download Resume</button>
-    
     <div class="resume-container">
         <!-- Left Sidebar -->
         <aside class="left-sidebar">
@@ -526,33 +485,38 @@
                 <section class="skills-section">
                     <h2 class="section-title">Skills</h2>
                     
-                    <div class="skill-category-title">Data & Automation</div>
+                    <div class="skill-category-title">Data Platform & Governance</div>
                     <div class="skill-tags">
-                        <span class="skill-tag">PostgreSQL</span>
-                        <span class="skill-tag">SQL / NoSQL</span>
+                        <span class="skill-tag">Big Data</span>
+                        <span class="skill-tag">Databricks</span>
+                        <span class="skill-tag">Snowflake</span>
                         <span class="skill-tag">Spark</span>
                         <span class="skill-tag">Kafka</span>
                         <span class="skill-tag">Airflow</span>
-                        <span class="skill-tag">Databricks</span>
+                        <span class="skill-tag">Data Warehouse / Lakehouse</span>
                         <span class="skill-tag">ETL / ELT</span>
-                        <span class="skill-tag">Test Automation</span>
-                        <span class="skill-tag">Debugging</span>
+                        <span class="skill-tag">SQL / NoSQL</span>
+                        <span class="skill-tag">OLTP / OLAP</span>
                     </div>
                     
                     <div class="skill-category-title">ML & AI</div>
                     <div class="skill-tags">
                         <span class="skill-tag">LLM / GenAI</span>
+                        <span class="skill-tag">Langchain / Agentforce</span>
+                        <span class="skill-tag">NLP</span>
                         <span class="skill-tag">TensorFlow</span>
+                        <span class="skill-tag">Torch</span>
                         <span class="skill-tag">Scikit-Learn</span>
                         <span class="skill-tag">Neural Networks</span>
+                        <span class="skill-tag">GAN</span>
+                        <span class="skill-tag">LSTM</span>
                     </div>
                     
-                    <div class="skill-category-title">Systems & Cloud</div>
+                    <div class="skill-category-title">Cloud & Orchestration</div>
                     <div class="skill-tags">
-                        <span class="skill-tag">Linux / Unix / macOS</span>
                         <span class="skill-tag">AWS / Azure / GCP</span>
-                        <span class="skill-tag">Docker / Kubernetes</span>
-                        <span class="skill-tag">Git</span>
+                        <span class="skill-tag">Kubernetes</span>
+                        <span class="skill-tag">Docker</span>
                         <span class="skill-tag">Terraform</span>
                         <span class="skill-tag">CI / CD</span>
                     </div>
@@ -565,16 +529,16 @@
                         <span class="skill-tag">Prometheus</span>
                     </div>
                     
-                    <div class="skill-category-title">Programming & Scripting</div>
+                    <div class="skill-category-title">Programming</div>
                     <div class="skill-tags">
                         <span class="skill-tag">Python</span>
-                        <span class="skill-tag">Bash / Shell</span>
-                        <span class="skill-tag">Lua</span>
-                        <span class="skill-tag">C++ / C</span>
+                        <span class="skill-tag">Rust</span>
                         <span class="skill-tag">Java</span>
                         <span class="skill-tag">SQL</span>
                         <span class="skill-tag">Go</span>
                         <span class="skill-tag">Scala</span>
+                        <span class="skill-tag">C#</span>
+                        <span class="skill-tag">GraphQL</span>
                         <span class="skill-tag">REST APIs</span>
                     </div>
                 </section>
@@ -590,18 +554,18 @@
 
                 <!-- Awards -->
                 <section class="awards-section">
-                    <h2 class="section-title"><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Awards</a></h2>
+                    <h2 class="section-title">Awards</h2>
                     <ul class="simple-list">
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Atlassian Spot Recognitions</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Salesforce Hackathon Winner</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Apple Supply-Chain Recognition</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Qualcomm Innovation Maestro Winner</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Qualcomm HaQkathon Winner</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Qualcomm Super-Qualstar Awarded</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Qualcomm Multiple Qualstars Awarded</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">Qualcomm Top 3 ML Worldwide</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">PwC STAR Performer Awarded</a></li>
-                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">PwC Spot Awards & Recognitions</a></li>
+                        <li>Atlassian Spot Recognitions</li>
+                        <li>Salesforce Hackathon Winner</li>
+                        <li>Apple Supply-Chain Recognition</li>
+                        <li>Qualcomm Innovation Maestro Winner</li>
+                        <li>Qualcomm HaQkathon Winner</li>
+                        <li>Qualcomm Super-Qualstar Awarded</li>
+                        <li>Qualcomm Multiple Qualstars Awarded</li>
+                        <li>Qualcomm Top 3 ML Worldwide</li>
+                        <li>PwC STAR Performer Awarded</li>
+                        <li>PwC Spot Awards & Recognitions</li>
                     </ul>
                 </section>
 
@@ -626,11 +590,11 @@
                 <section class="contact-section">
                     <h2 class="section-title">Leadership</h2>
                     <ul class="simple-list">
-                        <li>Led 12+ member teams incl. contractors</li>
-                        <li>Remote collaboration across time zones</li>
+                        <li>Led 12+ members engineering teams</li>
                         <li>Coached 50+ professionals</li>
-                        <li>Conducted 100+ technical interviews</li>
+                        <li>Core technical 100+ interviews</li>
                         <li>Drove technical roadmaps</li>
+                        <li>Built high-performance teams</li>
                     </ul>
                 </section>
             </div>
@@ -641,14 +605,14 @@
             <!-- Name Header -->
             <header class="name-header">
                 <h1 class="full-name">Shubham Mallick</h1>
-                <p class="job-title">Data & Application Architect | Technical Lead</p>
+                <p class="job-title">Data & Application Architect</p>
             </header>
 
             <!-- Professional Summary -->
             <section class="summary-section">
                 <h2 class="content-section-title">Professional Summary</h2>
                 <p class="summary-text">
-                    Nearly 14 years of extensive experience as Senior Software Engineer with specialization in large-scale distributed systems, automation development, and cloud-native platforms. Led 12+ member engineering teams at Apple, Salesforce, Qualcomm, and IBM. Strong proficiency in Python/Bash scripting, debugging complex system issues, and root cause analysis. Expertise in Linux/Unix, Git, CI/CD, observability (Splunk/Datadog/Prometheus), and IT networking. Delivered enterprise solutions with 99.9% SLA and 70% efficiency improvements.
+                    Nearly 14 years of extensive experiences as Senior Data/Application Architect with specialization in large-scale distributed data systems, data governance (lineage, quality, compliance), and cloud-native platforms. Delivered enterprise solutions processing 50TB+ daily with 70% latency reduction and 99.9% SLA. Expertise in orchestration (Airflow/Kubernetes), observability (Splunk/Datadog/Prometheus), CI/CD, multi-cloud, and AI/ML integration across Salesforce, Apple, Qualcomm, IBM, and PwC.
                 </p>
             </section>
 
@@ -667,9 +631,9 @@
                     <div class="position-title">Lead Engineering</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Leading team of 6 members on data platform initiatives with Databricks/Spark for enterprise workloads; developing automation with Python/Bash</li>
-                            <li>Establishing quality frameworks and pipeline observability; implementing CI/CD with Git-based version control</li>
-                            <li>Collaborating with geographically distributed teams; driving root cause analysis for complex system issues</li>
+                            <li>Leading data platform initiatives with Databricks/Spark for enterprise analytics & AI/ML workloads for Go-To-Market product</li>
+                            <li>Establishing data governance standards including quality frameworks and pipeline observability among teams</li>
+                            <li>Building AI-ready data infrastructure on Databricks enabling GenAI model deployment and ML feature engineering</li>
                         </ul>
                     </div>
                 </div>
@@ -682,13 +646,13 @@
                         </div>
                         <div class="duration">Jul 2022 - Aug 2025</div>
                     </div>
-                    <div class="position-title">Staff Engineering, AI-Application Performance Engineering</div>
+                    <div class="position-title">Staff Engineering, Performance Engineering, Sales AI</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Architected cloud-native platform achieving 70% latency reduction using Spark/EKS/Kafka on AWS/Linux infrastructure</li>
-                            <li>Implemented observability with Grafana/Splunk; established SLAs & quality monitoring for CI/CD and system diagnostics</li>
-                            <li>Developed automation scripts (Python/Terraform/Jenkins) reducing deployment time by 70%; managed Git workflows</li>
-                            <li>Applied debugging techniques for complex system issues; collaborated with remote teams on issue resolution</li>
+                            <li>Architected cloud-native data platform with event-driven ticketing-system, achieving 70% latency reduction using Spark/EKS/Kafka orchestration in AWS ecosystem</li>
+                            <li>Implemented platform observability with Grafana/Splunk; established SLAs & data quality for monitoring CI/CD, and application performance</li>
+                            <li>Contributed IaC automation (Terraform/EKS/Jenkins) reducing deployment time by 70%; enabled developer self-service</li>
+                            <li>Drove GenAI/AI integration with Agentforce into data infrastructure, achieving 25-40% performance improvement</li>
                         </ul>
                     </div>
                 </div>
@@ -704,11 +668,11 @@
                     <div class="position-title">Technical Lead, Module Owner</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Led 12-member engineering team (including contractors), architecting enterprise platform with 99.9% SLA</li>
-                            <li>Built automation scripts (Python/Bash) for data pipelines handling 1M+ msgs/hour; applied debugging for issue resolution</li>
-                            <li>Led cloud migration (on-prem to AWS) on Linux infrastructure, reducing costs 50% and improving scalability 300%</li>
-                            <li>Established quality validation frameworks and compliance across supply-chain manufacturing domain</li>
-                            <li>Collaborated with geographically distributed teams; built APIs serving 10+ internal engineering teams</li>
+                            <li>Led 12-member engineering team, architecting enterprise data platform processing 100GB+ daily with 99.9% SLA</li>
+                            <li>Built real-time data pipelines (Kafka) handling 1M+ msgs/hour with comprehensive data quality and lineage tracking</li>
+                            <li>Led cloud migration (on-prem to AWS) with Data Mesh principles, reducing costs 50% and improving scalability 300%</li>
+                            <li>Established data governance standards for data discovery, quality, and compliance across supply-chain domain</li>
+                            <li>Built data APIs with semantic models and metadata management serving 10+ internal analytics teams</li>
                         </ul>
                     </div>
                 </div>
@@ -721,15 +685,15 @@
                         </div>
                         <div class="duration">Nov 2017 - May 2020</div>
                     </div>
-                    <div class="position-title">Senior Software Engineer, Distributed Systems</div>
+                    <div class="position-title">Senior ML, Distributed System Engineer</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Architected large-scale distributed platform processing 20TB+ daily on Linux/Hadoop ecosystem with Spark/HIVE</li>
-                            <li>Developed automation scripts (Python/Bash) for ML pipelines with 92% accuracy; optimized infrastructure 25%</li>
-                            <li>Implemented quality monitoring frameworks and root cause analysis ensuring system reliability</li>
-                            <li>Won Innovation Maestro, HaQkathon; presented automation solutions to CxO leadership</li>
-                            <li>Designed CI/CD workflows (Airflow/Git) improving pipeline efficiency by 35%</li>
-                            <li>Collaborated with cross-functional teams enabling self-service access to 15+ products</li>
+                            <li>Architected large-scale distributed platform processing 20TB+ daily with Spark/HIVE/MapR DB in Hadoop ecosystem</li>
+                            <li>Built AI/ML data pipelines with 92% model accuracy; optimized data infrastructure reducing resource usage 25%</li>
+                            <li>Implemented data quality & monitoring frameworks ensuring data reliability across enterprise analytics workloads</li>
+                            <li>Won Innovation Maestro, HaQkathon; presented the innovative solutions to CxO leadership</li>
+                            <li>Designed orchestration workflows (Airflow) & data transformation frameworks improving pipeline efficiency by 35%</li>
+                            <li>Partnered with engineering & analytics teams enabling developer self-service access to 15+ data products</li>
                         </ul>
                     </div>
                 </div>
@@ -742,12 +706,12 @@
                         </div>
                         <div class="duration">Dec 2016 - Nov 2017</div>
                     </div>
-                    <div class="position-title">Advisory Analyst, Cloud SME</div>
+                    <div class="position-title">Advisory Analyst, Azure Cloud SME</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Led 6-member team architecting cloud platform on Azure, delivered ahead of schedule</li>
-                            <li>Migrated 500GB+ data with 99.9% integrity; established quality SLAs and validation frameworks</li>
-                            <li>Implemented automation scripts and IT networking/security protocols across 3 geographic regions</li>
+                            <li>Led 6-member team architecting multi-cloud data platform on Azure, delivered ahead of schedule</li>
+                            <li>Migrated 500GB+ data with 99.9% integrity using Azure Data Factory, Service Bus; established data quality SLAs</li>
+                            <li>Implemented IaC automation and compliance frameworks meeting regulatory requirements across 3 geographic regions</li>
                         </ul>
                     </div>
                 </div>
@@ -760,7 +724,7 @@
                         </div>
                         <div class="duration">Oct 2014 - Dec 2016</div>
                     </div>
-                    <div class="position-title">Senior Consultant / Developer</div>
+                    <div class="position-title">Senior Developer / Consultant</div>
                     <div class="experience-description">
                         <ul>
                             <li>Architected BI platform with OLTP/OLAP optimization querying billion+ rows in 2-5 sec; delivered dashboards for business analytics</li>
@@ -780,103 +744,16 @@
                         </div>
                         <div class="duration">Apr 2012 - Oct 2014</div>
                     </div>
-                    <div class="position-title">Software Developer</div>
+                    <div class="position-title">Application Developer</div>
                     <div class="experience-description">
                         <ul>
-                            <li>Managed 24x7 production support with debugging and issue resolution for backend systems</li>
-                            <li>Developed automation scripts reducing manual effort by 60% across 5+ applications</li>
+                            <li>Managed 24x7 production support for MetLife backend processing, and application support</li>
+                            <li>Automated processes reducing manual effort by 60%, across 5+ applications</li>
                         </ul>
                     </div>
                 </div>
             </section>
         </main>
     </div>
-
-    <!-- PDF Generation Script -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script>
-        async function downloadResume() {
-            // Hide the download button temporarily
-            const downloadBtn = document.querySelector('.download-btn');
-            downloadBtn.style.display = 'none';
-            
-            // Get the resume container
-            const element = document.querySelector('.resume-container');
-            
-            // Check if element exists
-            if (!element) {
-                console.error('Container element not found');
-                alert('Error: Could not find resume container');
-                downloadBtn.style.display = 'flex';
-                return;
-            }
-            
-            // Wait for all images to load
-            const images = element.querySelectorAll('img');
-            await Promise.all(Array.from(images).map(img => {
-                if (img.complete) return Promise.resolve();
-                return new Promise((resolve) => {
-                    img.onload = resolve;
-                    img.onerror = resolve;
-                });
-            }));
-            
-            try {
-                console.log('Starting PDF generation...');
-                
-                // A4 dimensions in mm
-                const a4Width = 210;
-                const a4Height = 297;
-                
-                // Generate canvas with high quality
-                const canvas = await html2canvas(element, {
-                    scale: 3,
-                    useCORS: true,
-                    logging: false,
-                    backgroundColor: '#ffffff',
-                    allowTaint: true,
-                    imageTimeout: 0,
-                    onclone: function(clonedDoc) {
-                        var style = clonedDoc.createElement('style');
-                        style.textContent = `
-                            .resume-container {
-                                box-shadow: none !important;
-                                margin: 0 !important;
-                            }
-                            .resume-container::before { display: none !important; }
-                            .left-sidebar::before { display: none !important; }
-                        `;
-                        clonedDoc.head.appendChild(style);
-                    }
-                });
-                
-                // Create PDF with exact A4 dimensions
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: 'portrait',
-                    unit: 'mm',
-                    format: [a4Width, a4Height]
-                });
-                
-                // Add canvas as image to PDF, scaled to fit exactly one A4 page
-                const imgData = canvas.toDataURL('image/jpeg', 1.0);
-                pdf.addImage(imgData, 'PNG', 0, 0, a4Width, a4Height);
-                
-                // Save PDF
-                pdf.save('Shubham Mallick - Data and Application Architect.pdf');
-                
-                console.log('PDF generation complete');
-                
-                // Show the download button again
-                downloadBtn.style.display = 'flex';
-                
-            } catch (error) {
-                console.error('PDF generation failed:', error);
-                alert('PDF generation failed. Please try again or use Ctrl+P / Cmd+P to print.');
-                downloadBtn.style.display = 'flex';
-            }
-        }
-    </script>
 </body>
 </html>
