@@ -87,9 +87,9 @@
             height: 100%;
             border-radius: 50%;
             border: 2.5px solid var(--accent-gold);
-            object-fit: cover;
+            background-size: cover;
+            background-position: center;
             box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-            display: block;
         }
 
 
@@ -416,8 +416,46 @@
         }
 
 
+        /* Download Button Styles */
+        .download-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        .download-btn::before {
+            content: '📄';
+            font-size: 16px;
+        }
+
         /* Print Styles */
         @media print {
+            .download-btn {
+                display: none !important;
+            }
             body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
@@ -445,13 +483,17 @@
     <script src="../js/url-cleanup.js"></script>
 </head>
 <body>
+    <!-- Download Resume Button -->
+    <!-- Profile Image Doesn't look good in downloaded PDF, so commenting out the button -->
+    <button class="download-btn" onclick="downloadResume()">Download Resume</button>
+    
     <div class="resume-container">
         <!-- Left Sidebar -->
         <aside class="left-sidebar">
             <div class="sidebar-content">
                 <!-- Profile Image -->
                 <div class="profile-image-container">
-                    <img src="../img/profile-img-3.jpg" alt="Shubham Mallick" class="profile-image">
+                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpg');" role="img" aria-label="Shubham Mallick"></div>
                 </div>
 
                 <!-- Contact Information -->
@@ -758,5 +800,82 @@
             </section>
         </main>
     </div>
+
+    <!-- PDF Generation Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        async function downloadResume() {
+            const downloadBtn = document.querySelector('.download-btn');
+            downloadBtn.style.display = 'none';
+            
+            const element = document.querySelector('.resume-container');
+            
+            if (!element) {
+                console.error('Container element not found');
+                alert('Error: Could not find resume container');
+                downloadBtn.style.display = 'flex';
+                return;
+            }
+            
+            const images = element.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise((resolve) => {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                });
+            }));
+            
+            try {
+                const a4Width = 210;
+                const a4Height = 297;
+                
+                const canvas = await html2canvas(element, {
+                    scale: 3,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    imageTimeout: 0,
+                    onclone: function(clonedDoc) {
+                        var style = clonedDoc.createElement('style');
+                        style.textContent = `
+                            .resume-container {
+                                box-shadow: none !important;
+                                margin: 0 !important;
+                            }
+                            .resume-container::before { display: none !important; }
+                            .left-sidebar::before { display: none !important; }
+                            .profile-image {
+                                border-radius: 50% !important;
+                                overflow: hidden !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(style);
+                    }
+                });
+                
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: [a4Width, a4Height]
+                });
+                
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                pdf.addImage(imgData, 'PNG', 0, 0, a4Width, a4Height);
+                
+                pdf.save('Shubham Mallick - Data and Application Architect.pdf');
+                
+                downloadBtn.style.display = 'flex';
+                
+            } catch (error) {
+                console.error('PDF generation failed:', error);
+                alert('PDF generation failed. Please try again or use Ctrl+P / Cmd+P to print.');
+                downloadBtn.style.display = 'flex';
+            }
+        }
+    </script>
 </body>
 </html>
