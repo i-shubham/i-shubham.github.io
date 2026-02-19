@@ -832,7 +832,7 @@
                 const a4Height = 297;
                 
                 const canvas = await html2canvas(element, {
-                    scale: 3,
+                    scale: 4,
                     useCORS: true,
                     logging: false,
                     backgroundColor: '#ffffff',
@@ -851,8 +851,21 @@
                                 border-radius: 50% !important;
                                 overflow: hidden !important;
                             }
+                            .skill-tag {
+                                height: auto !important;
+                                line-height: 1 !important;
+                                padding-top: 1px !important;
+                                padding-bottom: 3px !important;
+                                padding-left: 2px !important;
+                                padding-right: 2px !important;
+                            }
                         `;
                         clonedDoc.head.appendChild(style);
+
+                        var profileImg = clonedDoc.querySelector('.profile-image');
+                        if (profileImg) {
+                            profileImg.style.backgroundImage = "url('../img/profile-img-2.png')";
+                        }
                     }
                 });
                 
@@ -863,8 +876,8 @@
                     format: [a4Width, a4Height]
                 });
                 
-                const imgData = canvas.toDataURL('image/jpeg', 1.0);
-                pdf.addImage(imgData, 'PNG', 0, 0, a4Width, a4Height);
+                const imgData = canvas.toDataURL('image/png');
+                pdf.addImage(imgData, 'PNG', 0, 0, a4Width, a4Height, undefined, 'FAST');
                 
                 pdf.save('Shubham Mallick - Data and Application Architect.pdf');
                 
