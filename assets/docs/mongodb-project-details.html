@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shubham Mallick - MongoDB & NoSQL Project Experience</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #1a2332;
+            --accent-gold: #d4af37;
+            --accent-blue: #2c5f8d;
+            --accent-green: #2d8659;
+            --text-gray: #4a5568;
+            --bg-light: #f8f9fa;
+            --border-color: #e2e8f0;
+            --mongo-green: #00684a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Work Sans', sans-serif;
+            color: var(--primary-dark);
+            background: #f0f2f5;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .doc-header {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #2d3748 60%, var(--mongo-green) 100%);
+            color: white;
+            padding: 36px 48px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .doc-header::before {
+            content: '';
+            position: absolute;
+            top: -40%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(212,175,55,0.12) 0%, transparent 70%);
+        }
+
+        .doc-header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 26pt;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: -0.5pt;
+            position: relative;
+        }
+
+        .doc-header .subtitle {
+            font-size: 11pt;
+            font-weight: 400;
+            color: rgba(255,255,255,0.85);
+            margin-bottom: 12px;
+        }
+
+        .doc-header .tagline {
+            font-size: 9.5pt;
+            color: var(--accent-gold);
+            font-weight: 500;
+            letter-spacing: 0.3pt;
+        }
+
+        .doc-body {
+            padding: 36px 48px 48px;
+        }
+
+        .overview-box {
+            background: linear-gradient(135deg, #f8faf9, #eef6f1);
+            border-left: 4px solid var(--mongo-green);
+            border-radius: 0 6px 6px 0;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            font-size: 10pt;
+            line-height: 1.65;
+            color: var(--text-gray);
+        }
+
+        .overview-box strong {
+            color: var(--primary-dark);
+        }
+
+        .company-section {
+            margin-bottom: 36px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 32px;
+        }
+
+        .company-section:last-of-type {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .company-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 6px;
+        }
+
+        .company-header img {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .company-header h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 15pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+
+        .company-meta {
+            font-size: 9pt;
+            color: var(--accent-blue);
+            font-weight: 500;
+            margin-bottom: 16px;
+            padding-left: 42px;
+        }
+
+        .company-meta .duration {
+            color: var(--text-gray);
+            font-style: italic;
+            font-weight: 400;
+            margin-left: 8px;
+        }
+
+        .project-card {
+            background: var(--bg-light);
+            border-radius: 6px;
+            padding: 20px 24px;
+            margin-bottom: 14px;
+            border: 1px solid var(--border-color);
+            transition: box-shadow 0.2s ease;
+        }
+
+        .project-card:hover {
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+
+        .project-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .project-title {
+            font-size: 10.5pt;
+            font-weight: 600;
+            color: var(--mongo-green);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .project-title::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .project-desc {
+            font-size: 9.5pt;
+            color: var(--text-gray);
+            line-height: 1.55;
+            margin-bottom: 10px;
+        }
+
+        .project-details {
+            list-style: none;
+            padding: 0;
+        }
+
+        .project-details li {
+            font-size: 9pt;
+            color: var(--text-gray);
+            line-height: 1.5;
+            padding-left: 16px;
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        .project-details li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--mongo-green);
+            font-weight: bold;
+        }
+
+        .project-details li strong {
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .tech-tag {
+            background: rgba(0, 104, 74, 0.08);
+            border: 1px solid rgba(0, 104, 74, 0.2);
+            color: var(--mongo-green);
+            font-size: 7.5pt;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .tech-tag.highlight {
+            background: rgba(0, 104, 74, 0.15);
+            border-color: var(--mongo-green);
+            font-weight: 600;
+        }
+
+        .alignment-section {
+            margin-top: 40px;
+            padding-top: 32px;
+            border-top: 2px solid var(--accent-gold);
+        }
+
+        .alignment-section h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 14pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5pt;
+        }
+
+        .alignment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .alignment-card {
+            background: var(--bg-light);
+            border-radius: 6px;
+            padding: 16px 20px;
+            border-left: 3px solid var(--accent-gold);
+        }
+
+        .alignment-card h3 {
+            font-size: 9.5pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 6px;
+        }
+
+        .alignment-card p {
+            font-size: 8.5pt;
+            color: var(--text-gray);
+            line-height: 1.5;
+        }
+
+        @media print {
+            body { background: white; }
+            .container { box-shadow: none; margin: 0; border-radius: 0; }
+            .project-card:hover { box-shadow: none; }
+        }
+
+        @media (max-width: 768px) {
+            .doc-header, .doc-body { padding: 24px; }
+            .alignment-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="doc-header">
+            <h1>Shubham Mallick</h1>
+            <p class="subtitle">MongoDB & NoSQL Document Database — Project Experience</p>
+            <p class="tagline">Data & Platform Architect | 14 Years in Data-Intensive Distributed Systems</p>
+        </header>
+
+        <div class="doc-body">
+            <div class="overview-box">
+                <strong>Overview:</strong> Extensive hands-on experience with MongoDB and document-oriented databases across enterprise platforms spanning
+                event-driven architectures, real-time data pipelines, microservices backends, API-first platforms, and analytics systems.
+                Worked with MongoDB in production environments processing millions of transactions daily, designing schema strategies for
+                time-series and document workloads, building RESTful/GraphQL APIs, and establishing governance and lifecycle standards
+                for NoSQL data platforms.
+            </div>
+
+            <!-- Atlassian -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/atlassian.png" alt="Atlassian">
+                    <h2>Atlassian</h2>
+                </div>
+                <div class="company-meta">
+                    Lead Engineering <span class="duration">| Sep 2025 – Present</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Go-To-Market Data Platform — Document Store for Product Analytics</div>
+                    <p class="project-desc">
+                        Leading the design and evolution of a multi-model data platform supporting Go-To-Market analytics,
+                        where MongoDB serves as the primary document store for flexible, schema-evolving product telemetry
+                        and customer engagement data.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>Architecture & Governance:</strong> Defined platform architecture patterns for data ingestion from multiple product sources into MongoDB collections, establishing schema versioning, TTL policies, and lifecycle management standards for document data</li>
+                        <li><strong>Event-Driven Ingestion:</strong> Designed event-streaming pipelines (Kafka → MongoDB) for real-time ingestion of product usage events, ensuring interoperability between time-series metrics (stored in specialized DBs) and document data in MongoDB</li>
+                        <li><strong>API Layer:</strong> Architected RESTful and GraphQL API services on top of MongoDB aggregation pipelines, enabling self-service data access for analytics and product teams</li>
+                        <li><strong>Indexing & Performance:</strong> Established indexing strategies (compound, text, wildcard indexes) and read-preference configurations optimizing query latency across 500M+ documents</li>
+                        <li><strong>Observability:</strong> Integrated MongoDB Atlas monitoring with Datadog/Grafana dashboards for real-time tracking of query performance, replication lag, and storage utilization</li>
+                        <li><strong>Data Quality & Governance:</strong> Implemented JSON Schema validation on MongoDB collections and established data quality frameworks with automated anomaly detection across ingestion pipelines</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB Atlas</span>
+                        <span class="tech-tag highlight">MongoDB Aggregation Framework</span>
+                        <span class="tech-tag">Kafka</span>
+                        <span class="tech-tag">Databricks</span>
+                        <span class="tech-tag">GraphQL</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Datadog</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">Kubernetes</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Salesforce -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/salesforce.jpeg" alt="Salesforce">
+                    <h2>Salesforce</h2>
+                </div>
+                <div class="company-meta">
+                    Staff Engineering, Performance Engineering, Sales AI <span class="duration">| Jul 2022 – Aug 2025</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Event-Driven Ticketing Platform — MongoDB as Operational Data Store</div>
+                    <p class="project-desc">
+                        Architected a cloud-native, event-driven ticketing and performance analytics platform where MongoDB
+                        served as the core operational document store for high-throughput event processing and real-time querying.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>Platform Architecture:</strong> Designed MongoDB as the central document store in an event-driven microservices architecture, handling ticket lifecycle events ingested via Kafka with 70% latency reduction over the legacy relational system</li>
+                        <li><strong>Schema Design:</strong> Implemented polymorphic schema patterns in MongoDB for heterogeneous ticket types (incidents, performance alerts, capacity events), enabling flexible document structures while maintaining query consistency</li>
+                        <li><strong>Time-Series & Document Hybrid:</strong> Designed a dual-store pattern where time-series performance metrics fed into specialized storage while correlated contextual/document data resided in MongoDB, joined via lightweight API services</li>
+                        <li><strong>High-Performance Access:</strong> Built compound and partial indexes, optimized aggregation pipelines, and implemented read/write concern tuning to achieve sub-50ms p99 latency at 10K+ ops/sec</li>
+                        <li><strong>Caching Layer:</strong> Integrated Redis caching with MongoDB for frequently accessed ticket summaries and dashboard aggregations, reducing database load by 40%</li>
+                        <li><strong>API Services:</strong> Developed RESTful microservices (Node.js/Express) backed by MongoDB, exposing ticket CRUD, search, and analytics endpoints consumed by 15+ internal teams</li>
+                        <li><strong>Observability & SLAs:</strong> Built Grafana/Splunk dashboards monitoring MongoDB cluster health, slow queries, and replication metrics; established SLAs for data freshness and query performance</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB</span>
+                        <span class="tech-tag highlight">Node.js / Express</span>
+                        <span class="tech-tag">Kafka</span>
+                        <span class="tech-tag">Redis</span>
+                        <span class="tech-tag">AWS EKS</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Grafana</span>
+                        <span class="tech-tag">Splunk</span>
+                        <span class="tech-tag">Terraform</span>
+                        <span class="tech-tag">Docker</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">GenAI/Agentforce Data Infrastructure — MongoDB Vector & Document Store</div>
+                    <p class="project-desc">
+                        Contributed to AI-powered data infrastructure where MongoDB served as the document store for
+                        GenAI context retrieval, agent memory, and unstructured data management for the Agentforce platform.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>Document Store for AI:</strong> Designed MongoDB collections for storing LLM conversation histories, agent context documents, and retrieval-augmented generation (RAG) source material with flexible schema evolution</li>
+                        <li><strong>Search & Indexing:</strong> Leveraged MongoDB Atlas Search with text and vector indexes for semantic retrieval across unstructured knowledge base documents, achieving 25-40% improvement in context relevance</li>
+                        <li><strong>Data Pipeline Integration:</strong> Built ingestion pipelines feeding processed enterprise data into MongoDB for AI consumption, with transformation logic handling multiple source formats (JSON, semi-structured logs, API payloads)</li>
+                        <li><strong>Security & Governance:</strong> Implemented field-level encryption, role-based access controls, and audit logging on MongoDB collections containing sensitive AI training and inference data</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB Atlas</span>
+                        <span class="tech-tag highlight">MongoDB Atlas Search</span>
+                        <span class="tech-tag">Agentforce</span>
+                        <span class="tech-tag">LangChain</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">AWS</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Apple -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/apple.png" alt="Apple">
+                    <h2>Apple Inc.</h2>
+                </div>
+                <div class="company-meta">
+                    Technical Lead, Module Owner <span class="duration">| Jun 2020 – Jul 2022</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Supply-Chain Data Platform — MongoDB for Real-Time Operational Data</div>
+                    <p class="project-desc">
+                        Led the architecture of an enterprise data platform for Apple's supply-chain domain where MongoDB
+                        served as the operational document store for real-time logistics events, supplier metadata, and
+                        data mesh entity storage processing 100GB+ daily.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>Data Mesh Entity Store:</strong> Architected MongoDB as the domain entity store within a Data Mesh architecture, with each supply-chain domain (procurement, logistics, quality) owning its MongoDB collections with well-defined data products and access contracts</li>
+                        <li><strong>Real-Time Event Processing:</strong> Built Kafka-to-MongoDB pipelines handling 1M+ messages/hour of supply-chain events (shipment updates, inventory changes, quality alerts), with MongoDB Change Streams propagating downstream to analytics consumers</li>
+                        <li><strong>Document Modeling:</strong> Designed denormalized document models for complex supply-chain entities (multi-tier supplier hierarchies, BOM structures, logistics chains) reducing join-heavy relational queries and improving read performance 5x</li>
+                        <li><strong>Data Lineage & Governance:</strong> Built metadata management layer on MongoDB tracking data lineage, schema evolution history, and data quality scores per collection — serving as a lightweight data catalog for 10+ analytics teams</li>
+                        <li><strong>Cloud Migration:</strong> Led migration of on-premise MongoDB clusters to MongoDB Atlas on AWS, implementing sharding strategies, automated backup/restore, and cross-region replication for disaster recovery</li>
+                        <li><strong>API & Semantic Layer:</strong> Built RESTful data APIs backed by MongoDB aggregation pipelines, providing semantic access to supply-chain data products with authentication, rate limiting, and usage analytics</li>
+                        <li><strong>Monitoring & SLAs:</strong> Established MongoDB operational SLAs (99.9% availability, sub-100ms p95 reads) with Prometheus/Grafana monitoring stack tracking cluster metrics, slow query logs, and storage forecasting</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB Atlas</span>
+                        <span class="tech-tag highlight">MongoDB Change Streams</span>
+                        <span class="tech-tag highlight">MongoDB Sharding</span>
+                        <span class="tech-tag">Kafka</span>
+                        <span class="tech-tag">AWS</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Data Mesh</span>
+                        <span class="tech-tag">Prometheus</span>
+                        <span class="tech-tag">Grafana</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">Kubernetes</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Qualcomm -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/qualcomm.jpeg" alt="Qualcomm">
+                    <h2>Qualcomm</h2>
+                </div>
+                <div class="company-meta">
+                    Senior ML, Distributed System Engineer <span class="duration">| Nov 2017 – May 2020</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Distributed Analytics Platform — MongoDB for ML Feature Store & Metadata</div>
+                    <p class="project-desc">
+                        Architected MongoDB as the feature store and metadata repository within a large-scale distributed analytics
+                        platform processing 20TB+ daily, supporting AI/ML model training pipelines and enterprise analytics workloads.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>ML Feature Store:</strong> Designed MongoDB collections as the online feature store for real-time ML inference, serving pre-computed feature vectors with sub-10ms latency using compound indexes and in-memory storage engine for hot data</li>
+                        <li><strong>Metadata Repository:</strong> Built a centralized metadata management system on MongoDB tracking dataset schemas, pipeline DAG definitions, model versioning, and data quality metrics across 15+ data products</li>
+                        <li><strong>Hybrid Data Architecture:</strong> Architected a multi-model data layer where MongoDB handled document/semi-structured workloads (model configs, experiment logs, feature definitions) alongside HIVE/MapR DB for batch analytics — with Airflow orchestrating cross-store workflows</li>
+                        <li><strong>Data Pipeline Integration:</strong> Built Spark-to-MongoDB connectors for batch loading transformed features and MongoDB-to-Spark readers for training data hydration, processing millions of feature records per pipeline run</li>
+                        <li><strong>Indexing & Query Optimization:</strong> Implemented text search indexes for experiment discovery, TTL indexes for automatic cleanup of ephemeral training artifacts, and covered indexes reducing query execution time by 35%</li>
+                        <li><strong>Platform Governance:</strong> Established collection naming conventions, schema validation rules, access control policies (RBAC), and retention standards for MongoDB deployments across engineering teams</li>
+                        <li><strong>Developer Self-Service:</strong> Built internal CLI tools and REST APIs enabling data scientists and engineers to register, discover, and consume features and datasets stored in MongoDB without DBA intervention</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB</span>
+                        <span class="tech-tag highlight">MongoDB In-Memory Engine</span>
+                        <span class="tech-tag">Spark</span>
+                        <span class="tech-tag">HIVE</span>
+                        <span class="tech-tag">MapR DB</span>
+                        <span class="tech-tag">Airflow</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">Hadoop</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Innovation Platform (HaQkathon Winner) — MEAN Stack Rapid Prototyping</div>
+                    <p class="project-desc">
+                        Won the Qualcomm HaQkathon and Innovation Maestro awards by building a full-stack MEAN application
+                        for an internal innovation management and idea tracking platform, presented to CxO leadership.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>MEAN Stack Architecture:</strong> Built end-to-end using MongoDB, Express.js, Angular, and Node.js — with MongoDB serving as the primary data store for innovation submissions, voting data, and team collaboration documents</li>
+                        <li><strong>Document Modeling:</strong> Designed flexible MongoDB schemas for innovation proposals with nested sub-documents (team members, evaluation criteria, milestone tracking) enabling rich querying without complex joins</li>
+                        <li><strong>RESTful API Backend:</strong> Developed Express.js/Node.js API services with Mongoose ODM for MongoDB interaction, implementing CRUD operations, full-text search, and aggregation-based analytics endpoints</li>
+                        <li><strong>Real-Time Features:</strong> Implemented MongoDB Change Streams with Socket.io for real-time updates on voting, comments, and evaluation status across the Angular frontend</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB</span>
+                        <span class="tech-tag highlight">Express.js</span>
+                        <span class="tech-tag highlight">Angular</span>
+                        <span class="tech-tag highlight">Node.js</span>
+                        <span class="tech-tag">Mongoose ODM</span>
+                        <span class="tech-tag">Socket.io</span>
+                        <span class="tech-tag">REST APIs</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- IBM -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/ibm.png" alt="IBM">
+                    <h2>IBM</h2>
+                </div>
+                <div class="company-meta">
+                    Advisory Analyst, Azure Cloud SME <span class="duration">| Dec 2016 – Nov 2017</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Multi-Cloud Data Platform on Azure — MongoDB (CosmosDB) for Document Workloads</div>
+                    <p class="project-desc">
+                        Led a 6-member team architecting a multi-cloud data platform on Azure where Azure Cosmos DB
+                        (MongoDB API) served as the globally distributed document store for cross-region enterprise data workloads.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>CosmosDB with MongoDB API:</strong> Architected Azure Cosmos DB with MongoDB wire protocol compatibility, enabling teams to use familiar MongoDB drivers and query patterns while leveraging Cosmos DB's global distribution and SLA guarantees</li>
+                        <li><strong>Data Migration:</strong> Migrated 500GB+ of document data from on-premise MongoDB clusters to Azure Cosmos DB with 99.9% data integrity, using Azure Data Factory for bulk transfer and custom validation scripts for schema consistency</li>
+                        <li><strong>Multi-Region Replication:</strong> Configured multi-region write/read replicas across 3 geographic regions with consistency level tuning (bounded staleness for analytics, strong consistency for transactional workloads)</li>
+                        <li><strong>Event Integration:</strong> Integrated Azure Service Bus with Cosmos DB change feed for event-driven processing, enabling downstream consumers to react to document changes in near real-time</li>
+                        <li><strong>Compliance & Security:</strong> Implemented encryption at rest, VNET service endpoints, and audit logging on Cosmos DB deployments meeting regulatory requirements across healthcare and financial services domains</li>
+                        <li><strong>IaC & Lifecycle Management:</strong> Built ARM templates and automation scripts for Cosmos DB provisioning, throughput scaling (RU/s), and index policy management as part of the platform's infrastructure-as-code strategy</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">Azure Cosmos DB (MongoDB API)</span>
+                        <span class="tech-tag highlight">MongoDB Wire Protocol</span>
+                        <span class="tech-tag">Azure Data Factory</span>
+                        <span class="tech-tag">Azure Service Bus</span>
+                        <span class="tech-tag">ARM Templates</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">REST APIs</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PwC -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/pwc.jpeg" alt="PwC">
+                    <h2>PwC</h2>
+                </div>
+                <div class="company-meta">
+                    Senior Developer / Consultant <span class="duration">| Oct 2014 – Dec 2016</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">BI & Analytics Platform — MongoDB for Semi-Structured Data & ETL Staging</div>
+                    <p class="project-desc">
+                        Built MongoDB-backed components within a large-scale BI platform, using it as the staging and
+                        transformation layer for semi-structured data sources feeding into OLAP systems, and as the backend
+                        for operational dashboards.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>ETL Staging Layer:</strong> Designed MongoDB as the landing zone and staging area for semi-structured data (JSON feeds, XML payloads, CSV uploads) from diverse business sources before transformation into relational OLAP schemas</li>
+                        <li><strong>Schema-on-Read Processing:</strong> Leveraged MongoDB's flexible document model for schema-on-read ingestion of 50M+ rows/day from heterogeneous sources, applying transformation logic via aggregation pipelines before loading into SQL data warehouse</li>
+                        <li><strong>Dashboard Backend:</strong> Built Node.js/Express microservices backed by MongoDB for operational dashboards, serving pre-aggregated analytics data to frontend visualization layers with sub-second response times</li>
+                        <li><strong>Data Modeling:</strong> Implemented logical data modeling best practices for MongoDB collections — defining embedding vs. referencing patterns, document size optimization, and schema versioning improving data consistency by 40%</li>
+                        <li><strong>Cross-Store Interoperability:</strong> Built data synchronization pipelines between MongoDB (document store) and SQL Server (relational/OLAP), ensuring consistency across the hybrid data platform</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB</span>
+                        <span class="tech-tag highlight">Node.js / Express</span>
+                        <span class="tech-tag">SQL Server</span>
+                        <span class="tech-tag">OLAP / OLTP</span>
+                        <span class="tech-tag">ETL Pipelines</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Python</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Cognizant -->
+            <section class="company-section">
+                <div class="company-header">
+                    <img src="../img/org/cognizant.png" alt="Cognizant">
+                    <h2>Cognizant</h2>
+                </div>
+                <div class="company-meta">
+                    Application Developer <span class="duration">| Apr 2012 – Oct 2014</span>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">MetLife Backend Processing — MongoDB for Application Data & Automation</div>
+                    <p class="project-desc">
+                        Contributed to MongoDB integration within MetLife's backend processing systems, using it for
+                        application configuration management, automated workflow state storage, and operational data.
+                    </p>
+                    <ul class="project-details">
+                        <li><strong>Application Data Store:</strong> Used MongoDB as the backend data store for application configuration, workflow state, and operational metadata across 5+ production applications in the insurance domain</li>
+                        <li><strong>Process Automation:</strong> Built automation scripts interacting with MongoDB for batch processing workflows — storing job execution logs, processing status, and error documents, reducing manual effort by 60%</li>
+                        <li><strong>CRUD API Services:</strong> Developed REST API endpoints backed by MongoDB for application support tools used by the 24x7 production support team for real-time system health and data lookup</li>
+                        <li><strong>Monitoring & Alerting:</strong> Implemented MongoDB query-based monitoring for application health checks, with automated alerts on document count anomalies and processing delays</li>
+                    </ul>
+                    <div class="tech-stack">
+                        <span class="tech-tag highlight">MongoDB</span>
+                        <span class="tech-tag">REST APIs</span>
+                        <span class="tech-tag">Python</span>
+                        <span class="tech-tag">Bash / Shell</span>
+                        <span class="tech-tag">Java</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alignment Section -->
+            <section class="alignment-section">
+                <h2>Alignment with Role Requirements</h2>
+                <div class="alignment-grid">
+                    <div class="alignment-card">
+                        <h3>Architectural Leadership</h3>
+                        <p>Defined and evolved MongoDB-backed platform architectures across 7 organizations — spanning document stores, event-driven systems, data mesh patterns, and multi-model data strategies with governance and lifecycle standards.</p>
+                    </div>
+                    <div class="alignment-card">
+                        <h3>Multi-Model Data Expertise</h3>
+                        <p>Hands-on experience spanning MongoDB (document), SQL/OLAP (relational), time-series patterns, and unstructured data — with proven interoperability across storage systems via APIs and orchestrated pipelines.</p>
+                    </div>
+                    <div class="alignment-card">
+                        <h3>Event-Driven & Messaging</h3>
+                        <p>Architected Kafka/MongoDB, Service Bus/CosmosDB, and Change Stream-driven pipelines across Salesforce, Apple, Qualcomm, and IBM — processing millions of events daily with sub-50ms latency.</p>
+                    </div>
+                    <div class="alignment-card">
+                        <h3>MEAN Stack & API-First</h3>
+                        <p>Built full-stack MEAN applications (Qualcomm HaQkathon) and Node.js/Express/MongoDB API services (Salesforce, PwC) — with REST and GraphQL endpoints serving multiple consumer teams.</p>
+                    </div>
+                    <div class="alignment-card">
+                        <h3>DevOps & Observability</h3>
+                        <p>Integrated MongoDB monitoring with Datadog, Grafana, Splunk, and Prometheus across platforms. Established SLAs, IaC automation (Terraform/ARM), and CI/CD for MongoDB deployment lifecycle.</p>
+                    </div>
+                    <div class="alignment-card">
+                        <h3>Mentorship & Collaboration</h3>
+                        <p>Led 12+ member teams, mentored 50+ engineers, partnered across product/engineering/analytics, and drove technical roadmaps — enabling developer self-service and cross-product data infrastructure.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</body>
+</html>
