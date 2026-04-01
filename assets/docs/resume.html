@@ -338,15 +338,19 @@
         .experience-item {
             margin-bottom: 4.5mm;
             padding-left: 4mm;
-            border-left: 2px solid var(--accent-gold);
             position: relative;
+            background-image: linear-gradient(var(--accent-gold), var(--accent-gold));
+            background-size: 2px calc(100% - 18px);
+            background-position: 0 15px;
+            background-repeat: no-repeat;
         }
 
         .experience-item::before {
             content: '';
             position: absolute;
-            left: -3.5px;
-            top: 1mm;
+            left: -1.8px;
+            top: 2mm;
+            /* z-index: 1; */
             width: 5px;
             height: 5px;
             background: var(--accent-gold);
@@ -397,6 +401,7 @@
             flex-shrink: 0;
             padding-bottom: 0;
             align-self: flex-end;
+            font-weight: bolder;
         }
 
         .experience-description {
