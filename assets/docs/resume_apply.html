@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shubham Mallick - Data and Application Architect</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #1a2332;
+            --accent-gold: #d4af37;
+            --accent-blue: #2c5f8d;
+            --text-gray: #4a5568;
+            --bg-light: #f8f9fa;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Work Sans', sans-serif;
+            color: var(--primary-dark);
+            background: white;
+            line-height: 1.6;
+        }
+
+        .resume-container {
+            width: 210mm;
+            height: 297mm;
+            margin: 0 auto;
+            background: white;
+            display: grid;
+            grid-template-columns: 55mm 155mm;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0,0,0,0.1);
+        }
+
+        /* Left Sidebar */
+        .left-sidebar {
+            background: linear-gradient(180deg, var(--primary-dark) 0%, #2d3748 100%);
+            color: white;
+            padding: 2mm 2mm 2mm 3mm;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .left-sidebar::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(212,175,55,0.08) 0%, transparent 70%);
+            animation: pulse 15s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .sidebar-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Profile Image */
+        .profile-image-container {
+            width: 32mm;
+            height: 32mm;
+            margin: 0 auto 4mm;
+            position: relative;
+        }
+
+        .profile-image {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2.5px solid var(--accent-gold);
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+
+        /* Contact Section */
+        .contact-section {
+            margin-bottom: 3.5mm;
+        }
+
+        .section-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 8.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8pt;
+            margin-bottom: 2mm;
+            color: var(--accent-gold);
+            position: relative;
+            padding-bottom: 1mm;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 15mm;
+            height: 2px;
+            background: var(--accent-gold);
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            /* margin-bottom: 0.25mm; */
+            margin-top: 0.5mm;
+            font-size: 7.5pt;
+            line-height: 1.2;
+        }
+
+        .contact-icon {
+            width: 4.5mm;
+            height: 4.5mm;
+            margin-right: 1.2mm;
+            flex-shrink: 0;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            font-size: 6pt;
+            text-align: center;
+            line-height: 4.5mm;
+            overflow: hidden;
+        }
+
+        .contact-text {
+            color: rgba(255,255,255,0.9);
+            word-break: break-word;
+            font-size: 7.5pt;
+        }
+
+        .contact-text a {
+            color: rgba(255,255,255,0.9);
+            text-decoration: none;
+        }
+
+        /* Skills Section */
+        .skills-section {
+            margin-bottom: 3.5mm;
+        }
+
+        .skill-category-title {
+            font-size: 7pt;
+            font-weight: 600;
+            color: var(--accent-gold);
+            text-transform: uppercase;
+            letter-spacing: 0.4pt;
+            margin-top: 2mm;
+            /* margin-bottom: 1mm; */
+        }
+
+        .skill-category-title:first-of-type {
+            margin-top: 0;
+        }
+
+        .skill-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1mm;
+            margin-bottom: 0.3mm;
+        }
+
+        .skill-tag {
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 6pt;
+            padding: 0px 2px 0px 2px;
+            border-radius: 2mm;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .skill-tag:hover {
+            background: rgba(212, 175, 55, 0.25);
+            border-color: var(--accent-gold);
+            transform: translateY(-1px);
+        }
+
+        /* Languages/Certifications */
+        .simple-list {
+            font-size: 6.5pt;
+            line-height: 1.3;
+            color: rgba(255,255,255,0.85);
+        }
+
+        .simple-list li {
+            list-style: none;
+            padding-left: 2.5mm;
+            position: relative;
+            margin-bottom: 0.7mm;
+        }
+
+        .simple-list li::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: var(--accent-gold);
+            font-weight: bold;
+        }
+
+        .simple-list li strong {
+            color: var(--accent-gold);
+            font-weight: 600;
+        }
+
+        .simple-list li br {
+            line-height: 1.6;
+        }
+
+        /* Visa Badge */
+        .visa-badge {
+            background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c);
+            padding: 2px 4px;
+            border-radius: 4mm;
+            font-size: 6.5pt;
+            font-weight: 600;
+            color: white;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+            margin-top: 5px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .visa-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: skewX(-15deg) translateX(-100%);
+        }
+
+        /* Awards section */
+        .awards-section {
+            margin-bottom: 3.5mm;
+        }
+
+        .awards-section .simple-list li::before {
+            content: '🏆  ';
+            font-size: 5pt;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* Right Content */
+        .right-content {
+            padding: 2mm 3mm 2mm 5mm;
+            background: white;
+        }
+
+        /* Name Header */
+        .name-header {
+            margin-bottom: 3mm;
+            border-bottom: 2px solid var(--accent-gold);
+            padding-bottom: 1mm;
+        }
+
+        .full-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 22pt;
+            font-weight: 900;
+            color: var(--primary-dark);
+            margin-top: 1mm;
+            /* letter-spacing: -0.5pt; */
+            line-height: 1.1;
+        }
+
+        .job-title {
+            font-size: 9pt;
+            font-weight: 500;
+            color: var(--accent-blue);
+            letter-spacing: 0.5pt;
+        }
+
+        /* Summary Section */
+        .summary-section {
+            margin-bottom: 3.5mm;
+        }
+
+        .content-section-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 10.5pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 2mm;
+            text-transform: uppercase;
+            letter-spacing: 0.5pt;
+            position: relative;
+            padding-bottom: 1mm;
+            display: inline-block;
+            max-width: 100%;
+        }
+
+        .content-section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--accent-gold);
+        }
+
+        .summary-text {
+            font-size: 7.5pt;
+            line-height: 1.3;
+            color: var(--text-gray);
+            /* text-align: justify; */
+        }
+
+        /* Experience Section */
+        .experience-section {
+            margin-bottom: 3mm;
+        }
+
+        .experience-item {
+            margin-bottom: 4.5mm;
+            padding-left: 4mm;
+            position: relative;
+            background-image: linear-gradient(var(--accent-gold), var(--accent-gold));
+            background-size: 2px calc(100% - 18px);
+            background-position: 0 15px;
+            background-repeat: no-repeat;
+        }
+
+        .experience-item::before {
+            content: '';
+            position: absolute;
+            left: -1.8px;
+            top: 2mm;
+            /* z-index: 1; */
+            width: 5px;
+            height: 5px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            box-shadow: 0 0 0 1.5px white, 0 0 0 3.5px var(--accent-gold);
+        }
+
+        .experience-header {
+            /* margin-bottom: 0.5mm; */
+            display: flex;
+            justify-content: space-between;
+            /* align-items: baseline; */
+        }
+
+        .company-info {
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+        }
+
+        .company-logo {
+            width: 5mm;
+            height: 5mm;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .company-name {
+            font-size: 8.5pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 0.2mm;
+        }
+
+        .position-title {
+            font-size: 7.5pt;
+            font-weight: 600;
+            color: var(--accent-blue);
+            /* margin-bottom: 0.2mm; */
+            /* margin-top: 0.2mm; */
+        }
+
+        .duration {
+            font-size: 6.5pt;
+            color: var(--text-gray);
+            font-style: italic;
+            white-space: nowrap;
+            flex-shrink: 0;
+            padding-bottom: 0;
+            align-self: flex-end;
+            font-weight: bolder;
+        }
+
+        .experience-description {
+            font-size: 6.8pt;
+            line-height: 1.35;
+            color: var(--text-gray);
+            margin-top: 0.5mm;
+        }
+
+        .experience-description ul {
+            margin-left: 3mm;
+            margin-top: 0.3mm;
+        }
+
+        .experience-description li {
+            margin-bottom: 0.5mm;
+        }
+
+
+        /* Download Button Styles */
+        .download-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(0);
+        }
+
+        .download-btn::before {
+            content: '📄';
+            font-size: 16px;
+        }
+
+        /* Print Styles */
+        @media print {
+            .download-btn {
+                display: none !important;
+            }
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .resume-container {
+                box-shadow: none;
+            }
+            .profile-image {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .visa-badge {
+                /* background: linear-gradient(45deg, #8cab99, #85d0a4, #68b4a5, #72c4b3) !important; */
+                background: linear-gradient(45deg, #27ae60, #2ecc71, #16a085, #1abc9c) !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                box-shadow: none;
+            }
+            .visa-badge::before {
+                display: none;
+            }
+            .contact-icon {
+                line-height: 4.5mm !important;
+                text-align: center !important;
+                overflow: hidden !important;
+            }
+        }
+    </style>
+    <script src="../js/url-cleanup.js"></script>
+</head>
+<body>
+    <!-- Download Resume Button -->
+    <!-- Profile Image Doesn't look good in downloaded PDF, so commenting out the button -->
+    <button class="download-btn" onclick="downloadResume()">Download Resume</button>
+    
+    <div class="resume-container">
+        <!-- Left Sidebar -->
+        <aside class="left-sidebar">
+            <div class="sidebar-content">
+                <!-- Profile Image -->
+                <div class="profile-image-container">
+                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpg');" role="img" aria-label="Shubham Mallick"></div>
+                </div>
+
+                <!-- Contact Information -->
+                <section class="contact-section">
+                    <div class="visa-badge">🇺🇸 USA B1/B2 Visa</div>
+                    <h2 class="section-title">Contact</h2>
+                    <div class="contact-item">
+                        <div class="contact-icon">📩</div>
+                        <div class="contact-text"><a href="mailto:shubham.kolkata@gmail.com" target="_blank" style="color: white; text-decoration: none;">shubham.kolkata@gmail.com</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">📞</div>
+                        <div class="contact-text"><a href="tel:+91-9734389354" target="_blank" style="color: white; text-decoration: none;">+91-9734389354</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">💼</div>
+                        <div class="contact-text"><a href="https://www.linkedin.com/in/i-shubham/" target="_blank" style="color: white; text-decoration: none;">www.linkedin.com/in/i-shubham</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">🌎</div>
+                        <div class="contact-text"><a href="https://www.i-shubham.in/" target="_blank" style="color: white; text-decoration: none;">www.i-shubham.in</a></div>
+                    </div>
+                    <div class="contact-item">
+                        <div class="contact-icon">📍</div>
+                        <div class="contact-text">Hyderabad, India</div>
+                    </div>
+                    
+                </section>
+
+                <!-- Skills -->
+                <section class="skills-section">
+                    <h2 class="section-title">Skills</h2>
+                    
+                    <div class="skill-category-title">Data Platform & Governance</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Big Data</span>
+                        <span class="skill-tag">Databricks</span>
+                        <span class="skill-tag">Snowflake</span>
+                        <span class="skill-tag">Spark</span>
+                        <span class="skill-tag">Kafka</span>
+                        <span class="skill-tag">Data Warehouse / Lakehouse</span>
+                        <span class="skill-tag">SQL</span>
+                        <span class="skill-tag">ETL / ELT</span>
+                        <span class="skill-tag">NoSQL / MongoDB</span>
+                        <span class="skill-tag">OLTP / OLAP</span>
+                    </div>
+                    
+                    <div class="skill-category-title">ML & AI</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">LLM / GenAI</span>
+                        <span class="skill-tag">Langchain</span>
+                        <span class="skill-tag">Agentforce</span>
+                        <span class="skill-tag">NLP</span>
+                        <span class="skill-tag">TensorFlow</span>
+                        <span class="skill-tag">Torch</span>
+                        <span class="skill-tag">Neural Networks</span>
+                        <span class="skill-tag">GAN</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Systems, Cloud & Orchestration</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Linux / Unix / macOS</span>
+                        <span class="skill-tag">AWS / Azure / GCP</span>
+                        <span class="skill-tag">Docker / Kubernetes</span>
+                        <span class="skill-tag">Git</span>
+                        <span class="skill-tag">Terraform</span>
+                        <span class="skill-tag">Airflow</span>
+                        <span class="skill-tag">CI-CD</span>
+                        <span class="skill-tag">Agile / Scrum</span>
+                        <span class="skill-tag">Microservices</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Observability</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Splunk</span>
+                        <span class="skill-tag">Grafana</span>
+                        <span class="skill-tag">Datadog</span>
+                        <span class="skill-tag">Prometheus</span>
+                    </div>
+                    
+                    <div class="skill-category-title">Programming</div>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Python</span>
+                        <span class="skill-tag">Rust</span>
+                        <span class="skill-tag">Bash / Shell</span>
+                        <span class="skill-tag">Java</span>
+                        <span class="skill-tag">SQL</span>
+                        <span class="skill-tag">Go</span>
+                        <span class="skill-tag">Scala</span>
+                        <span class="skill-tag">C#</span>
+                        <span class="skill-tag">GraphQL</span>
+                        <span class="skill-tag">REST API</span>
+                    </div>
+                </section>
+
+                <!-- Certifications -->
+                <section class="contact-section" style="padding-top: 10px;">
+                    <h2 class="section-title">Certifications</h2>
+                    <ul class="simple-list">
+                        <li>Microsoft Certified Professional</li>
+                        <li>IBM Certified Professional</li>
+                    </ul>
+                </section>
+
+                <!-- Awards -->
+                <section class="awards-section">
+                    <h2 class="section-title">Awards</h2>
+                    <ul class="simple-list">
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Atlassian Spot Recognitions</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Salesforce Hackathon Winner</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Apple Supply-Chain Recognition</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Qualcomm Innovation Maestro Winner</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Qualcomm HaQkathon Winner</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Qualcomm Super-Qualstar Awarded</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Qualcomm Multiple Qualstars Awarded</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;Qualcomm Top 3 ML Worldwide</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;PwC STAR Performer Awarded</a></li>
+                        <li><a href="https://www.i-shubham.in/#portfolio" target="_blank" style="text-decoration: none; color: inherit;">&nbsp;PwC Spot Awards & Recognitions</a></li>
+                    </ul>
+                </section>
+
+                <!-- Education -->
+                <section class="contact-section">
+                    <h2 class="section-title">Education</h2>
+                    <ul class="simple-list">
+                        <li>
+                            <strong>M. Tech</strong> Data Science & Engineering
+                            <br>
+                            • <a href="https://www.bits-pilani.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">BITS Pilani</a>, India - with Distinction
+                        </li>
+                        <li>
+                            <strong>B. Tech</strong> Computer Science
+                            <br>
+                            • <a href="https://makautwb.ac.in/" target="_blank" style="text-decoration: none; color: inherit;">WBUT</a>, Kolkata - with Distinction
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- Leadership -->
+                <section class="contact-section">
+                    <h2 class="section-title">Leadership</h2>
+                    <ul class="simple-list">
+                        <li>Led 12+ member engineering teams</li>
+                        <li>Mentored 50+ professionals</li>
+                        <li>Core 100+ interview panels</li>
+                        <li>Drove technical roadmaps</li>
+                        <li>Built high-performance teams</li>
+                        <li>Client advisory, stakeholder management</li>
+                    </ul>
+                </section>
+            </div>
+        </aside>
+
+        <!-- Right Content -->
+        <main class="right-content">
+            <!-- Name Header -->
+            <header class="name-header">
+                <h1 class="full-name">Shubham Mallick</h1>
+                <p class="job-title">Senior Data & Application Architect | AI-First Delivery & Technical Lead</p>
+            </header>
+
+            <!-- Professional Summary -->
+            <section class="summary-section">
+                <h2 class="content-section-title">Professional Summary</h2>
+                <p class="summary-text">
+                    14 years as Senior Data/Application Architect leading AI-first delivery of enterprise data modernization across large-scale distributed systems, data governance (lineage, cataloging, quality, compliance), and cloud-native platforms (Azure, AWS, GCP). Delivered solutions processing 50TB+ daily with 70% latency reduction and 99.9% SLA. Expertise in Microsoft Fabric, Databricks, Spark, Purview-style governance, orchestration (Airflow/Kubernetes), observability (Splunk/Datadog/Grafana/Prometheus), DevOps/CI-CD, solutioning, and AI/ML integration across industries.
+                </p>
+            </section>
+
+            <!-- Professional Experience -->
+            <section class="experience-section">
+                <h2 class="content-section-title">Professional Experience</h2>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/atlassian.png" alt="Atlassian" class="company-logo">
+                            <div class="company-name">Atlassian</div>
+                        </div>
+                        <div class="duration">Sep 2025 - Present</div>
+                    </div>
+                    <div class="position-title">Lead Engineering</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Leading enterprise data platform modernization with Databricks/Spark for analytics, AI/ML & Go-To-Market product</li>
+                            <li>Establishing data governance standards including cataloging, frameworks, and DataOps observability across teams</li>
+                            <li>Built scalable data-ingestion framework on Databricks Lakehouse for heterogeneous data-sources</li>
+                            <li>Building AI-first data infrastructure enabling GenAI/RAG pipeline deployment and ML feature engineering</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/salesforce.jpeg" alt="Salesforce" class="company-logo">
+                            <div class="company-name">Salesforce</div>
+                        </div>
+                        <div class="duration">Jul 2022 - Aug 2025</div>
+                    </div>
+                    <div class="position-title">Staff Engineering, Performance Engineering, Sales AI</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected cloud-native data platform with event-driven architecture (ticketing-system), achieving 70% latency reduction using Spark/EKS/Kafka orchestration in AWS/Azure ecosystem</li>
+                            <li>Implemented platform observability with Grafana/Splunk; established SLAs, SLOs & data quality gates for CI/CD and application performance</li>
+                            <li>Led IaC automation (Terraform/EKS/Jenkins) reducing deployment time by 70%; enabled developer self-service via DevOps best practices</li>
+                            <li>Drove AI-first integration of GenAI agents into data infrastructure, achieving 25-40% performance improvement</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/apple.png" alt="Apple" class="company-logo">
+                            <div class="company-name">Apple Inc.</div>
+                        </div>
+                        <div class="duration">Jun 2020 - Jul 2022</div>
+                    </div>
+                    <div class="position-title">Technical Lead, Module Owner</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Led 12-member cross-functional team, architecting enterprise data platform processing 100GB+ daily with 99.9% SLA</li>
+                            <li>Built real-time data pipelines (Kafka) handling 1M+ msgs/hour with data quality gates, lineage tracking & cataloging</li>
+                            <li>Led cloud migration (on-prem to AWS) with Data Mesh principles, reducing costs 50% and improving scalability 300%</li>
+                            <li>Established enterprise data governance for data discovery, quality, sensitivity & compliance across supply-chain</li>
+                            <li>Built data APIs with semantic models and metadata management serving 10+ internal analytics & consumption teams</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/qualcomm.jpeg" alt="Qualcomm" class="company-logo">
+                            <div class="company-name">Qualcomm</div>
+                        </div>
+                        <div class="duration">Nov 2017 - May 2020</div>
+                    </div>
+                    <div class="position-title">Senior ML, Distributed System Engineer</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected large-scale distributed platform processing 20TB+ daily with Spark/Hive/MapR DB in Hadoop ecosystem</li>
+                            <li>Built AI/ML data pipelines with 92% model accuracy; tuned compute sizing, partitioning & memory optimization</li>
+                            <li>Implemented data quality & observability frameworks ensuring reliability across enterprise analytics workloads</li>
+                            <li>Won Innovation Maestro, HaQkathon; presented innovative AI solutions to CxO leadership</li>
+                            <li>Designed orchestration workflows (Airflow) & reusable data transformation accelerators improving efficiency by 35%</li>
+                            <li>Partnered with engineering & analytics teams enabling self-service access to 15+ data products</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/ibm.png" alt="IBM" class="company-logo">
+                            <div class="company-name">IBM</div>
+                        </div>
+                        <div class="duration">Dec 2016 - Nov 2017</div>
+                    </div>
+                    <div class="position-title">Advisory Analyst, Azure Cloud SME</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Led 6-member team architecting enterprise data platform on Azure (Synapse, Data Factory, Service Bus), delivered ahead of schedule</li>
+                            <li>Migrated 500GB+ data with 99.9% integrity; established data quality SLAs, cataloging & governance standards</li>
+                            <li>Implemented IaC automation, compliance frameworks meeting requirements across 3 geographic regions</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/pwc.jpeg" alt="PwC" class="company-logo">
+                            <div class="company-name">PwC</div>
+                        </div>
+                        <div class="duration">Oct 2014 - Dec 2016</div>
+                    </div>
+                    <div class="position-title">Senior Developer / Consultant</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Architected BI platform with OLTP/OLAP optimization, query tuning & execution plan analysis; querying billion+ rows in 2-5 sec</li>
+                            <li>Built scalable ETL pipelines processing 50M+ rows daily with quality gates</li>
+                            <li>Implemented logical data modeling & schema versioning improving data consistency by 40% across analytics workloads</li>
+                            <li>Led pre-sales solutioning, technical estimations & client engagement across Sales, Finance domains</li>
+                            <li>Won STAR Performer for data platform excellence & multiple client appreciation awards</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="company-info">
+                            <img src="../img/org/cognizant.png" alt="Cognizant" class="company-logo">
+                            <div class="company-name">Cognizant</div>
+                        </div>
+                        <div class="duration">Apr 2012 - Oct 2014</div>
+                    </div>
+                    <div class="position-title">Application Developer</div>
+                    <div class="experience-description">
+                        <ul>
+                            <li>Managed 24x7 production support for MetLife (financial services) backend processing & troubleshooting</li>
+                            <li>Automated processes reducing manual effort by 60% across 5+ applications; built reusable components</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- PDF Generation Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        async function downloadResume() {
+            const downloadBtn = document.querySelector('.download-btn');
+            downloadBtn.style.display = 'none';
+            
+            const element = document.querySelector('.resume-container');
+            
+            if (!element) {
+                console.error('Container element not found');
+                alert('Error: Could not find resume container');
+                downloadBtn.style.display = 'flex';
+                return;
+            }
+            
+            const images = element.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise((resolve) => {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                });
+            }));
+            
+            try {
+                const a4Width = 210;
+                const a4Height = 297;
+                
+                const canvas = await html2canvas(element, {
+                    scale: 4,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    allowTaint: true,
+                    imageTimeout: 0,
+                    onclone: function(clonedDoc) {
+                        var style = clonedDoc.createElement('style');
+                        style.textContent = `
+                            .resume-container {
+                                box-shadow: none !important;
+                                margin: 0 !important;
+                            }
+                            .resume-container::before { display: none !important; }
+                            .left-sidebar::before { display: none !important; }
+                            .profile-image {
+                                border-radius: 50% !important;
+                                overflow: hidden !important;
+                            }
+                            .skill-tag {
+                                height: auto !important;
+                                line-height: 1 !important;
+                                padding-top: 1px !important;
+                                padding-bottom: 3px !important;
+                                padding-left: 2px !important;
+                                padding-right: 2px !important;
+                            }
+                        `;
+                        clonedDoc.head.appendChild(style);
+
+                        var profileImg = clonedDoc.querySelector('.profile-image');
+                        if (profileImg) {
+                            profileImg.style.backgroundImage = "url('../img/profile-img-2.png')";
+                        }
+                    }
+                });
+                
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: [a4Width, a4Height]
+                });
+                
+                const imgData = canvas.toDataURL('image/png');
+                pdf.addImage(imgData, 'PNG', 0, 0, a4Width, a4Height, undefined, 'FAST');
+                
+                pdf.save('Shubham Mallick - Data and Application Architect.pdf');
+                
+                downloadBtn.style.display = 'flex';
+                
+            } catch (error) {
+                console.error('PDF generation failed:', error);
+                alert('PDF generation failed. Please try again or use Ctrl+P / Cmd+P to print.');
+                downloadBtn.style.display = 'flex';
+            }
+        }
+    </script>
+</body>
+</html>
