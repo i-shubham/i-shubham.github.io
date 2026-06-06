@@ -28,6 +28,12 @@ async fn enrich(p: &Product, state: &AppState) -> serde_json::Value {
     .await
     .unwrap_or(None);
 
+    let bid_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bids WHERE product_id = $1")
+        .bind(p.id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
     json!({
         "id": p.id,
         "brand_user_id": p.brand_user_id,
@@ -41,6 +47,7 @@ async fn enrich(p: &Product, state: &AppState) -> serde_json::Value {
         "created_at": p.created_at,
         "brand_name": brand.as_ref().map(|b| &b.company).map(|s| s.as_str()).unwrap_or(""),
         "brand_logo": brand.as_ref().and_then(|b| b.logo.as_deref()).unwrap_or(""),
+        "bid_count": bid_count,
     })
 }
 

@@ -1,10 +1,32 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use axum::{
+    extract::Request,
+    http::Uri,
+    middleware::{self, Next},
+    response::Response,
     routing::{get, patch, post},
     Router,
 };
 use tower_http::{cors::{Any, CorsLayer}, services::ServeDir};
+
+/// Rewrites `/page` → `/page.html` so `ServeDir` finds the right file.
+/// Skips API routes (start with /api), paths with extensions (contain a dot), and root.
+async fn clean_urls(mut req: Request, next: Next) -> Response {
+    let path = req.uri().path().to_string();
+    if !path.starts_with("/api") && !path.contains('.') && path != "/" {
+        let clean = path.trim_end_matches('/');
+        let new_path = format!("{}.html", clean);
+        let pq = match req.uri().query() {
+            Some(q) => format!("{}?{}", new_path, q),
+            None    => new_path,
+        };
+        if let Ok(new_uri) = pq.parse::<Uri>() {
+            *req.uri_mut() = new_uri;
+        }
+    }
+    next.run(req).await
+}
 
 use plugg::{
     config::Config,
@@ -41,6 +63,7 @@ async fn main() {
         // ── protected ───────────────────────────────────────────────────────
         .route("/me",                    get(users::me))
         .route("/products/{id}/bids",    get(bids::list_bids).post(bids::place_bid))
+        .route("/bids/my",               get(bids::my_bids))
         .route("/bids/{id}",             patch(bids::update_bid_status))
         .route("/bids/{id}/concept",     get(bids::get_concept).post(bids::share_concept))
         .route("/influencers/connect",   post(influencers::connect_social))
@@ -61,7 +84,8 @@ async fn main() {
         .nest("/api", api)
         .fallback_service(serve_dir)
         .layer(cors)
-        .with_state(state);
+        .with_state(state)
+        .layer(middleware::from_fn(clean_urls));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     println!("Plugg (Rust/Axum) running on http://{}", addr);

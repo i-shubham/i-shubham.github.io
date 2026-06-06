@@ -9,7 +9,7 @@
   await App.renderShell({ active: "" });
 
   document.getElementById("sbName").textContent = user.name;
-  document.getElementById("sbFoot").innerHTML = `<div class="card" style="padding:14px;text-align:center"><a href="index.html" class="btn btn-ghost btn-sm btn-block">↗ View public site</a></div>`;
+  document.getElementById("sbFoot").innerHTML = `<div class="card" style="padding:14px;text-align:center"><a href="/" class="btn btn-ghost btn-sm btn-block">↗ View public site</a></div>`;
   const titles = {
     overview: ["Revenue", "Platform earnings & activity"],
     users: ["Users", "Creators, brands & their status"],
@@ -153,7 +153,7 @@
         body: `<p>This clears all accounts, campaigns and bids in this browser and reloads the seeded demo. You'll be logged out.</p>`,
         footer: `<button class="btn btn-ghost" onclick="App.closeModal()">Cancel</button><button class="btn btn-dark" id="confirmReset">Reset</button>`,
       });
-      document.getElementById("confirmReset").onclick = () => { API.reset(); location.href = "index.html"; };
+      document.getElementById("confirmReset").onclick = () => { API.reset(); location.href = "/"; };
     };
   }
 
