@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plugg — Where Brands meet Creators</title>
+  <meta name="description" content="Plugg is the marketplace where brands post campaigns and influencers bid to collaborate. Transparent stats, secure payments, real results." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="apple-touch-icon" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="container hero-grid">
+      <div>
+        <span class="eyebrow">✨ The creator–brand marketplace</span>
+        <h1>Where <span class="gradient-text">brands</span> and <span class="gradient-text">creators</span> collaborate.</h1>
+        <p class="lead">Brands post campaigns. Creators bid with real Instagram & YouTube stats. Approve a bid, share your concept, pay securely — all in one place.</p>
+        <div class="hero-actions">
+          <a href="register.html?role=influencer" class="btn btn-primary btn-lg">I'm a Creator →</a>
+          <a href="register.html?role=brand" class="btn btn-ghost btn-lg">I'm a Brand →</a>
+        </div>
+        <div class="hero-stats">
+          <div><div class="n gradient-text" id="statCreators">—</div><div class="l">Active creators</div></div>
+          <div><div class="n gradient-text" id="statCampaigns">—</div><div class="l">Campaigns run</div></div>
+          <div><div class="n gradient-text" id="statDelivery">—</div><div class="l">On-time delivery</div></div>
+        </div>
+      </div>
+
+      <div class="hero-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <strong>Live campaign</strong><span class="badge badge-green">● Open for bids</span>
+        </div>
+        <div class="row">
+          <span class="avatar" style="background:#fff;background-image:url('img/brands/brand-nimbus.png');background-size:cover;background-position:center"></span>
+          <div style="flex:1">
+            <strong>Nimbus Pods Pro — Launch Reel</strong>
+            <div class="muted" style="font-size:.85rem">Nimbus Audio · Tech · Budget ₹45,000</div>
+          </div>
+        </div>
+        <div class="row">
+          <span class="avatar" style="background-image:url('img/influencers/inf-aarav.png');background-size:cover;background-position:center"></span>
+          <div style="flex:1">
+            <div class="flex between items-center">
+              <strong>Aarav Mehta</strong><span class="chip">bid ₹42,000</span>
+            </div>
+            <div class="muted" style="font-size:.82rem">285K followers · 1.9M top reel · 6.4% eng.</div>
+          </div>
+        </div>
+        <div class="row" style="background:var(--grad-soft);border-color:transparent">
+          <span class="avatar" style="background-image:url('img/influencers/inf-diya.png');background-size:cover;background-position:center"></span>
+          <div style="flex:1">
+            <div class="flex between items-center">
+              <strong>Diya Kapoor</strong><span class="badge badge-violet">Pro</span>
+            </div>
+            <div class="muted" style="font-size:.82rem">520K followers · 4.2M top reel · 8.1% eng.</div>
+          </div>
+        </div>
+        <a href="marketplace.html" class="btn btn-primary btn-block mt">View all campaigns</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- VALUE: dual audience -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Built for both sides</span>
+        <h2>One marketplace, two superpowers</h2>
+        <p class="muted">Whether you create content or sell products, Plugg makes collaboration effortless.</p>
+      </div>
+      <div class="grid grid-2">
+        <div class="card hover">
+          <div class="icon">🎬</div>
+          <h3>For Creators</h3>
+          <p>Showcase your Instagram & YouTube stats, browse paid campaigns, and bid on the ones you love. Get a <strong>30-day free trial</strong> — then keep going on Pro.</p>
+          <ul style="padding-left:18px;color:var(--ink-2);margin:0 0 18px">
+            <li>Verified follower & engagement profile</li>
+            <li>Bid your price on real campaigns</li>
+            <li>Unlock the brand's creative brief on approval</li>
+            <li>Secure, on-time payouts</li>
+          </ul>
+          <a href="register.html?role=influencer" class="btn btn-primary">Start free trial</a>
+        </div>
+        <div class="card hover">
+          <div class="icon">🏷️</div>
+          <h3>For Brands</h3>
+          <p>Post a product or campaign with your budget, then review every bidder's audience side-by-side. Approve the best fit and share your concept instantly.</p>
+          <ul style="padding-left:18px;color:var(--ink-2);margin:0 0 18px">
+            <li>Reach thousands of vetted creators</li>
+            <li>Compare bids by reach, engagement & price</li>
+            <li>Share the video concept after approval</li>
+            <li>Pay securely — only a small platform fee</li>
+          </ul>
+          <a href="register.html?role=brand" class="btn btn-dark">Post a campaign</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Simple by design</span>
+        <h2>How Plugg works</h2>
+      </div>
+      <div class="grid grid-4">
+        <div class="card hover center">
+          <div class="icon" style="margin:0 auto 14px">①</div>
+          <h3>Post or join</h3>
+          <p class="muted">Brands post campaigns. Creators build a stats profile in minutes.</p>
+        </div>
+        <div class="card hover center">
+          <div class="icon" style="margin:0 auto 14px">②</div>
+          <h3>Bid & compare</h3>
+          <p class="muted">Creators bid their price. Brands see every bidder's audience.</p>
+        </div>
+        <div class="card hover center">
+          <div class="icon" style="margin:0 auto 14px">③</div>
+          <h3>Approve & brief</h3>
+          <p class="muted">Approve a bid and the brand's video concept unlocks for the creator.</p>
+        </div>
+        <div class="card hover center">
+          <div class="icon" style="margin:0 auto 14px">④</div>
+          <h3>Deliver & get paid</h3>
+          <p class="muted">Content goes live, payment is released securely. Everyone wins.</p>
+        </div>
+      </div>
+      <div class="center mt-lg"><a href="how-it-works.html" class="btn btn-ghost">See the full flow →</a></div>
+    </div>
+  </section>
+
+  <!-- TRUST / REVENUE -->
+  <section class="section">
+    <div class="container grid grid-3">
+      <div class="card"><div class="icon">🔒</div><h3>Secure payments</h3><p class="muted">Funds are handled through a protected payment gateway. Creators get paid on delivery, brands stay protected.</p></div>
+      <div class="card"><div class="icon">📊</div><h3>Transparent stats</h3><p class="muted">Every creator shows followers, subscribers, top reel views and engagement — so brands choose with confidence.</p></div>
+      <div class="card"><div class="icon">⚖️</div><h3>Fair & simple fees</h3><p class="muted">Creators enjoy a 30-day trial then a flat Pro plan. Brands pay a small commission only on accepted bids.</p></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section" style="padding-top:0">
+    <div class="container">
+      <div class="card" style="background:var(--grad);color:#fff;text-align:center;padding:56px 24px;border:0;box-shadow:var(--shadow-lg)">
+        <h2 style="color:#fff">Ready to create your next collaboration?</h2>
+        <p style="color:rgba(255,255,255,.9);max-width:540px;margin:0 auto 24px">Join thousands of creators and brands already building campaigns that perform.</p>
+        <div class="hero-actions" style="justify-content:center">
+          <a href="register.html?role=influencer" class="btn btn-lg" style="background:#fff;color:var(--violet)">Join as Creator</a>
+          <a href="register.html?role=brand" class="btn btn-lg btn-dark">Join as Brand</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="footer"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    App.renderShell({ active: "" });
+    (async () => {
+      const s = await API.platformStats();
+      document.getElementById("statCreators").textContent = App.compact(s.creators) + "+";
+      document.getElementById("statCampaigns").textContent = App.compact(s.campaigns);
+      document.getElementById("statDelivery").textContent = s.delivery + "%";
+    })();
+  </script>
+</body>
+</html>

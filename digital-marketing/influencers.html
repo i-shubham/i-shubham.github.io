@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creators — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <section class="hero" style="padding:48px 0 24px">
+    <div class="container">
+      <span class="eyebrow">Vetted talent</span>
+      <h1>Discover creators</h1>
+      <p class="lead muted">Browse creators by niche and audience. Brands can invite them to campaigns.</p>
+      <div class="flex gap wrap mt" id="nicheFilter"></div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:8px">
+    <div class="container">
+      <div class="grid grid-3" id="grid"></div>
+    </div>
+  </section>
+
+  <div id="footer"></div>
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    let currentNiche = "all";
+    const niches = ["all","Tech","Fashion","Beauty","Fitness","Food","Travel","Lifestyle"];
+    async function init() {
+      await App.renderShell({ active: "influencers" });
+      document.getElementById("nicheFilter").innerHTML = niches.map(n =>
+        `<button class="chip" data-n="${n}" style="cursor:pointer">${n === "all" ? "All niches" : n}</button>`).join("");
+      document.querySelectorAll("#nicheFilter .chip").forEach(b =>
+        b.addEventListener("click", () => { currentNiche = b.dataset.n; paint(); render(); }));
+      paint(); render();
+    }
+    function paint() {
+      document.querySelectorAll("#nicheFilter .chip").forEach(b =>
+        b.style.cssText = "cursor:pointer" + (b.dataset.n === currentNiche ? ";background:var(--grad);color:#fff;border-color:transparent" : ""));
+    }
+    async function render() {
+      const list = await API.listInfluencers({ niche: currentNiche });
+      const grid = document.getElementById("grid");
+      if (!list.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="e-emoji">🔍</div>No creators in this niche yet.</div>`; return; }
+      grid.innerHTML = list.map(card).join("");
+    }
+    function card(i) {
+      const proBadge = i.sub.status === "pro" ? '<span class="badge badge-violet">Pro ✓</span>' : i.sub.status === "trial" ? '<span class="badge badge-amber">Trial</span>' : "";
+      return `<div class="card hover">
+        <div class="flex gap items-center">
+          ${App.avatar(i.name, i.avatar, "lg")}
+          <div style="flex:1">
+            <div class="flex between items-center"><h3 style="margin:0">${App.esc(i.name)}</h3>${proBadge}</div>
+            <div class="muted" style="font-size:.85rem">@${App.esc(i.handle)} · ${App.esc(i.location||"—")}</div>
+            <span class="chip" style="margin-top:6px">${App.esc(i.niche)}</span>
+          </div>
+        </div>
+        <p class="muted" style="font-size:.88rem;margin-top:12px">${App.esc(i.bio||"")}</p>
+        <div class="metrics mt">
+          <div class="metric"><div class="mv">${App.compact(i.instaFollowers)}</div><div class="ml">IG followers</div></div>
+          <div class="metric"><div class="mv">${App.compact(i.ytSubscribers)}</div><div class="ml">YT subs</div></div>
+          <div class="metric"><div class="mv">${i.engagement}%</div><div class="ml">Engagement</div></div>
+        </div>
+        <div class="metrics mt" style="grid-template-columns:1fr 1fr">
+          <div class="metric"><div class="mv">${App.compact(i.instaTopReel)}</div><div class="ml">Top reel views</div></div>
+          <div class="metric"><div class="mv">${App.compact(i.ytTopViews)}</div><div class="ml">Top video views</div></div>
+        </div>
+      </div>`;
+    }
+    init();
+  </script>
+</body>
+</html>
