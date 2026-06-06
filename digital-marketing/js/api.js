@@ -5,12 +5,12 @@
    Today it is backed by the browser's localStorage so the site
    works as a fully static demo with zero server.
 
-   LATER (FastAPI + MySQL):
+   LATER (Go / Chi + MySQL):
    Flip `API.useBackend = true` and set `API.baseURL`. Every method
    already returns a Promise and mirrors REST endpoints, so the UI
    code never changes — only the transport inside this file does.
 
-   Suggested REST mapping (FastAPI routers):
+   Suggested REST mapping (Axum handlers):
      POST   /auth/register                 -> register()
      POST   /auth/login                    -> login()
      GET    /me                            -> currentUser()
@@ -29,6 +29,13 @@
 const API = (() => {
   const KEY = "plugg_db_v1";
 
+  // Safe localStorage wrapper (Chrome blocks access on file:// URLs)
+  const storage = {
+    get(k)    { try { return localStorage.getItem(k); }            catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); }               catch {} },
+    del(k)    { try { localStorage.removeItem(k); }                catch {} },
+  };
+
   // --- Revenue config (Admin levers) -----------------------------
   const CONFIG = {
     trialDays: 30,
@@ -39,8 +46,8 @@ const API = (() => {
     currencySymbol: "\u20B9",
   };
 
-  // --- Backend toggle (for future FastAPI integration) ----------
-  const state = { useBackend: false, baseURL: "/api" };
+  // --- Backend toggle (Rust/Axum integration) --------
+  const state = { useBackend: true, baseURL: "/api" };
 
   // --- localStorage helpers -------------------------------------
   function blankDB() {
@@ -48,11 +55,11 @@ const API = (() => {
   }
   function load() {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = storage.get(KEY);
       return raw ? JSON.parse(raw) : blankDB();
     } catch (e) { return blankDB(); }
   }
-  function save(db) { localStorage.setItem(KEY, JSON.stringify(db)); }
+  function save(db) { storage.set(KEY, JSON.stringify(db)); }
   function nextId(db) { return db.seq++; }
   const delay = (ms = 120) => new Promise(r => setTimeout(r, ms));
   const ok = async (data) => { await delay(); return data; };
@@ -60,29 +67,31 @@ const API = (() => {
 
   // --- Future fetch wrapper (used when useBackend = true) -------
   async function http(method, path, body) {
+    const headers = { ...authHeader() };
+    if (body) headers["Content-Type"] = "application/json";
     const res = await fetch(state.baseURL + path, {
       method,
-      headers: { "Content-Type": "application/json", ...authHeader() },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || e.detail || res.statusText); }
     return res.status === 204 ? null : res.json();
   }
   function authHeader() {
-    const t = localStorage.getItem("plugg_token");
+    const t = storage.get("plugg_token");
     return t ? { Authorization: "Bearer " + t } : {};
   }
 
   // --- Session --------------------------------------------------
   const SESSION_KEY = "plugg_session";
-  function setSession(userId) { localStorage.setItem(SESSION_KEY, String(userId)); }
-  function clearSession() { localStorage.removeItem(SESSION_KEY); }
-  function sessionId() { const v = localStorage.getItem(SESSION_KEY); return v ? Number(v) : null; }
+  function setSession(userId) { storage.set(SESSION_KEY, String(userId)); }
+  function clearSession() { storage.del(SESSION_KEY); }
+  function sessionId() { const v = storage.get(SESSION_KEY); return v ? Number(v) : null; }
 
   // --- Social stat sync (demo) ----------------------------------
   // In the static demo we cannot call the real Instagram/YouTube APIs,
   // so we deterministically derive realistic numbers from the connected
-  // URL/handle. When the FastAPI backend is live, replace `applySync`
+  // URL/handle. When the Rust/Axum backend is live, replace `applySync`
   // with a server call to the Graph API / YouTube Data API.
   function strHash(s) {
     s = String(s || ""); let h = 2166136261;
@@ -126,7 +135,13 @@ const API = (() => {
   //  AUTH
   // ============================================================
   async function register({ role, name, email, password, profile }) {
-    if (state.useBackend) return http("POST", "/auth/register", { role, name, email, password, profile });
+    if (state.useBackend) {
+      const body = { role, name, email, password, ...profile };
+      const r = await http("POST", "/auth/register", body);
+      if (r.token) storage.set("plugg_token", r.token);
+      setSession(r.user.id);
+      return r.user;
+    }
     const db = load();
     if (db.users.find(u => u.email.toLowerCase() === email.toLowerCase()))
       return fail("An account with this email already exists.");
@@ -158,7 +173,8 @@ const API = (() => {
   async function login({ email, password }) {
     if (state.useBackend) {
       const r = await http("POST", "/auth/login", { email, password });
-      if (r.token) localStorage.setItem("plugg_token", r.token);
+      if (r.token) storage.set("plugg_token", r.token);
+      setSession(r.user.id);
       return r.user;
     }
     const db = load();
@@ -168,10 +184,16 @@ const API = (() => {
     return ok(sanitize(user));
   }
 
-  function logout() { clearSession(); localStorage.removeItem("plugg_token"); }
+  function logout() { clearSession(); storage.del("plugg_token"); }
 
   async function currentUser() {
-    if (state.useBackend) return http("GET", "/me");
+    if (state.useBackend) {
+      if (!storage.get("plugg_token")) return null;
+      try {
+        const r = await http("GET", "/me");
+        return r ? r.user : null;
+      } catch (e) { return null; }
+    }
     const id = sessionId();
     if (!id) return null;
     const db = load();
@@ -202,7 +224,10 @@ const API = (() => {
   }
   // Connect (or update) a social account, then immediately fetch its stats.
   async function connectSocial(userId, platform, url) {
-    if (state.useBackend) return http("POST", `/influencers/${userId}/connect`, { platform, url });
+    if (state.useBackend) {
+      const field = platform === "instagram" ? "instaUrl" : "ytUrl";
+      return http("POST", "/influencers/connect", { instaUrl: platform === "instagram" ? url : "", ytUrl: platform === "youtube" ? url : "" });
+    }
     const db = load();
     const i = db.influencers.find(x => x.userId === userId);
     if (!i) return fail("Profile not found");
@@ -220,8 +245,29 @@ const API = (() => {
     save(db); return ok(i);
   }
   // Re-fetch latest numbers from all connected accounts.
+  async function uploadPicture(file) {
+    const form = new FormData();
+    form.append("file", file);
+    if (state.useBackend) {
+      const token = storage.get("plugg_token");
+      const r = await fetch(state.baseURL + "/profile/picture", {
+        method: "POST",
+        headers: token ? { Authorization: "Bearer " + token } : {},
+        body: form,
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Upload failed"); }
+      return r.json();
+    }
+    // localStorage fallback — store as data URL
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve({ url: e.target.result });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
   async function syncStats(userId) {
-    if (state.useBackend) return http("POST", `/influencers/${userId}/sync`);
+    if (state.useBackend) return http("POST", "/influencers/sync");
     const db = load();
     const i = db.influencers.find(x => x.userId === userId);
     if (!i) return fail("Profile not found");
@@ -235,7 +281,11 @@ const API = (() => {
     Object.assign(b, patch); save(db); return ok(b);
   }
   async function listInfluencers({ niche } = {}) {
-    if (state.useBackend) return http("GET", "/influencers");
+    if (state.useBackend) {
+      let list = await http("GET", "/influencers");
+      if (niche && niche !== "all") list = list.filter(i => i.niche === niche);
+      return list.map(i => ({ ...i, sub: subscriptionStatus(i) }));
+    }
     const db = load();
     let list = db.influencers.slice();
     if (niche && niche !== "all") list = list.filter(i => i.niche === niche);
@@ -258,7 +308,13 @@ const API = (() => {
     save(db); return ok(id);
   }
   async function listProducts({ category, brandUserId, status } = {}) {
-    if (state.useBackend) return http("GET", "/products");
+    if (state.useBackend) {
+      let list = await http("GET", "/products");
+      if (category && category !== "all") list = list.filter(p => p.category === category);
+      if (brandUserId) list = list.filter(p => p.brandUserId === brandUserId);
+      if (status) list = list.filter(p => p.status === status);
+      return list;
+    }
     const db = load();
     let list = db.products.slice().sort((a, b) => b.id - a.id);
     if (category && category !== "all") list = list.filter(p => p.category === category);
@@ -444,7 +500,7 @@ const API = (() => {
   // ============================================================
   function rawDB() { return load(); }
   function writeDB(db) { save(db); }
-  function reset() { localStorage.removeItem(KEY); clearSession(); }
+  function reset() { storage.del(KEY); clearSession(); }
   function isSeeded() { return load().users.length > 0; }
 
   return {
@@ -453,7 +509,7 @@ const API = (() => {
     register, login, logout, currentUser, sessionId,
     // profiles
     getInfluencer, getBrand, updateInfluencer, updateBrand, listInfluencers,
-    connectSocial, disconnectSocial, syncStats,
+    connectSocial, disconnectSocial, syncStats, uploadPicture,
     // products
     createProduct, listProducts, getProduct, updateProduct,
     // bids

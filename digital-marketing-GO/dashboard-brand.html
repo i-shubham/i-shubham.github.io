@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brand Dashboard — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="theme-brand">
+  <div id="nav"></div>
+
+  <div class="dash">
+    <div class="dash-backdrop" id="backdrop"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="sb-avatar">🏷️</div>
+        <div><div class="sb-role">Brand</div><div class="sb-name" id="sbName">…</div></div>
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-section">Campaigns</div>
+        <div class="sb-link active" data-panel="overview"><span class="i">📊</span> Overview</div>
+        <div class="sb-link" data-panel="campaigns"><span class="i">📣</span> My campaigns</div>
+        <div class="sb-link" data-panel="post"><span class="i">➕</span> Post campaign</div>
+        <div class="sb-link" data-panel="discover"><span class="i">🔎</span> Discover creators</div>
+        <div class="sb-section">Account</div>
+        <div class="sb-link" data-panel="billing"><span class="i">💳</span> Payments</div>
+        <div class="sb-link" data-panel="profile"><span class="i">🏷️</span> Brand profile</div>
+      </nav>
+      <div class="sidebar-foot" id="sbFoot"></div>
+    </aside>
+
+    <main class="dash-main">
+      <div class="page-head">
+        <div class="flex items-center gap">
+          <button class="btn btn-ghost btn-sm" id="menuBtn" style="display:none">☰</button>
+          <div><h1 id="pageTitle">Overview</h1><div class="muted" id="pageSub"></div></div>
+        </div>
+        <button class="btn btn-primary btn-sm" data-goto="post">➕ New campaign</button>
+      </div>
+
+      <section class="panel active" id="panel-overview"></section>
+      <section class="panel" id="panel-campaigns"></section>
+      <section class="panel" id="panel-post"></section>
+      <section class="panel" id="panel-discover"></section>
+      <section class="panel" id="panel-billing"></section>
+      <section class="panel" id="panel-profile"></section>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/brand.js"></script>
+</body>
+</html>

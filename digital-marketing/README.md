@@ -1,9 +1,8 @@
 # Plugg — Influencer × Brand Marketplace
 
 A static, fully responsive marketplace where **brands post campaigns** and
-**creators bid** to collaborate. It runs today with **zero backend** (data lives
-in the browser via `localStorage`) and is structured to drop in a **FastAPI +
-MySQL** backend later with **no UI rewrites**.
+**creators bid** to collaborate. The frontend data layer (`js/api.js`) connects
+to a **Rust (Axum) + PostgreSQL** backend with **no UI rewrites** required.
 
 > Part of the GitHub Pages site. Served as a static folder — open
 > `digital-marketing/index.html` directly or via any static host.
@@ -12,13 +11,16 @@ MySQL** backend later with **no UI rewrites**.
 
 ## ✨ What it does
 
-| Role | Capabilities |
-| --- | --- |
+
+| Role                     | Capabilities                                                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Creator (Influencer)** | **Connect Instagram/YouTube links** — stats (followers, subscribers, top reel/video views, engagement) are **auto‑fetched and read‑only** (never typed by hand). 30‑day free trial, browse & **bid** on campaigns, see **brief unlocked only after approval**, manage subscription/billing. |
-| **Brand** | Post products/campaigns (title, budget, deliverables, deadline), **see all bidders** side‑by‑side with audience stats, **approve a bid** (auto‑declines others + charges commission), then **share the private video concept**, view commission history, discover creators. |
-| **Admin** | Revenue dashboard (brand commission + creator subscriptions + creator commission), user management, **fee levers** (trial length, commission %, subscription price), demo‑data export/reset. |
+| **Brand**                | Post products/campaigns (title, budget, deliverables, deadline), **see all bidders** side‑by‑side with audience stats, **approve a bid** (auto‑declines others + charges commission), then **share the private video concept**, view commission history, discover creators.                 |
+| **Admin**                | Revenue dashboard (brand commission + creator subscriptions + creator commission), user management, **fee levers** (trial length, commission %, subscription price), demo‑data export/reset.                                                                                                |
+
 
 ### Revenue model (built in)
+
 - **Creators:** 30‑day free trial → **Creator Pro** monthly subscription **or** pay‑per‑deal commission.
 - **Brands:** small **% commission charged only on an accepted bid**.
 - Admin controls every lever from the dashboard (`Fee settings`).
@@ -48,64 +50,85 @@ digital-marketing/
 
 ---
 
-## 🔌 Going dynamic: FastAPI + MySQL
+## 🔌 Running the Rust/Axum backend
 
 **All data access is funneled through `js/api.js`.** The UI never touches
-storage directly, so the backend swap happens in exactly one file.
+storage directly.
 
-1. Build the FastAPI service (routers mirror the methods in `api.js`).
-2. In `js/api.js` set:
-   ```js
-   API.state.useBackend = true;
-   API.state.baseURL = "https://api.yourdomain.com";
-   ```
-   Every method already returns a `Promise` and has the `useBackend` branch
-   calling `http(...)` — fill those in / point them at your endpoints.
-
-### Suggested REST endpoints
-| UI method | Method & path |
-| --- | --- |
-| `register` | `POST /auth/register` |
-| `login` | `POST /auth/login` → `{ token, user }` |
-| `currentUser` | `GET /me` |
-| `listProducts` | `GET /products` |
-| `createProduct` | `POST /products` |
-| `bidsForProduct` | `GET /products/{id}/bids` |
-| `placeBid` | `POST /products/{id}/bids` |
-| `updateBidStatus` | `PATCH /bids/{id}` |
-| `shareConcept` | `POST /bids/{id}/concept` |
-| `getConceptForBid` | `GET /bids/{id}/concept` |
-| `listInfluencers` | `GET /influencers` |
-| `connectSocial` | `POST /influencers/{id}/connect` |
-| `syncStats` | `POST /influencers/{id}/sync` (calls IG Graph / YouTube Data API) |
-| `subscribe` | `POST /subscriptions` |
-| `recordPayment` | `POST /payments` |
-| `adminRevenue` | `GET /admin/revenue` |
-
-### Suggested MySQL schema
-```sql
-users(id, role ENUM('influencer','brand','admin'), name, email UNIQUE, password_hash, created_at)
-influencer_profiles(user_id FK, handle, niche, bio, location,
-  insta_url, yt_url, last_synced,                         -- connected channels
-  insta_followers, insta_top_reel, yt_subscribers, yt_top_views, engagement, -- fetched, read-only
-  trial_start, plan ENUM('trial','pro'), plan_type, subscribed_until)
-brand_profiles(user_id FK, company, industry, website, about)
-products(id, brand_user_id FK, title, description, category, budget,
-  deadline, deliverables, status ENUM('open','in_progress','closed'), created_at)
-bids(id, product_id FK, influencer_user_id FK, amount, message,
-  status ENUM('pending','approved','rejected'), created_at)
-concepts(id, bid_id FK, product_id FK, brand_user_id FK, influencer_user_id FK,
-  concept TEXT, script TEXT, deliverables, deadline, shared_at)
-payments(id, type ENUM('brand_commission','influencer_subscription','influencer_commission'),
-  user_id FK, ref_id, gross, amount, status, note, created_at)
+```bash
+cd backend
+make migrate-up        # create tables (first time only)
+make seed              # populate demo data  (cargo run --bin seed)
+make run               # start server       (cargo run --bin server)
 ```
 
-### Recommended backend stack
-- **FastAPI** + **SQLAlchemy** (or SQLModel) + **Alembic** migrations
-- **MySQL 8** (or PlanetScale/RDS)
-- **JWT** auth (`Authorization: Bearer …` — `api.js` already sends it)
+The server serves the frontend at `/` and all API routes at `/api/*`.  
+Interactive docs: `http://localhost:8080/api/docs` *(coming soon — Axum doesn't auto-generate Swagger)*.
+
+`js/api.js` is already wired to the backend:
+```js
+API.state.useBackend = true;
+API.state.baseURL = "/api";
+```
+
+### Suggested REST endpoints
+
+
+| UI method          | Method & path                                                     |
+| ------------------ | ----------------------------------------------------------------- |
+| `register`         | `POST /auth/register`                                             |
+| `login`            | `POST /auth/login` → `{ token, user }`                            |
+| `currentUser`      | `GET /me`                                                         |
+| `listProducts`     | `GET /products`                                                   |
+| `createProduct`    | `POST /products`                                                  |
+| `bidsForProduct`   | `GET /products/{id}/bids`                                         |
+| `placeBid`         | `POST /products/{id}/bids`                                        |
+| `updateBidStatus`  | `PATCH /bids/{id}`                                                |
+| `shareConcept`     | `POST /bids/{id}/concept`                                         |
+| `getConceptForBid` | `GET /bids/{id}/concept`                                          |
+| `listInfluencers`  | `GET /influencers`                                                |
+| `connectSocial`    | `POST /influencers/{id}/connect`                                  |
+| `syncStats`        | `POST /influencers/{id}/sync` (calls IG Graph / YouTube Data API) |
+| `subscribe`        | `POST /subscriptions`                                             |
+| `recordPayment`    | `POST /payments`                                                  |
+| `adminRevenue`     | `GET /admin/revenue`                                              |
+
+
+### PostgreSQL schema
+
+```sql
+users(id BIGSERIAL, role CHECK IN ('influencer','brand','admin'), name, email UNIQUE, password_hash, created_at)
+influencer_profiles(user_id FK, handle, niche, bio, location,
+  insta_url, yt_url, last_synced,
+  insta_followers, insta_top_reel, yt_subscribers, yt_top_views, engagement,
+  trial_start, plan, plan_type, subscribed_until)
+brand_profiles(user_id FK, company, industry, website, about, logo)
+products(id, brand_user_id FK, title, description, category, budget,
+  deadline, deliverables, status, created_at)
+bids(id, product_id FK, influencer_user_id FK, amount, message, status, created_at)
+concepts(id, bid_id FK, product_id FK, brand_user_id FK, influencer_user_id FK,
+  concept TEXT, script TEXT, deliverables, deadline, shared_at)
+payments(id, type, user_id FK, ref_id, gross, amount, status, note, created_at)
+```
+
+### Backend stack
+
+- **Rust 1.90+** with **Axum 0.8** (async, tower-compatible, hyper-powered)
+- **SQLx 0.8** (compile-time-safe async SQL, no ORM overhead)
+- **PostgreSQL 18** (local) or any managed Postgres (Supabase, Neon, RDS)
+- **JWT** auth via `jsonwebtoken` (`Authorization: Bearer …` — `api.js` already sends it)
+- **Passwords:** `bcrypt` crate (async via `spawn_blocking`)
+- **Migrations:** raw SQL in `migrations/` — apply with `make migrate-up`
 - **Payments:** Razorpay / Stripe — replace the demo checkout modals; on
-  webhook success call `POST /subscriptions` or record the brand commission.
+webhook success call `POST /api/subscriptions` or `POST /api/payments`.
+
+### Why Rust/Axum?
+
+- **Blazing performance:** handles tens of thousands of concurrent requests with minimal memory.
+- **Memory safe:** no garbage collector, no runtime panics from null/race conditions.
+- **Single static binary:** `cargo build --release` produces a ~10 MB self-contained binary.
+- **Type-safe SQL:** SQLx validates queries against the DB schema at compile time.
+- **Battle-tested at scale:** Discord, Cloudflare, AWS all run Rust for latency-critical services.
 
 ---
 
@@ -113,18 +136,22 @@ payments(id, type ENUM('brand_commission','influencer_subscription','influencer_
 
 Open `index.html`. The app seeds realistic data on first load.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Creator | `aaravcreates@demo.io` | `demo123` |
-| Brand | `nimbusaudio@demo.io` | `demo123` |
-| Admin | `admin@plugg.io` | `admin123` |
+
+| Role    | Email                  | Password   |
+| ------- | ---------------------- | ---------- |
+| Creator | `aaravcreates@demo.io` | `demo123`  |
+| Brand   | `nimbusaudio@demo.io`  | `demo123`  |
+| Admin   | `admin@plugg.io`       | `admin123` |
+
 
 Reset anytime from **Admin → Demo data → Reset**.
 
 ---
 
 ## 📱 Responsive & robust
+
 - Mobile‑first CSS, collapsible nav + dashboard drawer, touch‑friendly targets.
 - Works on any modern mobile or desktop browser; no build step, no dependencies.
 - Input validation, duplicate‑bid/email guards, role‑based route protection,
-  and HTML‑escaping throughout.
+and HTML‑escaping throughout.
+

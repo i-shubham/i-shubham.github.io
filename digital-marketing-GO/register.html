@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <div class="auth-wrap">
+    <aside class="auth-side">
+      <h2 id="sideTitle">Create your free account</h2>
+      <p style="color:rgba(255,255,255,.9)" id="sideSub">Join Plugg and start collaborating today.</p>
+      <ul id="sideList">
+        <li><span class="tick">✓</span> 30-day free trial for creators</li>
+        <li><span class="tick">✓</span> Brands post & browse for free</li>
+        <li><span class="tick">✓</span> Secure payments built in</li>
+      </ul>
+    </aside>
+
+    <main class="auth-form">
+      <div class="auth-card">
+        <h1 style="font-size:1.8rem">Create account</h1>
+        <p class="muted">Already a member? <a href="login.html" style="color:var(--violet);font-weight:600">Log in</a></p>
+
+        <div class="segment" id="roleSeg">
+          <div class="seg" data-role="influencer">
+            <div class="emoji">🎬</div><div class="t">Creator</div><div class="s">Bid on campaigns</div>
+          </div>
+          <div class="seg" data-role="brand">
+            <div class="emoji">🏷️</div><div class="t">Brand</div><div class="s">Post campaigns</div>
+          </div>
+        </div>
+
+        <form id="regForm">
+          <div class="field">
+            <label for="name" id="nameLabel">Full name</label>
+            <input class="input" id="name" name="name" required placeholder="Your name" />
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="email">Email</label><input class="input" type="email" id="email" name="email" required placeholder="you@example.com" /></div>
+            <div class="field"><label for="password">Password</label><input class="input" type="password" id="password" name="password" required minlength="5" placeholder="Min 5 chars" /></div>
+          </div>
+
+          <!-- Influencer-only fields -->
+          <div id="infFields">
+            <div class="divider"></div>
+            <p style="font-weight:700;margin-bottom:4px">Connect your channels</p>
+            <p class="hint" style="margin-top:0;margin-bottom:12px">We fetch your followers, subscribers, top views & engagement automatically from the links you connect — no manual numbers.</p>
+            <div class="field-row">
+              <div class="field"><label for="handle">Handle / username</label><input class="input" id="handle" name="handle" placeholder="@yourhandle" /></div>
+              <div class="field">
+                <label for="niche">Niche</label>
+                <select class="input" id="niche" name="niche">
+                  <option>Tech</option><option>Fashion</option><option>Beauty</option><option>Fitness</option><option>Food</option><option>Travel</option><option>Gaming</option><option>Lifestyle</option><option>Finance</option><option>Comedy</option>
+                </select>
+              </div>
+            </div>
+            <div class="field"><label for="instaUrl">📸 Instagram profile link</label><input class="input" id="instaUrl" name="instaUrl" placeholder="https://instagram.com/yourhandle" /></div>
+            <div class="field"><label for="ytUrl">▶️ YouTube channel link</label><input class="input" id="ytUrl" name="ytUrl" placeholder="https://youtube.com/@yourchannel" /></div>
+            <div class="field-row">
+              <div class="field"><label for="location">City</label><input class="input" id="location" name="location" placeholder="e.g. Mumbai" /></div>
+              <div class="field">
+                <label>Plan after trial</label>
+                <select class="input" name="planType">
+                  <option value="subscription">Creator Pro (subscription)</option>
+                  <option value="commission">Pay-per-deal (commission)</option>
+                </select>
+              </div>
+            </div>
+            <div class="field"><label for="bio">Short bio</label><textarea class="input" id="bio" name="bio" placeholder="What do you create?"></textarea></div>
+            <div class="hint" style="color:var(--violet)">✓ You can connect or update links anytime from your dashboard — stats refresh on sync.</div>
+          </div>
+
+          <!-- Brand-only fields -->
+          <div id="brandFields" style="display:none">
+            <div class="divider"></div>
+            <p style="font-weight:700;margin-bottom:12px">Your brand</p>
+            <div class="field-row">
+              <div class="field"><label for="company">Company name</label><input class="input" id="company" name="company" placeholder="Your company" /></div>
+              <div class="field">
+                <label for="industry">Industry</label>
+                <select class="input" id="industry" name="industry">
+                  <option>Electronics</option><option>Fashion</option><option>Beauty</option><option>Health</option><option>Food & Beverage</option><option>Travel</option><option>Gaming</option><option>Finance</option><option>General</option>
+                </select>
+              </div>
+            </div>
+            <div class="field"><label for="website">Website</label><input class="input" id="website" name="website" placeholder="yourbrand.com" /></div>
+            <div class="field"><label for="about">About the brand</label><textarea class="input" id="about" name="about" placeholder="What do you sell?"></textarea></div>
+          </div>
+
+          <label class="flex gap-sm items-center" style="font-size:.85rem;margin:6px 0 16px;color:var(--muted)">
+            <input type="checkbox" required /> I agree to the Terms & the platform fee policy.
+          </label>
+          <button class="btn btn-primary btn-block btn-lg" type="submit" id="submitBtn">Create account</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    App.renderShell({ active: "" });
+    let role = App.qs("role") === "brand" ? "brand" : "influencer";
+
+    const segs = document.querySelectorAll("#roleSeg .seg");
+    const infFields = document.getElementById("infFields");
+    const brandFields = document.getElementById("brandFields");
+    const sideTitle = document.getElementById("sideTitle");
+    const sideSub = document.getElementById("sideSub");
+    const sideList = document.getElementById("sideList");
+    const nameLabel = document.getElementById("nameLabel");
+    const submitBtn = document.getElementById("submitBtn");
+
+    function applyRole() {
+      segs.forEach(s => s.classList.toggle("active", s.dataset.role === role));
+      const isInf = role === "influencer";
+      infFields.style.display = isInf ? "" : "none";
+      brandFields.style.display = isInf ? "none" : "";
+      nameLabel.textContent = isInf ? "Full name" : "Your name";
+      submitBtn.textContent = isInf ? "Start free trial" : "Create brand account";
+      if (isInf) {
+        sideTitle.textContent = "Turn your audience into income";
+        sideSub.textContent = "Showcase your stats, bid on campaigns, get paid.";
+        sideList.innerHTML = ["✓ 30-day free trial — no card","✓ Bid on real paid campaigns","✓ Unlock briefs on approval","✓ Secure, on-time payouts"].map(t=>`<li><span class="tick">✓</span> ${t.slice(2)}</li>`).join("");
+      } else {
+        sideTitle.textContent = "Find the perfect creator";
+        sideSub.textContent = "Post a campaign and compare bids by real audience data.";
+        sideList.innerHTML = ["✓ Post & browse for free","✓ Compare reach & engagement","✓ Share concepts after approval","✓ Pay only on accepted bids"].map(t=>`<li><span class="tick">✓</span> ${t.slice(2)}</li>`).join("");
+      }
+    }
+    segs.forEach(s => s.addEventListener("click", () => { role = s.dataset.role; applyRole(); }));
+    applyRole();
+
+    document.getElementById("regForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = App.serializeForm(e.target);
+      const payload = {
+        role, name: data.name, email: data.email, password: data.password,
+        profile: role === "influencer"
+          ? { handle: data.handle, niche: data.niche, bio: data.bio, instaUrl: data.instaUrl, ytUrl: data.ytUrl, location: data.location, planType: data.planType }
+          : { company: data.company, industry: data.industry, website: data.website, about: data.about },
+      };
+      try {
+        const user = await API.register(payload);
+        App.toast("Account created — welcome!", "ok");
+        setTimeout(() => location.href = App.dashFor(user), 600);
+      } catch (err) { App.toast(err.message, "err"); }
+    });
+  </script>
+</body>
+</html>

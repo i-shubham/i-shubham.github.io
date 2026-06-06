@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <section class="hero" style="padding:56px 0 24px">
+    <div class="container center">
+      <span class="eyebrow">Simple, transparent pricing</span>
+      <h1>Fair fees for <span class="gradient-text">creators</span> & <span class="gradient-text">brands</span></h1>
+      <p class="lead muted" style="margin:0 auto">No hidden charges. Creators start free. Brands pay only when a deal happens.</p>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:12px">
+    <div class="container">
+      <h2 class="center" style="margin-bottom:28px">For Creators</h2>
+      <div class="grid grid-3">
+        <div class="card price-card">
+          <h3>Free Trial</h3>
+          <div class="amount">₹0</div>
+          <p class="muted">First 30 days</p>
+          <ul id="trialList"></ul>
+          <a href="register.html?role=influencer" class="btn btn-ghost btn-block">Start trial</a>
+        </div>
+        <div class="card price-card featured">
+          <span class="ribbon">Most popular</span>
+          <h3>Creator Pro</h3>
+          <div class="amount" id="proAmount">₹1,499<span style="font-size:1rem;font-weight:600;color:var(--muted)">/mo</span></div>
+          <p class="muted">After your trial</p>
+          <ul>
+            <li>✓ Unlimited bids on all campaigns</li>
+            <li>✓ Verified stats badge</li>
+            <li>✓ Priority placement to brands</li>
+            <li>✓ Lower payout fees</li>
+            <li>✓ Analytics on your bids</li>
+          </ul>
+          <a href="register.html?role=influencer" class="btn btn-primary btn-block">Go Pro</a>
+        </div>
+        <div class="card price-card">
+          <h3>Pay-per-deal</h3>
+          <div class="amount" id="comAmount">8%</div>
+          <p class="muted">Commission per accepted bid</p>
+          <ul>
+            <li>✓ No monthly fee</li>
+            <li>✓ Bid on all campaigns</li>
+            <li>✓ Pay only when you win</li>
+            <li>✓ Great for occasional creators</li>
+          </ul>
+          <a href="register.html?role=influencer" class="btn btn-ghost btn-block">Choose commission</a>
+        </div>
+      </div>
+
+      <h2 class="center" style="margin:56px 0 28px">For Brands</h2>
+      <div class="grid grid-2">
+        <div class="card price-card">
+          <h3>Browse & Post</h3>
+          <div class="amount">₹0</div>
+          <p class="muted">Always free</p>
+          <ul>
+            <li>✓ Post unlimited campaigns</li>
+            <li>✓ Receive unlimited bids</li>
+            <li>✓ Compare creator audiences</li>
+            <li>✓ Message & shortlist creators</li>
+          </ul>
+          <a href="register.html?role=brand" class="btn btn-ghost btn-block">Create brand account</a>
+        </div>
+        <div class="card price-card featured">
+          <span class="ribbon">Pay on success</span>
+          <h3>Platform commission</h3>
+          <div class="amount" id="brandCom">10%</div>
+          <p class="muted">Only on accepted bids</p>
+          <ul>
+            <li>✓ Pay nothing to browse or post</li>
+            <li>✓ Commission charged on the winning bid</li>
+            <li>✓ Secure payment protection</li>
+            <li>✓ Dispute support included</li>
+          </ul>
+          <a href="register.html?role=brand" class="btn btn-dark btn-block">Post a campaign</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="footer"></div>
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    App.renderShell({ active: "pricing" });
+    document.getElementById("proAmount").innerHTML = App.money(API.CONFIG.subscriptionMonthly) + '<span style="font-size:1rem;font-weight:600;color:var(--muted)">/mo</span>';
+    document.getElementById("comAmount").textContent = API.CONFIG.influencerCommissionPct + "%";
+    document.getElementById("brandCom").textContent = API.CONFIG.brandCommissionPct + "%";
+    document.getElementById("trialList").innerHTML = [
+      "✓ Full access for " + API.CONFIG.trialDays + " days",
+      "✓ Bid on all campaigns",
+      "✓ Build your stats profile",
+      "✓ No card required",
+    ].map(t => "<li>" + t + "</li>").join("");
+  </script>
+</body>
+</html>

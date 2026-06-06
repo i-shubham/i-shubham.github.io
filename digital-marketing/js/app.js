@@ -152,7 +152,7 @@ const App = (() => {
           </div>
         </div>
         <div class="footer-bottom">
-          <span>© ${y} Plugg. Demo build — static front-end (FastAPI + MySQL ready).</span>
+          <span>© ${y} Plugg. Demo build — static front-end (Rust/Axum + PostgreSQL ready).</span>
           <span>Made for creators & brands.</span>
         </div>
       </div>

@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS concepts;
+DROP TABLE IF EXISTS bids;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS brand_profiles;
+DROP TABLE IF EXISTS influencer_profiles;
+DROP TABLE IF EXISTS users;

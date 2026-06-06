@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campaigns — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <section class="hero" style="padding:48px 0 24px">
+    <div class="container">
+      <span class="eyebrow">Live opportunities</span>
+      <h1>Browse open campaigns</h1>
+      <p class="lead muted">Discover paid collaborations from brands. Log in as a creator to place a bid.</p>
+      <div class="flex gap wrap mt" id="catFilter"></div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:8px">
+    <div class="container">
+      <div class="grid grid-3" id="grid"></div>
+    </div>
+  </section>
+
+  <div id="footer"></div>
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    let user, currentCat = "all";
+    const cats = ["all","Tech","Fashion","Beauty","Fitness","Food","Travel","General"];
+
+    async function init() {
+      user = await App.renderShell({ active: "marketplace" });
+      document.getElementById("catFilter").innerHTML = cats.map(c =>
+        `<button class="chip" data-cat="${c}" style="cursor:pointer">${c === "all" ? "All" : c}</button>`).join("");
+      document.querySelectorAll("#catFilter .chip").forEach(b =>
+        b.addEventListener("click", () => { currentCat = b.dataset.cat; paintActive(); render(); }));
+      paintActive();
+      render();
+    }
+    function paintActive() {
+      document.querySelectorAll("#catFilter .chip").forEach(b =>
+        b.style.cssText = "cursor:pointer" + (b.dataset.cat === currentCat ? ";background:var(--grad);color:#fff;border-color:transparent" : ""));
+    }
+    async function render() {
+      const products = await API.listProducts({ category: currentCat });
+      const grid = document.getElementById("grid");
+      if (!products.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="e-emoji">📭</div>No campaigns in this category yet.</div>`; return; }
+      grid.innerHTML = products.map(p => card(p)).join("");
+      grid.querySelectorAll("[data-bid]").forEach(btn => btn.addEventListener("click", () => onBid(+btn.dataset.bid)));
+    }
+    function card(p) {
+      return `<div class="card hover listing">
+        <div class="thumb"${p.brandLogo?` style="background:#fff;background-image:url('${p.brandLogo}');background-size:contain;background-repeat:no-repeat;background-position:center"`:""}><span class="price">${App.money(p.budget)}</span></div>
+        <div class="flex between items-center"><span class="chip">${App.esc(p.category)}</span>${App.statusBadge(p.status)}</div>
+        <h3 style="margin-top:10px">${App.esc(p.title)}</h3>
+        <p class="muted" style="font-size:.9rem">${App.esc(p.description).slice(0,110)}${p.description.length>110?"…":""}</p>
+        <div class="meta">
+          <span class="chip">🏷️ ${App.esc(p.brandName)}</span>
+          <span class="chip">👥 ${p.bidCount} bid${p.bidCount===1?"":"s"}</span>
+          ${p.deadline ? `<span class="chip">⏰ ${App.dateFmt(p.deadline)}</span>` : ""}
+        </div>
+        <div class="foot">
+          <span class="muted" style="font-size:.82rem">${App.esc(p.deliverables||"")}</span>
+          <button class="btn btn-primary btn-sm" data-bid="${p.id}">Bid now</button>
+        </div>
+      </div>`;
+    }
+    function onBid(id) {
+      if (!user) { location.href = "login.html?next=marketplace.html"; return; }
+      if (user.role === "influencer") { location.href = "dashboard-influencer.html#campaigns"; return; }
+      App.toast("Log in as a creator to bid on campaigns.", "err");
+    }
+    init();
+  </script>
+</body>
+</html>

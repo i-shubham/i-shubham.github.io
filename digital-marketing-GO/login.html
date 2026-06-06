@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — Plugg</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="img/plugg-logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="nav"></div>
+
+  <div class="auth-wrap">
+    <aside class="auth-side">
+      <h2>Welcome back to Plugg</h2>
+      <p style="color:rgba(255,255,255,.9)">Log in to manage campaigns, review bids, and grow your collaborations.</p>
+      <ul>
+        <li><span class="tick">✓</span> Pick up right where you left off</li>
+        <li><span class="tick">✓</span> Track bids, concepts & payments</li>
+        <li><span class="tick">✓</span> One account, web & mobile</li>
+      </ul>
+    </aside>
+
+    <main class="auth-form">
+      <div class="auth-card">
+        <h1 style="font-size:1.8rem">Log in</h1>
+        <p class="muted">New here? <a href="register.html" style="color:var(--violet);font-weight:600">Create an account</a></p>
+
+        <div class="alert alert-info" style="font-size:.82rem">
+          <strong>Demo logins</strong> — Creator: <code>aaravcreates@demo.io</code> · Brand: <code>nimbusaudio@demo.io</code> · Admin: <code>admin@plugg.io</code> · password for all demo creators/brands is <code>demo123</code> (admin <code>admin123</code>).
+        </div>
+
+        <form id="loginForm">
+          <div class="field">
+            <label for="email">Email</label>
+            <input class="input" type="email" id="email" name="email" required placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input class="input" type="password" id="password" name="password" required placeholder="••••••••" />
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit">Log in</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    App.renderShell({ active: "" });
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { email, password } = App.serializeForm(e.target);
+      try {
+        const user = await API.login({ email, password });
+        App.toast("Welcome back, " + user.name + "!", "ok");
+        const next = App.qs("next");
+        setTimeout(() => location.href = next || App.dashFor(user), 500);
+      } catch (err) {
+        App.toast(err.message, "err");
+      }
+    });
+  </script>
+</body>
+</html>
