@@ -73,8 +73,8 @@
       </div>`;
     }
     function onBid(id) {
-      if (!user) { location.href = "/login?next=marketplace"; return; }
-      if (user.role === "influencer") { location.href = "/dashboard-influencer#campaigns"; return; }
+      if (!user) { location.href = "login.html?next=marketplace.html"; return; }
+      if (user.role === "influencer") { location.href = "dashboard-influencer.html#campaigns"; return; }
       App.toast("Log in as a creator to bid on campaigns.", "err");
     }
     init();

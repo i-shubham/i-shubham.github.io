@@ -255,15 +255,10 @@
 
     host.innerHTML = `
       <div class="card mb flex gap items-center wrap">
-        <div class="avatar-upload-wrap" id="avatarWrap" title="Click to change photo">
-          ${App.avatar(inf.name, inf.avatar, "lg")}
-          <div class="avatar-upload-overlay">📷</div>
-          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" id="avatarInput" style="display:none">
-        </div>
+        ${App.avatar(inf.name, inf.avatar, "lg")}
         <div style="flex:1;min-width:0">
           <h3 style="margin:0">${App.esc(inf.name)}</h3>
           <div class="muted" style="font-size:.88rem">@${App.esc(inf.handle)} · ${App.esc(inf.niche)} · ${App.esc(inf.location || "—")}</div>
-          <button class="btn btn-ghost btn-sm" style="margin-top:6px" id="changePhotoBtn">Change photo</button>
         </div>
         <span class="badge ${API.subscriptionStatus(inf).status === "pro" ? "badge-green" : "badge-amber"}">${API.subscriptionStatus(inf).label}</span>
       </div>
@@ -327,29 +322,6 @@
       try { await API.syncStats(user.id); await refreshInf(); App.toast("Stats refreshed.", "ok"); renderProfile(); }
       catch (e) { App.toast(e.message, "err"); syncBtn.disabled = false; syncBtn.textContent = "🔄 Sync now"; }
     });
-    // ── Avatar upload ──────────────────────────────────────────────────────
-    const avatarWrap = document.getElementById("avatarWrap");
-    const avatarInput = document.getElementById("avatarInput");
-    const changePhotoBtn = document.getElementById("changePhotoBtn");
-    if (avatarWrap && avatarInput) {
-      avatarWrap.addEventListener("click", () => avatarInput.click());
-      if (changePhotoBtn) changePhotoBtn.addEventListener("click", (e) => { e.stopPropagation(); avatarInput.click(); });
-      avatarInput.addEventListener("change", async () => {
-        const file = avatarInput.files[0];
-        if (!file) return;
-        try {
-          App.toast("Uploading…");
-          const { url } = await API.uploadPicture(file);
-          await refreshInf();
-          renderProfile();
-          // Also refresh sidebar avatar
-          const sba = document.querySelector(".sb-avatar");
-          if (sba) { sba.textContent = ""; sba.style.cssText = `background-image:url('${url}');background-size:cover;background-position:center`; }
-          App.toast("Profile photo updated!", "ok");
-        } catch (e) { App.toast(e.message || "Upload failed", "err"); }
-      });
-    }
-
     document.getElementById("profForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       await API.updateInfluencer(user.id, App.serializeForm(e.target));

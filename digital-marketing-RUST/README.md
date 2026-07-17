@@ -2,7 +2,7 @@
 
 A static, fully responsive marketplace where **brands post campaigns** and
 **creators bid** to collaborate. The frontend data layer (`js/api.js`) connects
-to a **Python FastAPI + PostgreSQL** backend with **no UI rewrites** required.
+to a **Rust (Axum) + PostgreSQL** backend with **no UI rewrites** required.
 
 > Part of the GitHub Pages site. Served as a static folder — open
 > `digital-marketing/index.html` directly or via any static host.
@@ -50,7 +50,7 @@ digital-marketing/
 
 ---
 
-## 🔌 Running the FastAPI backend
+## 🔌 Running the Rust/Axum backend
 
 **All data access is funneled through `js/api.js`.** The UI never touches
 storage directly.
@@ -58,13 +58,14 @@ storage directly.
 ```bash
 cd backend
 make migrate-up        # create tables (first time only)
-make seed              # populate demo data
-make run               # start server on http://localhost:8080
+make seed              # populate demo data  (cargo run --bin seed)
+make run               # start server       (cargo run --bin server)
 ```
 
-The server serves the frontend at `/` and all API routes at `/api/*`.
+The server serves the frontend at `/` and all API routes at `/api/*`.  
+Interactive docs: `http://localhost:8080/api/docs` *(coming soon — Axum doesn't auto-generate Swagger)*.
 
-In `js/api.js` the backend is already enabled:
+`js/api.js` is already wired to the backend:
 ```js
 API.state.useBackend = true;
 API.state.baseURL = "/api";
@@ -112,21 +113,22 @@ payments(id, type, user_id FK, ref_id, gross, amount, status, note, created_at)
 
 ### Backend stack
 
-- **Python 3.10+** with **FastAPI** (async, auto-generated OpenAPI docs at `/docs`)
-- **SQLAlchemy 2** ORM + **psycopg2** driver
+- **Rust 1.90+** with **Axum 0.8** (async, tower-compatible, hyper-powered)
+- **SQLx 0.8** (compile-time-safe async SQL, no ORM overhead)
 - **PostgreSQL 18** (local) or any managed Postgres (Supabase, Neon, RDS)
-- **JWT** auth via `python-jose` (`Authorization: Bearer …` — `api.js` already sends it)
+- **JWT** auth via `jsonwebtoken` (`Authorization: Bearer …` — `api.js` already sends it)
+- **Passwords:** `bcrypt` crate (async via `spawn_blocking`)
 - **Migrations:** raw SQL in `migrations/` — apply with `make migrate-up`
 - **Payments:** Razorpay / Stripe — replace the demo checkout modals; on
 webhook success call `POST /api/subscriptions` or `POST /api/payments`.
 
-### Why FastAPI?
+### Why Rust/Axum?
 
-- **Pythonic & fast to iterate:** clean async syntax, type hints everywhere.
-- **Auto OpenAPI docs:** visit `http://localhost:8080/docs` for interactive Swagger UI.
-- **Pydantic v2 validation:** request/response schemas are validated automatically.
-- **Easy deployment:** Docker, Render, Railway, Fly.io — all first-class supported.
-- **Large ecosystem:** SQLAlchemy, Alembic, Celery, and the full PyPI library catalog.
+- **Blazing performance:** handles tens of thousands of concurrent requests with minimal memory.
+- **Memory safe:** no garbage collector, no runtime panics from null/race conditions.
+- **Single static binary:** `cargo build --release` produces a ~10 MB self-contained binary.
+- **Type-safe SQL:** SQLx validates queries against the DB schema at compile time.
+- **Battle-tested at scale:** Discord, Cloudflare, AWS all run Rust for latency-critical services.
 
 ---
 

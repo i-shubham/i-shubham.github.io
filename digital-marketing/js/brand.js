@@ -292,18 +292,7 @@
   }
 
   async function renderProfile() {
-    document.getElementById("panel-profile").innerHTML = `<div class="card mb flex gap items-center" style="max-width:640px">
-      <div class="avatar-upload-wrap" id="logoWrap" title="Click to change logo">
-        ${App.avatar(brand.company, brand.logo, "lg")}
-        <div class="avatar-upload-overlay">📷</div>
-        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" id="logoInput" style="display:none">
-      </div>
-      <div>
-        <div class="fw-600">${App.esc(brand.company)}</div>
-        <button class="btn btn-ghost btn-sm" style="margin-top:6px" id="changeLogoBtn">Change logo</button>
-      </div>
-    </div>
-    <div class="card" style="max-width:640px">
+    document.getElementById("panel-profile").innerHTML = `<div class="card" style="max-width:640px">
       <form id="brandForm">
         <div class="field"><label>Company name</label><input class="input" name="company" value="${App.esc(brand.company)}" required /></div>
         <div class="field-row">
@@ -314,29 +303,6 @@
         <button class="btn btn-primary" type="submit">Save profile</button>
       </form>
     </div>`;
-    // ── Logo upload ────────────────────────────────────────────────────────
-    const logoWrap = document.getElementById("logoWrap");
-    const logoInput = document.getElementById("logoInput");
-    const changeLogoBtn = document.getElementById("changeLogoBtn");
-    if (logoWrap && logoInput) {
-      logoWrap.addEventListener("click", () => logoInput.click());
-      if (changeLogoBtn) changeLogoBtn.addEventListener("click", (e) => { e.stopPropagation(); logoInput.click(); });
-      logoInput.addEventListener("change", async () => {
-        const file = logoInput.files[0];
-        if (!file) return;
-        try {
-          App.toast("Uploading…");
-          const { url } = await API.uploadPicture(file);
-          brand = await API.getBrand(user.id);
-          renderProfile();
-          // Also refresh sidebar logo
-          const sba = document.querySelector(".sb-avatar");
-          if (sba) { sba.textContent = ""; sba.style.cssText = `background-image:url('${url}');background-size:cover;background-position:center;background-color:#fff`; }
-          App.toast("Logo updated!", "ok");
-        } catch (e) { App.toast(e.message || "Upload failed", "err"); }
-      });
-    }
-
     document.getElementById("brandForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       await API.updateBrand(user.id, App.serializeForm(e.target));

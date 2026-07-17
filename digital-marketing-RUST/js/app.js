@@ -91,9 +91,9 @@ const App = (() => {
   }
 
   function dashFor(user) {
-    if (!user) return "login.html";
-    return user.role === "influencer" ? "dashboard-influencer.html"
-      : user.role === "brand" ? "dashboard-brand.html" : "dashboard-admin.html";
+    if (!user) return "/login";
+    return user.role === "influencer" ? "/dashboard-influencer"
+      : user.role === "brand" ? "/dashboard-brand" : "/dashboard-admin";
   }
 
   function navHTML(user, active) {
@@ -101,17 +101,17 @@ const App = (() => {
     const right = user
       ? `<a href="${dashFor(user)}" class="btn btn-ghost btn-sm">Dashboard</a>
          <button class="btn btn-dark btn-sm" id="logoutBtn">Log out</button>`
-      : `<a href="login.html" class="btn btn-ghost btn-sm desktop-only">Log in</a>
-         <a href="register.html" class="btn btn-primary btn-sm">Join free</a>`;
+      : `<a href="/login" class="btn btn-ghost btn-sm desktop-only">Log in</a>
+         <a href="/register" class="btn btn-primary btn-sm">Join free</a>`;
     return `
     <nav class="nav" id="navBar">
       <div class="container nav-inner">
-        <a href="index.html" class="brand"><img class="logo" src="img/plugg-logo.png?v=3" alt="Plugg" /> Plugg</a>
+        <a href="/" class="brand"><img class="logo" src="img/plugg-logo.png?v=3" alt="Plugg" /> Plugg</a>
         <div class="nav-links">
-          ${link("marketplace.html", "Campaigns", "marketplace")}
-          ${link("influencers.html", "Creators", "influencers")}
-          ${link("how-it-works.html", "How it works", "how")}
-          ${link("pricing.html", "Pricing", "pricing")}
+          ${link("/marketplace", "Campaigns", "marketplace")}
+          ${link("/influencers", "Creators", "influencers")}
+          ${link("/how-it-works", "How it works", "how")}
+          ${link("/pricing", "Pricing", "pricing")}
         </div>
         <div class="nav-cta">
           ${right}
@@ -128,21 +128,21 @@ const App = (() => {
       <div class="container">
         <div class="footer-grid">
           <div>
-            <a href="index.html" class="brand" style="color:#fff"><img class="logo" src="img/plugg-logo.png?v=3" alt="Plugg" /> Plugg</a>
+            <a href="/" class="brand" style="color:#fff"><img class="logo" src="img/plugg-logo.png?v=3" alt="Plugg" /> Plugg</a>
             <p style="color:#9ca0bb;margin-top:14px;max-width:320px">The marketplace where brands and creators meet, bid, and build campaigns that convert.</p>
           </div>
           <div>
             <h4>Platform</h4>
-            <a class="f-link" href="marketplace.html">Browse campaigns</a>
-            <a class="f-link" href="influencers.html">Find creators</a>
-            <a class="f-link" href="how-it-works.html">How it works</a>
-            <a class="f-link" href="pricing.html">Pricing</a>
+            <a class="f-link" href="/marketplace">Browse campaigns</a>
+            <a class="f-link" href="/influencers">Find creators</a>
+            <a class="f-link" href="/how-it-works">How it works</a>
+            <a class="f-link" href="/pricing">Pricing</a>
           </div>
           <div>
             <h4>For you</h4>
-            <a class="f-link" href="register.html?role=influencer">Join as creator</a>
-            <a class="f-link" href="register.html?role=brand">Join as brand</a>
-            <a class="f-link" href="login.html">Log in</a>
+            <a class="f-link" href="/register?role=influencer">Join as creator</a>
+            <a class="f-link" href="/register?role=brand">Join as brand</a>
+            <a class="f-link" href="/login">Log in</a>
           </div>
           <div>
             <h4>Company</h4>
@@ -152,7 +152,7 @@ const App = (() => {
           </div>
         </div>
         <div class="footer-bottom">
-          <span>© ${y} Plugg. Demo build — static front-end (FastAPI + PostgreSQL ready).</span>
+          <span>© ${y} Plugg. Demo build — static front-end (Rust/Axum + PostgreSQL ready).</span>
           <span>Made for creators & brands.</span>
         </div>
       </div>
@@ -164,13 +164,13 @@ const App = (() => {
     const bar = document.getElementById("navBar");
     if (toggle && bar) toggle.addEventListener("click", () => bar.classList.toggle("open"));
     const lo = document.getElementById("logoutBtn");
-    if (lo) lo.addEventListener("click", () => { API.logout(); location.href = "index.html"; });
+    if (lo) lo.addEventListener("click", () => { API.logout(); location.href = "/"; });
   }
 
   // ---- Route guards ----
   async function requireRole(role) {
     const user = await API.currentUser();
-    if (!user) { location.href = `login.html?next=${encodeURIComponent(location.pathname.split("/").pop())}`; return null; }
+    if (!user) { location.href = `/login?next=${encodeURIComponent(location.pathname.replace(/^\//, '').replace(/\.html$/, ''))}`; return null; }
     if (user.role !== role) { location.href = dashFor(user); return null; }
     return user;
   }

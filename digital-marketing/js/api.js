@@ -10,7 +10,7 @@
    already returns a Promise and mirrors REST endpoints, so the UI
    code never changes — only the transport inside this file does.
 
-   Suggested REST mapping (Axum handlers):
+   Suggested REST mapping (FastAPI routers):
      POST   /auth/register                 -> register()
      POST   /auth/login                    -> login()
      GET    /me                            -> currentUser()
@@ -46,7 +46,7 @@ const API = (() => {
     currencySymbol: "\u20B9",
   };
 
-  // --- Backend toggle (Rust/Axum integration) --------
+  // --- Backend toggle (FastAPI integration) --------
   const state = { useBackend: true, baseURL: "/api" };
 
   // --- localStorage helpers -------------------------------------
@@ -91,7 +91,7 @@ const API = (() => {
   // --- Social stat sync (demo) ----------------------------------
   // In the static demo we cannot call the real Instagram/YouTube APIs,
   // so we deterministically derive realistic numbers from the connected
-  // URL/handle. When the Rust/Axum backend is live, replace `applySync`
+  // URL/handle. When the FastAPI backend is live, replace `applySync`
   // with a server call to the Graph API / YouTube Data API.
   function strHash(s) {
     s = String(s || ""); let h = 2166136261;
@@ -123,25 +123,6 @@ const API = (() => {
     const daysLeft = Math.ceil((end - Date.now()) / 86400000);
     return { end, daysLeft, active: daysLeft > 0 };
   }
-  // --- Normalise a product from the Rust backend (snake_case → camelCase) ----
-  function normProd(p) {
-    return {
-      id: p.id,
-      brandUserId: p.brand_user_id,
-      title: p.title,
-      description: p.description || "",
-      category: p.category || "",
-      budget: p.budget,
-      deadline: p.deadline || "",
-      deliverables: p.deliverables || "",
-      status: p.status,
-      createdAt: p.created_at,
-      brandName: p.brand_name || "",
-      brandLogo: p.brand_logo || "",
-      bidCount: p.bid_count || 0,
-    };
-  }
-
   function subscriptionStatus(inf) {
     if (inf.plan === "pro" && inf.subscribedUntil && new Date(inf.subscribedUntil) > new Date())
       return { status: "pro", label: "Pro subscriber" };
@@ -264,27 +245,6 @@ const API = (() => {
     save(db); return ok(i);
   }
   // Re-fetch latest numbers from all connected accounts.
-  async function uploadPicture(file) {
-    const form = new FormData();
-    form.append("file", file);
-    if (state.useBackend) {
-      const token = storage.get("plugg_token");
-      const r = await fetch(state.baseURL + "/profile/picture", {
-        method: "POST",
-        headers: token ? { Authorization: "Bearer " + token } : {},
-        body: form,
-      });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || "Upload failed"); }
-      return r.json();
-    }
-    // localStorage fallback — store as data URL
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => resolve({ url: e.target.result });
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
   async function syncStats(userId) {
     if (state.useBackend) return http("POST", "/influencers/sync");
     const db = load();
@@ -328,7 +288,7 @@ const API = (() => {
   }
   async function listProducts({ category, brandUserId, status } = {}) {
     if (state.useBackend) {
-      let list = (await http("GET", "/products")).map(normProd);
+      let list = await http("GET", "/products");
       if (category && category !== "all") list = list.filter(p => p.category === category);
       if (brandUserId) list = list.filter(p => p.brandUserId === brandUserId);
       if (status) list = list.filter(p => p.status === status);
@@ -345,7 +305,6 @@ const API = (() => {
     }));
   }
   async function getProduct(id) {
-    if (state.useBackend) return normProd(await http("GET", `/products/${id}`));
     const db = load();
     const p = db.products.find(x => x.id === id);
     if (!p) return ok(null);
@@ -363,7 +322,6 @@ const API = (() => {
   //  BIDS
   // ============================================================
   async function placeBid(productId, influencerUserId, { amount, message }) {
-    if (state.useBackend) return await http("POST", `/products/${productId}/bids`, { amount: +amount, message });
     const db = load();
     if (db.bids.find(b => b.productId === productId && b.influencerUserId === influencerUserId))
       return fail("You have already bid on this campaign.");
@@ -376,30 +334,6 @@ const API = (() => {
     save(db); return ok(id);
   }
   async function bidsForProduct(productId) {
-    if (state.useBackend) {
-      const list = await http("GET", `/products/${productId}/bids`);
-      return list.map(b => ({
-        id: b.id,
-        productId: b.product_id,
-        influencerUserId: b.influencer_user_id,
-        amount: b.amount,
-        message: b.message || "",
-        status: b.status,
-        createdAt: b.created_at,
-        influencerName: b.influencer_name,
-        influencer: {
-          name: b.influencer_name,
-          handle: b.influencer_handle,
-          avatar: b.influencer_avatar,
-          niche: b.influencer_niche,
-          instaFollowers: b.influencer_followers,
-          ytSubscribers: b.influencer_yt_sub,
-          engagement: b.influencer_engagement,
-          plan: b.influencer_plan || "trial",
-          sub: { status: b.influencer_plan === "pro" ? "pro" : "trial", label: b.influencer_plan === "pro" ? "Pro subscriber" : "Trial" },
-        },
-      }));
-    }
     const db = load();
     const bids = db.bids.filter(b => b.productId === productId).map(b => {
       const inf = db.influencers.find(i => i.userId === b.influencerUserId);
@@ -408,7 +342,6 @@ const API = (() => {
     return ok(bids);
   }
   async function myBids(influencerUserId) {
-    if (state.useBackend) return await http("GET", "/bids/my");
     const db = load();
     const bids = db.bids.filter(b => b.influencerUserId === influencerUserId).map(b => {
       const p = db.products.find(x => x.id === b.productId);
@@ -418,7 +351,6 @@ const API = (() => {
     return ok(bids.sort((a, b) => b.id - a.id));
   }
   async function updateBidStatus(bidId, status) {
-    if (state.useBackend) return await http("PATCH", `/bids/${bidId}`, { status });
     const db = load();
     const bid = db.bids.find(b => b.id === bidId);
     if (!bid) return fail("Bid not found");
@@ -445,7 +377,6 @@ const API = (() => {
   //  CONCEPTS (revealed to influencer only after approval)
   // ============================================================
   async function shareConcept(bidId, brandUserId, data) {
-    if (state.useBackend) return await http("POST", `/bids/${bidId}/concept`, data);
     const db = load();
     const bid = db.bids.find(b => b.id === bidId);
     if (!bid) return fail("Bid not found");
@@ -460,9 +391,6 @@ const API = (() => {
     save(db); return ok(c);
   }
   async function getConceptForBid(bidId) {
-    if (state.useBackend) {
-      try { return await http("GET", `/bids/${bidId}/concept`); } catch { return null; }
-    }
     const db = load();
     return ok(db.concepts.find(c => c.bidId === bidId) || null);
   }
@@ -560,7 +488,7 @@ const API = (() => {
     register, login, logout, currentUser, sessionId,
     // profiles
     getInfluencer, getBrand, updateInfluencer, updateBrand, listInfluencers,
-    connectSocial, disconnectSocial, syncStats, uploadPicture,
+    connectSocial, disconnectSocial, syncStats,
     // products
     createProduct, listProducts, getProduct, updateProduct,
     // bids

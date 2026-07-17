@@ -1,23 +1,24 @@
-PSQL=PGPASSWORD=admin /Library/PostgreSQL/18/bin/psql -U postgres -h localhost -d plugg
+PYTHON=/opt/miniconda3/envs/myenv/bin/python
 
-.PHONY: run build seed migrate-up migrate-down reset-db
+.PHONY: run seed migrate-up migrate-down install
 
 run:
-	cargo run --bin server
+	$(PYTHON) run.py
 
-build:
-	cargo build --release
+install:
+	$(PYTHON) -m pip install -r requirements.txt
 
 seed:
-	cargo run --bin seed
+	$(PYTHON) seed.py
 
 migrate-up:
-	$(PSQL) -f migrations/000001_init_schema.up.sql
+	PGPASSWORD=admin /Library/PostgreSQL/18/bin/psql -U postgres -h localhost -d plugg \
+	  -f migrations/000001_init_schema.up.sql
 
 migrate-down:
-	$(PSQL) -f migrations/000001_init_schema.down.sql
+	PGPASSWORD=admin /Library/PostgreSQL/18/bin/psql -U postgres -h localhost -d plugg \
+	  -f migrations/000001_init_schema.down.sql
 
 reset-db:
-	$(PSQL) -c "TRUNCATE payments, concepts, bids, products, \
-	             brand_profiles, influencer_profiles, users \
-	             RESTART IDENTITY CASCADE;"
+	PGPASSWORD=admin /Library/PostgreSQL/18/bin/psql -U postgres -h localhost -d plugg \
+	  -c "TRUNCATE payments, concepts, bids, products, brand_profiles, influencer_profiles, users RESTART IDENTITY CASCADE;"
