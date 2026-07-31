@@ -1,0 +1,40 @@
+.profile-slider {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.profile-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  /* transition: clip-path 0.3s ease; */
+}
+
+.image-left {
+  background-image: url('../images/admin/profile-img.jpg');
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0% 100%);
+}
+
+.image-right {
+  background-image: url('../images/admin/admin_3.jpg');
+  clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+}
+
+.sidebar-on-mobile .site-description,
+#floating-white-wrapper .site-description {
+  text-align: center;
+}
+
+.sidebar-on-mobile .profile-slider,
+#floating-white-wrapper .profile-slider {
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+}

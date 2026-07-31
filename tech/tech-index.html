@@ -1,510 +1,188 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="utf-8">
-    <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
-    <title>Shubham Mallick | Tech Blog</title>
-    <meta content="Tech Blog coming soon - Shubham Mallick's technical insights and experiences" name="description">
-    <meta content="tech blog, software engineering, technology" name="keywords">
-
-    <!-- Favicons -->
-    <link href="../../assets/img/profile-img.jpg" rel="icon">
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500&display=swap" rel="stylesheet">
-
-    <!-- Template Main CSS File -->
-    <link href="../travel/css/style_travel.css" rel="stylesheet">
-
-    <link rel="shortcut icon" href="../travel/images/logo.ico">
-    <link rel="stylesheet" href="../travel/css/bootstrap.min.css">
-    <link rel="stylesheet" href="../travel/css/all.min.css">
-    <link rel="stylesheet" href="../travel/css/fontawsom-all.min.css">
-    <link rel="stylesheet" href="../travel/css/animate.css">
-    <link rel="stylesheet" href="../travel/plugins/slider/css/owl.carousel.min.css">
-    <link rel="stylesheet" href="../travel/plugins/slider/css/owl.theme.default.css">
-    <link rel="stylesheet" type="text/css" href="../travel/css/style.css"/>
-    <link href="../travel/css/template.css" rel="stylesheet" type="text/css" />
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Navigation Component -->
-    <script src="../assets/js/navigation.js"></script>
-    
-    <style>
-        /* Coming Soon Styles */
-        .coming-soon-hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 80vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        /* Footer Styles - matching travel/index.html */
-        .footer-cont {
-            background-color: #212121;
-            color: #FFF;
-            padding: 5px;
-            padding-bottom: 10px;
-        }
-        
-        .footer-cont .foot-botom .fotter-coo h5 {
-            color: #f78d15;
-            font-size: 1rem;
-            margin-bottom: 2px;
-        }
-        
-        .footer-cont .foot-botom .fotter-coo ul li {
-            font-size: .9rem;
-            padding: 0px 0px;
-        }
-        
-        .footer-cont .foot-botom .fotter-coo ul li i {
-            margin-right: 2px;
-        }
-        
-        .copy {
-            padding: 5px;
-            background-color: #191616;
-            color: #FFF;
-        }
-        
-        .copy a {
-            color: #FFF;
-        }
-        
-        .copy span {
-            float: right;
-        }
-        
-        .copy span i {
-            margin-right: 20px;
-        }
-        
-        .coming-soon-hero::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
-            opacity: 0.3;
-        }
-        
-        .coming-soon-content {
-            text-align: center;
-            padding: 4rem 2rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 25px;
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            max-width: 700px;
-            margin: 2rem;
-            position: relative;
-            z-index: 2;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
-        
-        .coming-soon-icon {
-            font-size: 5rem;
-            margin-bottom: 2rem;
-            animation: float 3s ease-in-out infinite;
-            color: #fff;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-        
-        .coming-soon-title {
-            font-size: 3.5rem;
-            font-weight: bold;
-            margin-bottom: 1.5rem;
-            background: linear-gradient(45deg, #fff, #f0f0f0);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .coming-soon-subtitle {
-            font-size: 1.3rem;
-            margin-bottom: 2.5rem;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
-        
-        .tech-topics {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 1rem;
-            margin: 2.5rem 0;
-        }
-        
-        .tech-topic {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.75rem 1.5rem;
-            border-radius: 30px;
-            font-size: 1rem;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-        
-        .tech-topic:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-        
-        .coming-soon-status {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 1rem 2rem;
-            border-radius: 20px;
-            margin: 2rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .back-button {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 1rem 2.5rem;
-            border-radius: 30px;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            display: inline-block;
-            margin-top: 1.5rem;
-            font-weight: 500;
-            backdrop-filter: blur(10px);
-        }
-        
-        .back-button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            color: white;
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
-            margin: 1rem 0;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #45a049);
-            width: 65%;
-            border-radius: 3px;
-            animation: progress 2s ease-in-out;
-        }
-        
-        @keyframes progress {
-            0% { width: 0%; }
-            100% { width: 65%; }
-        }
-    </style>
-
-
-      <!--   Code Protection Script -->
-  <script>
-    // Function to detect if device is mobile
-    function isMobileDevice() {
-        // Check for touch capability
-        const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-        // Check user agent for mobile indicators
-        const mobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // Check screen size (mobile-like dimensions)
-        const smallScreen = window.screen.width <= 768 || window.screen.height <= 768;
-
-        // Check if orientation API is available (typically mobile)
-        const hasOrientationAPI = typeof window.orientation !== 'undefined';
-
-        return hasTouch || mobileUserAgent || (smallScreen && hasOrientationAPI);
-    }
-
-    // Function to detect if likely a tablet in landscape
-    function isTabletLandscape() {
-        return window.screen.width > 768 && window.screen.width <= 1024 &&
-               'ontouchstart' in window;
-    }
-
-    // Check device types
-    const isMobile = isMobileDevice();
-    const isTablet = isTabletLandscape();
-
-    // DevTools detection - runs ALWAYS (even with mobile emulation)
-    function showWarning() {
-        document.body.innerHTML =  '<div style="text-align: center; padding: 50px; font-size: 24px; color: red; background: white; height: 100vh; display: flex; align-items: center; justify-content: center;">Developer tools detected. Access denied.</div>';
-    }
-
-    function checkDevTools() {
-        const widthThreshold = 200;
-        const heightThreshold = 200;
-
-        const widthDiff = window.outerWidth - window.innerWidth;
-        const heightDiff = window.outerHeight - window.innerHeight;
-
-        // Account for normal browser chrome
-        const normalChromeHeight = 100;
-        const normalChromeWidth = 20;
-
-        const suspiciousWidth = widthDiff > (normalChromeWidth + widthThreshold);
-        const suspiciousHeight = heightDiff > (normalChromeHeight + heightThreshold);
-
-        if (suspiciousWidth || suspiciousHeight) {
-            showWarning();
-        }
-    }
-
-    // Start DevTools detection immediately (works regardless of mobile emulation)
-    let devToolsCheckInterval;
-    window.addEventListener('load', () => {
-        setTimeout(() => {
-            devToolsCheckInterval = setInterval(checkDevTools, 1000);
-        }, 2000);
-    });
-
-    // Apply other desktop restrictions only if not on mobile/tablet
-    if (!isMobile && !isTablet) {
-        // Desktop-only restrictions (excluding DevTools detection which runs above)
-
-        // Disable right-click context menu
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Disable Ctrl+U (View Source)
-            if (e.ctrlKey && e.key.toLowerCase() === 'u') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable F12 (Developer Tools)
-            if (e.key === 'F12') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+I (Developer Tools)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+C (Developer Tools)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+Shift+J (Console)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'j') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+S (Save Page)
-            if (e.ctrlKey && e.key.toLowerCase() === 's') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+P (Print)
-            if (e.ctrlKey && e.key.toLowerCase() === 'p') {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Ctrl+A (Select All)
-            if (e.ctrlKey && e.key.toLowerCase() === 'a') {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-        // Disable text selection
-        document.addEventListener('selectstart', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable copy
-        document.addEventListener('copy', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable cut
-        document.addEventListener('cut', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable paste
-        document.addEventListener('paste', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Disable drag and drop
-        document.addEventListener('dragstart', function(e) {
-            e.preventDefault();
-            return false;
-        });
-
-        // Other desktop-only restrictions are handled above
-
-        // Disable print screen
-        document.addEventListener('keyup', function(e) {
-            if (e.key === 'PrintScreen') {
-                e.preventDefault();
-                return false;
-            }
-        });
-
-    } else {
-        // Mobile/Tablet - Only disable some features that make sense
-        console.log('Mobile/Tablet device detected - Limited restrictions applied');
-
-        // Still disable right-click context menu on tablets
-        if (isTablet) {
-            document.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                return false;
-            });
-        }
-    }
-
-    // Disable view source via URL (applies to all devices)
-    if (window.location.href.includes('view-source:')) {
-        window.location.href = window.location.href.replace('view-source:', '');
-    }
-
-    // Show device type and DevTools detection status for testing
-    document.addEventListener('DOMContentLoaded', function() {
-        const deviceInfo = document.createElement('div');
-        deviceInfo.style.cssText = 'position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000;';
-
-        function updateDeviceInfo() {
-            const widthDiff = window.outerWidth - window.innerWidth;
-            const heightDiff = window.outerHeight - window.innerHeight;
-            const devToolsOpen = widthDiff > 220 || heightDiff > 300;
-
-            deviceInfo.innerHTML = `
-                Device: ${isMobile ? 'Mobile' : isTablet ? 'Tablet' : 'Desktop'}<br>
-                Screen: ${window.screen.width}x${window.screen.height}<br>
-                Touch: ${('ontouchstart' in window) ? 'Yes' : 'No'}<br>
-                DevTools: ${devToolsOpen ? '⚠️ DETECTED' : '✅ Clear'}<br>
-                Dimensions: ${widthDiff}x${heightDiff} diff<br>
-                Restrictions: ${(!isMobile && !isTablet) ? 'Active' : 'Limited'}<br>
-                DevTools Check: Always Active
-            `;
-        }
-
-        // updateDeviceInfo();
-        // // Update device info every second
-        // setInterval(updateDeviceInfo, 1000);
-
-        document.body.appendChild(deviceInfo);
-    });
-</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engineering Notes | Shubham Mallick</title>
+  <meta name="description" content="Practical notes on data engineering, distributed systems, cloud platforms, backend architecture, and machine learning from Shubham Mallick.">
+  <meta name="keywords" content="data engineering, distributed systems, Apache Spark, AWS, backend engineering, machine learning">
+  <link rel="icon" href="../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="css/tech.css" rel="stylesheet">
+  <!-- Shared navigation: intentionally unchanged. -->
+  <script src="../assets/js/navigation.js"></script>
 </head>
-
 <body>
-    <!-- Navigation will be automatically inserted here by navigation.js -->
+  <!-- navigation.js inserts the shared top menu here -->
 
-    <!-- Coming Soon Hero Section -->
-    <div class="coming-soon-hero">
-        <div class="coming-soon-content">
-            <div class="coming-soon-icon">
-                <i class="fas fa-code"></i>
-            </div>
-            <h1 class="coming-soon-title">Tech Blog</h1>
-            <p class="coming-soon-subtitle">
-                I'm crafting something amazing! The tech blog is under development and will feature deep insights on software engineering, 
-                cutting-edge technology trends, and real-world experiences from my journey in the tech industry.
-            </p>
-            
-            <div class="tech-topics">
-                <span class="tech-topic">Software Engineering</span>
-                <span class="tech-topic">Big Data Engineering</span>
-                <span class="tech-topic">Web Development</span>
-                <span class="tech-topic">Cloud Computing</span>
-                <span class="tech-topic">AI / ML</span>
-                <span class="tech-topic">System Design</span>
-                <span class="tech-topic">Best Practices</span>
-                <span class="tech-topic">Career Growth</span>
-                <span class="tech-topic">Tech Reviews</span>
-            </div>
-            
-            <div class="coming-soon-status">
-                <p style="margin-bottom: 0.5rem; font-weight: 500;">
-                    <i class="fas fa-clock"></i> Development Progress
-                </p>
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
-                </div>
-                <small style="opacity: 0.8;">65% Complete</small>
-            </div>
-            
-            <!-- <a href="../index.html" class="back-button">
-                <i class="fas fa-arrow-left"></i> Back to Portfolio
-            </a> -->
+  <main>
+    <section class="tech-hero">
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="container hero-inner">
+        <div class="hero-copy">
+          <p class="kicker"><span></span> Engineering notes from the field</p>
+          <h1>Systems are easy on a whiteboard.<br><em>Production is the real lesson.</em></h1>
+          <p class="hero-intro">Practical writing on data platforms, distributed systems, cloud architecture, and the decisions that only become obvious after something breaks at scale.</p>
+          <div class="hero-actions">
+            <a class="primary-action" href="#field-notes">Browse field notes <span>↓</span></a>
+            <a class="text-action" href="../index.html#about">About the author <span>↗</span></a>
+          </div>
         </div>
+
+        <aside class="terminal-card" aria-label="Author experience summary">
+          <div class="terminal-bar">
+            <span></span><span></span><span></span>
+            <p>shubham@engineering ~</p>
+          </div>
+          <div class="terminal-body">
+            <p><b>$</b> whoami</p>
+            <p class="output">Software &amp; Data Engineer</p>
+            <p><b>$</b> experience --years</p>
+            <p class="output accent">14+</p>
+            <p><b>$</b> focus --current</p>
+            <p class="output">distributed systems<br>data platforms<br>cloud &amp; machine learning</p>
+            <p><b>$</b> philosophy</p>
+            <p class="output">measure twice. deploy once.<span class="cursor">_</span></p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="signal-strip" aria-label="Core technologies">
+      <div class="container signal-row">
+        <span>Apache Spark</span><i></i>
+        <span>Python</span><i></i>
+        <span>Java</span><i></i>
+        <span>AWS</span><i></i>
+        <span>Distributed Systems</span><i></i>
+        <span>Machine Learning</span>
+      </div>
+    </section>
+
+    <section class="section field-notes" id="field-notes">
+      <div class="container">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">On the workbench</p>
+            <h2>Field notes in progress</h2>
+          </div>
+          <p>Not recycled documentation. These are the subjects I keep returning to after years of building and operating real systems.</p>
+        </div>
+
+        <div class="story-grid">
+          <article class="story-card featured">
+            <div class="story-number">01</div>
+            <div class="story-content">
+              <p class="story-tag">Data Engineering</p>
+              <h3>What actually makes a data pipeline reliable?</h3>
+              <p>Retries are not reliability. A practical look at idempotency, late data, schema drift, backfills, and the operational signals that matter after launch day.</p>
+              <div class="story-meta"><span>Long read</span><span>Draft in progress</span></div>
+            </div>
+            <div class="architecture-sketch" aria-hidden="true">
+              <span>source</span><b>→</b><span>ingest</span><b>→</b><span>transform</span><b>→</b><span>serve</span>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <div class="story-number">02</div>
+            <div class="story-content">
+              <p class="story-tag">Apache Spark</p>
+              <h3>When “just add more executors” stops working</h3>
+              <p>Reading the clues behind skew, shuffles, spills, tiny files, and jobs that become slower as the cluster grows.</p>
+              <div class="story-meta"><span>Performance</span><span>Draft in progress</span></div>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <div class="story-number">03</div>
+            <div class="story-content">
+              <p class="story-tag">Cloud Architecture</p>
+              <h3>The hidden cost of a convenient cloud design</h3>
+              <p>How data movement, service boundaries, and “temporary” architecture decisions quietly become the monthly bill.</p>
+              <div class="story-meta"><span>AWS</span><span>Notes collecting</span></div>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <div class="story-number">04</div>
+            <div class="story-content">
+              <p class="story-tag">System Design</p>
+              <h3>Designing for failure without designing for fantasy</h3>
+              <p>Choosing where resilience earns its complexity—and where a simple recovery path beats another distributed component.</p>
+              <div class="story-meta"><span>Architecture</span><span>Notes collecting</span></div>
+            </div>
+          </article>
+
+          <article class="story-card">
+            <div class="story-number">05</div>
+            <div class="story-content">
+              <p class="story-tag">Machine Learning</p>
+              <h3>The model is only a small part of the product</h3>
+              <p>Data contracts, reproducibility, serving, monitoring, and why a modest model with a dependable pipeline often wins.</p>
+              <div class="story-meta"><span>MLOps</span><span>Outline ready</span></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section principles">
+      <div class="container principles-layout">
+        <div class="principles-intro">
+          <p class="eyebrow">Operating principles</p>
+          <h2>The rules I trust when the diagram meets reality.</h2>
+          <p>Technology changes quickly. The habits that keep systems understandable and teams effective change much more slowly.</p>
+        </div>
+        <ol class="principle-list">
+          <li>
+            <span>01</span>
+            <div><h3>Make failure visible.</h3><p>A quiet failure is more dangerous than a loud one. Observability belongs in the first design, not the incident follow-up.</p></div>
+          </li>
+          <li>
+            <span>02</span>
+            <div><h3>Earn every abstraction.</h3><p>Introduce complexity when repeated evidence demands it—not because the architecture diagram looks more impressive.</p></div>
+          </li>
+          <li>
+            <span>03</span>
+            <div><h3>Optimize the bottleneck you measured.</h3><p>Profiling beats intuition. Most expensive rewrites begin with a confident guess about the wrong constraint.</p></div>
+          </li>
+          <li>
+            <span>04</span>
+            <div><h3>Leave a system easier to explain.</h3><p>Good engineering reduces the amount of private context required to operate and change the software safely.</p></div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section author-note">
+      <div class="container author-card">
+        <div class="author-mark">SM</div>
+        <div>
+          <p class="eyebrow">Why this blog</p>
+          <h2>Lessons worth writing down.</h2>
+          <p>After 14+ years across software engineering, big-data platforms, cloud migrations, and machine learning, the most useful lessons rarely fit into a certification syllabus. This is where I am collecting them—plainly, with trade-offs included.</p>
+        </div>
+        <a href="../index.html" class="author-link">View portfolio <span>↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="https://www.linkedin.com/in/i-shubham/" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a href="https://www.youtube.com/@i-shubham-mallick" target="_blank" rel="noopener noreferrer">YouTube</a>
+      </div>
     </div>
+  </footer>
 
-    <!-- Footer -->
-    <footer class="container-fluid footer-cont">
-        <div class="container">
-            <div class="foot-botom row">
-                <div class="col-md-3">
-                    <div class="fotter-coo">
-                        <h5>Important Links</h5>
-                        <ul>
-                            <li><i class="fas fa-caret-right"></i> <a href="#">About Us</a></li>
-                            <li><i class="fas fa-caret-right"></i> <a href="#">Contact Us</a></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </footer>
-
-    <div class="copy">
-        <div class="container">
-            Developed & Maintained by <a href="#">Shubham</a>
-            <span>
-                <a><i class="fab fa-pinterest-p"></i></a>
-                <a><i class="fab fa-twitter"></i></a>
-                <a><i class="fab fa-facebook-f"></i></a>
-            </span>
-        </div>
-    </div>
-
-    <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
-
-    <!-- Scripts -->
-    <script src="../travel/js/jquery-3.2.1.min.js"></script>
-    <script src="../travel/js/popper.min.js"></script>
-    <script src="../travel/js/bootstrap.min.js"></script>
-    <script src="../travel/plugins/scroll-fixed/jquery-scrolltofixed-min.js"></script>
-    <script src="../travel/plugins/slider/js/owl.carousel.min.js"></script>
-    <script src="../travel/js/script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
 </body>
-
-</html> 
+</html>

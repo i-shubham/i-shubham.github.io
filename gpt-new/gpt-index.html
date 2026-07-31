@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open-GPT | Shubham Mallick</title>
+  <meta name="description" content="Open-GPT is an AI workspace in development for grounded answers, document reasoning, data exploration, and dependable agent workflows.">
+  <meta name="keywords" content="Open GPT, AI agents, RAG, LLM, generative AI, document intelligence">
+  <link rel="icon" href="../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="css/gpt.css" rel="stylesheet">
+  <!-- Shared top navigation: intentionally unchanged. -->
+  <script src="../assets/js/navigation.js"></script>
+</head>
+<body>
+  <!-- navigation.js inserts the shared top menu here -->
+
+  <main>
+    <section class="gpt-hero">
+      <div class="orb orb-one" aria-hidden="true"></div>
+      <div class="orb orb-two" aria-hidden="true"></div>
+      <div class="container hero-layout">
+        <div class="hero-copy">
+          <div class="status-pill"><span></span> Private build · In development</div>
+          <h1>AI that shows<br><em>its work.</em></h1>
+          <p>Open-GPT is an AI workspace being built for grounded answers, document reasoning, and practical agent workflows—with sources, controls, and clear boundaries.</p>
+          <div class="hero-actions">
+            <a href="#inside" class="button-primary">Explore the concept <span>↓</span></a>
+            <a href="#build-status" class="button-quiet">See build status <span>↗</span></a>
+          </div>
+          <dl class="hero-facts">
+            <div><dt>Grounded</dt><dd>Responses tied to your sources</dd></div>
+            <div><dt>Private</dt><dd>Designed around data boundaries</dd></div>
+            <div><dt>Observable</dt><dd>Traceable steps, not magic</dd></div>
+          </dl>
+        </div>
+
+        <div class="workspace-preview" aria-label="Open-GPT interface concept">
+          <div class="preview-topbar">
+            <div class="preview-brand"><span class="spark">✦</span> Open-GPT</div>
+            <span class="concept-label">CONCEPT PREVIEW</span>
+            <button type="button" aria-label="More options">•••</button>
+          </div>
+          <div class="preview-body">
+            <aside class="preview-sidebar" aria-label="Example workspaces">
+              <p>WORKSPACES</p>
+              <button class="active" type="button"><span>◫</span> Product research</button>
+              <button type="button"><span>⌘</span> Data analysis</button>
+              <button type="button"><span>◇</span> Architecture review</button>
+              <div class="source-count"><b>12</b><span>sources indexed</span></div>
+            </aside>
+            <div class="conversation">
+              <div class="message user-message">
+                <span>YOU</span>
+                <p>Compare the two architecture proposals. Focus on failure modes and operational cost.</p>
+              </div>
+              <div class="message assistant-message">
+                <span>OPEN-GPT</span>
+                <p>Proposal B reduces the synchronous dependency chain, but moves complexity into event replay and reconciliation.</p>
+                <ul>
+                  <li><b>Failure isolation:</b> Better in B; consumers can recover independently.</li>
+                  <li><b>Operational cost:</b> Higher in B due to broker, retention, and replay tooling.</li>
+                  <li><b>Key risk:</b> Neither proposal defines an idempotency strategy.</li>
+                </ul>
+                <div class="citations"><button type="button">[1] proposal-a.pdf</button><button type="button">[2] proposal-b.pdf</button></div>
+              </div>
+              <div class="prompt-box"><span>Ask a follow-up about your sources…</span><button type="button" aria-label="Send prompt">↑</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-strip" aria-label="Open-GPT design priorities">
+      <div class="container">
+        <span>Retrieval augmented</span><i></i>
+        <span>Human in control</span><i></i>
+        <span>Evaluation first</span><i></i>
+        <span>Model agnostic</span><i></i>
+        <span>Built for real work</span>
+      </div>
+    </section>
+
+    <section class="section capabilities" id="inside">
+      <div class="container">
+        <div class="section-heading">
+          <p class="eyebrow">Inside the workspace</p>
+          <h2>Less chatbot.<br>More thinking surface.</h2>
+          <p class="section-intro">The goal is not another empty prompt box. Open-GPT is being shaped around the work people already do with documents, systems, and decisions.</p>
+        </div>
+
+        <div class="capability-grid">
+          <article class="capability-card card-wide">
+            <div class="card-icon">01</div>
+            <div>
+              <p class="card-label">Grounded research</p>
+              <h3>Ask across documents without losing the evidence.</h3>
+              <p>Bring reports, notes, and technical documents into one workspace. Answers remain connected to the passages that support them.</p>
+            </div>
+            <div class="source-stack" aria-hidden="true">
+              <span>PDF</span><span>DOC</span><span>WEB</span><span>SQL</span>
+            </div>
+          </article>
+
+          <article class="capability-card">
+            <div class="card-icon">02</div>
+            <p class="card-label">Data exploration</p>
+            <h3>Move from a question to an inspectable query.</h3>
+            <p>Generate analysis with the assumptions, SQL, and transformations visible before anything is trusted.</p>
+            <div class="mini-code" aria-hidden="true"><span>SELECT</span> region, SUM(revenue)<br><span>FROM</span> quarterly_sales<br><span>GROUP BY</span> region;</div>
+          </article>
+
+          <article class="capability-card">
+            <div class="card-icon">03</div>
+            <p class="card-label">Agent workflows</p>
+            <h3>Automate a sequence, not accountability.</h3>
+            <p>Plan, retrieve, compare, and draft through bounded steps. High-impact actions pause for human approval.</p>
+            <div class="step-flow" aria-hidden="true"><span>Plan</span><b>→</b><span>Act</span><b>→</b><span>Verify</span></div>
+          </article>
+
+          <article class="capability-card card-wide inverse">
+            <div class="card-icon">04</div>
+            <div>
+              <p class="card-label">Architecture reasoning</p>
+              <h3>Challenge the diagram before production does.</h3>
+              <p>Review system boundaries, failure paths, cost assumptions, and operational trade-offs with context from your own standards.</p>
+            </div>
+            <div class="system-map" aria-hidden="true">
+              <span>Client</span><b></b><span>API</span><b></b><span>Queue</span><b></b><span>Worker</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section architecture">
+      <div class="container architecture-layout">
+        <div class="architecture-copy">
+          <p class="eyebrow">Under the hood</p>
+          <h2>A model is one component, not the product.</h2>
+          <p>Useful AI depends on retrieval quality, permissions, tool boundaries, evaluation, and observability. The architecture is being designed around those less glamorous parts.</p>
+        </div>
+
+        <div class="architecture-pipeline" aria-label="Conceptual Open-GPT architecture">
+          <div class="pipeline-row">
+            <span class="pipeline-index">01</span>
+            <div><h3>Context</h3><p>Documents, databases, APIs, and the conversation itself.</p></div>
+            <code>ingest → parse → index</code>
+          </div>
+          <div class="pipeline-row">
+            <span class="pipeline-index">02</span>
+            <div><h3>Reasoning</h3><p>Retrieval, model routing, tool use, and bounded planning.</p></div>
+            <code>retrieve → reason → act</code>
+          </div>
+          <div class="pipeline-row">
+            <span class="pipeline-index">03</span>
+            <div><h3>Trust</h3><p>Citations, evaluations, traces, permissions, and approvals.</p></div>
+            <code>verify → cite → observe</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section safeguards">
+      <div class="container">
+        <div class="section-heading compact">
+          <p class="eyebrow">Non-negotiables</p>
+          <h2>Useful by design.<br>Careful by default.</h2>
+        </div>
+        <div class="safeguard-list">
+          <article><span>01</span><h3>Sources over confidence</h3><p>A polished sentence is not evidence. Grounded answers expose where claims came from.</p></article>
+          <article><span>02</span><h3>Permission-aware context</h3><p>The assistant should never retrieve information the current user cannot access directly.</p></article>
+          <article><span>03</span><h3>Approval before impact</h3><p>Actions that modify systems, send messages, or spend money require an explicit checkpoint.</p></article>
+          <article><span>04</span><h3>Evaluation before scale</h3><p>Quality, latency, safety, and cost need measured test sets—not a successful demo conversation.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section build-status" id="build-status">
+      <div class="container build-card">
+        <div class="build-copy">
+          <p class="eyebrow">Build journal · 2026</p>
+          <h2>Currently on the workbench.</h2>
+          <p>This page describes the direction, not a finished product. The current focus is a dependable core: source ingestion, retrieval quality, evaluation, and a clean workspace experience.</p>
+        </div>
+        <div class="milestones" aria-label="Development milestones">
+          <div class="milestone complete"><span>✓</span><div><b>Product direction</b><small>Workflows and trust boundaries</small></div></div>
+          <div class="milestone active"><span>↻</span><div><b>Retrieval foundation</b><small>Ingestion, chunking, search, citations</small></div></div>
+          <div class="milestone"><span>03</span><div><b>Evaluation harness</b><small>Quality, latency, and cost baselines</small></div></div>
+          <div class="milestone"><span>04</span><div><b>Private preview</b><small>Small workflows before broad access</small></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="gpt-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Open-GPT is a work in progress. No artificial progress bars.</p>
+      <div>
+        <a href="../index.html">Portfolio</a>
+        <a href="../tech/tech-index.html">Tech Blog</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

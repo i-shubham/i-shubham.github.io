@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lucerne | Travel the Horizon</title>
+  <meta name="description" content="Lucerne travel reflections with Alpine views and Swiss planning tips.">
+  <link rel="icon" href="../../images/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../css/editorial.css">
+  <script>
+    // Every page starts in English: a language choice applies only to the page it was made
+    // on. The widget translates during start-up whenever it finds a googtrans cookie, so the
+    // cookie is dropped here - before element.js is fetched - to keep new pages untranslated.
+    (function dropTranslationCookie() {
+      var travel = window.location.pathname.match(/^(.*\/travel)\//);
+      [travel ? travel[1] : '/', '/'].forEach(function(path) {
+        document.cookie = 'googtrans=; path=' + path + '; max-age=0';
+      });
+    })();
+
+    // Must be available before Google Translate script loads
+    window.googleTranslateElementInit = function googleTranslateElementInit() {
+      function mountWidget() {
+        var mount = document.getElementById('google_translate_element');
+        if (!mount || !window.google || !google.translate || !google.translate.TranslateElement) return false;
+        if (mount.getAttribute('data-initialized') === 'true') return true;
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          layout: google.translate.TranslateElement.InlineLayout.HORIZONTAL,
+          autoDisplay: false
+        }, 'google_translate_element');
+        mount.setAttribute('data-initialized', 'true');
+        return true;
+      }
+      if (mountWidget()) return;
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          mountWidget();
+          setTimeout(mountWidget, 300);
+          setTimeout(mountWidget, 1000);
+        });
+      } else {
+        setTimeout(mountWidget, 0);
+        setTimeout(mountWidget, 300);
+        setTimeout(mountWidget, 1000);
+      }
+    };
+  </script>
+  <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+  <script src="../../js/travel.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+  <!-- Navigation Component (shared with all site pages) -->
+  <script src="../../../assets/js/navigation.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <!-- Navigation will be automatically inserted here by navigation.js -->
+  <div id="nav-placeholder"></div>
+  <header class="site-header">
+    <div class="container nav-shell">
+      <a class="brand" href="../../index.html">
+        <strong>Travel the Horizon</strong>
+        <span>Editorial Journeys</span>
+      </a>
+      <button class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">☰</button>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="../../index.html">Home</a>
+        <details class="nav-dropdown">
+          <summary>France</summary>
+          <div class="dropdown-menu">
+                        <a href="../france/paris.html">Paris</a>
+            <a href="../france/palace_of_versailles.html">Versailles</a>
+            <a href="../france/montmartre.html">Montmartre</a>
+            <a href="../france/notre_dame.html">Notre-Dame</a>
+          </div>
+        </details>
+        <details class="nav-dropdown">
+          <summary>Switzerland</summary>
+          <div class="dropdown-menu">
+                        <a href="lucerne.html" aria-current="page">Lucerne</a>
+          </div>
+        </details>
+        <details class="nav-dropdown">
+          <summary>Italy</summary>
+          <div class="dropdown-menu">
+                        <a href="../italy/venice.html">Venice</a>
+          </div>
+        </details>
+        <div class="translate-wrap">
+          <p class="translate-label">Translate</p>
+          <div id="google_translate_element"></div>
+        </div>
+      </nav>
+    </div>
+  </header>
+  <main id="main-content">
+  <section class="article-hero"><div class="container"><p class="breadcrumbs"><a href="../../index.html">Home</a> / Lucerne</p><h1>Lucerne 🏞️</h1><p class="article-deck">Chapel Bridge, lake walks, a mournful lion in stone — and mountains that sit quietly until you stare.</p><div class="article-meta"><span>By Admin</span><span>Switzerland</span><span>Alpine gateway</span></div></div>
+    <div class="carousel post-carousel" data-carousel data-interval="4200" aria-label="Lucerne photo slideshow"><div class="carousel-track">
+      <figure class="slide is-active"><img src="../../images/pages/Lucerne/IMG_8188.jpg" alt="Lucerne waterfront and architecture"></figure>
+      <figure class="slide"><img src="../../images/pages/Lucerne/IMG_8157.jpg" alt="Chapel Bridge in Lucerne"></figure>
+      <figure class="slide"><img src="../../images/pages/Lucerne/IMG_8160.jpg" alt="Old town street in Lucerne"></figure>
+      <figure class="slide"><img src="../../images/pages/Lucerne/IMG_8139.jpg" alt="Lake Lucerne reflections"></figure>
+      <figure class="slide"><img src="../../images/pages/Lucerne/IMG_8172.jpg" alt="Mountain backdrop above city"></figure>
+    </div><div class="carousel-controls"><button class="carousel-button" type="button" data-carousel-action="previous" aria-label="Previous slide">←</button><button class="carousel-button" type="button" data-carousel-action="pause" aria-label="Pause slideshow" aria-pressed="false">Ⅱ</button><button class="carousel-button" type="button" data-carousel-action="next" aria-label="Next slide">→</button><div class="carousel-dots" aria-label="Select slide"></div></div><p class="carousel-status sr-only" aria-live="polite"></p></div>
+  </section>
+  <section class="container article-layout"><article class="article-body">
+    <p>Lucerne is one of those places that looks almost unreal when you first arrive — lake on one side, mountains stacked behind it, and a medieval old town that still feels lived-in rather than staged. We spent most of our time walking. The city is compact enough that you can cover a lot without rushing.</p>
+    <p>Kapellbrücke (Chapel Bridge) is the postcard everyone knows: covered wood, flower boxes, old paintings in the roof panels. Standing on it at the right hour, with the water moving underneath, you understand why people keep photographing it. Nearby, the old town lanes are painted and quiet in stretches, with towers from the Museggmauer still watching over the rooftops.</p>
+
+    <h2>Lake days and mountain days</h2>
+    <p>Lake Lucerne does not need much interpretation. A promenade walk is enough. If you want more, the boat routes give you the same mountains from a lower angle, which somehow makes them feel taller. Mount Pilatus and Mount Rigi are the big options for height — cogwheel train, cable car, the usual Swiss engineering flex. Book ahead in summer; slots fill.</p>
+    <p>We also stopped at the Lion Monument (Löwendenkmal). Mark Twain called it the most mournful piece of stone in the world, and he was not exaggerating for effect. It sits carved into the rock face, and people go quiet around it without being asked.</p>
+
+    <h2>What we would tell a friend</h2>
+    <ul>
+      <li>Walk the Altstadt first. It sets the tone for the whole stay.</li>
+      <li>Budget carefully — Switzerland is expensive in the small ways (coffee, museums, cable cars) as much as the big ones.</li>
+      <li>If you are hopping cities, look at a Swiss Travel Pass before buying single tickets for every leg.</li>
+      <li>Sunset by the lake is better than another midday photo of the bridge.</li>
+    </ul>
+
+    <h2>Food, simply</h2>
+    <p>We tried rösti and fondue because of course we did. Also a slice of Zuger Kirschtorte — cherry liqueur cake, denser than it looks. Nothing here needs to be gourmet to taste like the place.</p>
+    <p>Lucerne worked for us as a pause between bigger moves: enough history to stay curious, enough water and mountain light to reset.</p>
+
+    <blockquote>In Lucerne, the mountains do not ask for attention. They just sit there until you notice you have been staring.</blockquote>
+  </article><aside class="article-aside" aria-label="Featured posts"><h2>Featured posts</h2><a href="../france/paris.html">Bonjour Paris</a><a href="../france/palace_of_versailles.html">Versailles</a><a href="../france/montmartre.html">Montmartre</a><a href="../france/notre_dame.html">Notre-Dame</a><a href="../italy/venice.html">Venice</a></aside></section>
+  <div class="container post-nav"><a href="../france/notre_dame.html">← Previous: Notre-Dame</a><a href="../italy/venice.html">Next: Venice →</a></div>
+</main>
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <a class="brand" href="../../index.html"><strong>Travel the Horizon</strong><span>Editorial Journeys</span></a>
+        <p class="copyright">© <span data-current-year></span> Travel the Horizon. Developed & maintained by Shubham.</p>
+      </div>
+      <nav class="footer-links" aria-label="Footer links">
+        <a href="../../index.html">Home</a>
+        <a href="../france/paris.html">Paris</a><a href="../france/palace_of_versailles.html">Versailles</a><a href="../france/montmartre.html">Montmartre</a><a href="../france/notre_dame.html">Notre-Dame</a>
+      </nav>
+    </div>
+  </footer>
+  <div class="audio-player" role="group" aria-label="Ambient audio control">
+    <audio data-travel-audio preload="auto" loop><source src="../../audio/The_Palace_Of_Versailles.mp3" type="audio/mpeg"></audio>
+    <button type="button" data-audio-control aria-label="Play ambient audio" aria-pressed="false">▶</button>
+    <div class="audio-copy"><strong>Ambient soundtrack</strong><span data-audio-status>Tap play for ambience</span></div>
+  </div>
+</body>
+</html>

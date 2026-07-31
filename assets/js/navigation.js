@@ -22,8 +22,10 @@ class Navigation {
         
         // Special handling for travel pages
         let travelUrl = `${basePath}travel/index.html`;
-        if (path.includes('/travel/pages/')) {
-            travelUrl = '../index.html'; // This points to travel/index.html from pages directory
+        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) {
+            travelUrl = '../../index.html'; // country subfolder -> travel/index.html
+        } else if (path.includes('/travel/pages/')) {
+            travelUrl = '../index.html'; // pages directory -> travel/index.html
         }
         
         return [
@@ -37,7 +39,8 @@ class Navigation {
 
     getBasePath() {
         const path = window.location.pathname;
-        if (path.includes('/travel/pages/')) return '../../../';
+        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) return '../../../';
+        if (path.includes('/travel/pages/')) return '../../';
         if (path.includes('/travel/')) return '../../';
         if (path.includes('/tech/')) return '../../';
         if (path.includes('/gpt/')) return '../';
@@ -60,13 +63,14 @@ class Navigation {
         let navItemsHTML = '';
         navItems.forEach(item => {
             const isActive = item.id === this.currentPage ? 'active' : '';
-            const target = item.external ? ' target="_blank"' : '';
+            const ariaCurrent = item.id === this.currentPage ? ' aria-current="page"' : '';
+            const target = item.external ? ' target="_blank" rel="noopener noreferrer"' : '';
             const specialClass = item.special ? 'gpt-nav-item' : '';
             
             if (item.special) {
                 navItemsHTML += `
                     <li class="nav-item">
-                        <a class="nav-link ${isActive} ${specialClass}" href="${item.url}"${target}>
+                        <a class="nav-link ${isActive} ${specialClass}" href="${item.url}"${target}${ariaCurrent}>
                             <span class="gpt-icon">🤖</span>
                             <span class="gpt-text">${item.text}</span>
                         </a>
@@ -75,7 +79,7 @@ class Navigation {
             } else {
                 navItemsHTML += `
                     <li class="nav-item">
-                        <a class="nav-link ${isActive}" href="${item.url}"${target}>
+                        <a class="nav-link ${isActive}" href="${item.url}"${target}${ariaCurrent}>
                             <i class="${item.icon}"></i> ${item.text}
                         </a>
                     </li>
@@ -94,11 +98,11 @@ class Navigation {
         });
 
         return `
-            <nav class="navbar navbar-expand-lg navbar-light bg-light">
+            <nav id="mainNavBar" class="navbar navbar-expand-lg navbar-light bg-light">
                 <div class="container-fluid" id="mainDivNavBar">
-                    <img id="navbarImg" src="${this.getProfileImagePath()}" alt="" class="img-fluid rounded-circle">
+                    <img id="navbarImg" src="${this.getProfileImagePath()}" alt="" class="img-fluid rounded-circle" onerror="this.onerror=null;this.src='${this.getBasePath()}assets/img/profile-img.jpg';">
                     <!-- Brand/Logo -->
-                    <a class="navbar-brand" href="#">
+                    <a class="navbar-brand" href="${this.getBasePath()}index.html">
                         &nbsp;&nbsp;&nbsp;&nbsp;Shubham Mallick
                     </a>
 
@@ -125,11 +129,29 @@ class Navigation {
 
     getProfileImagePath() {
         const path = window.location.pathname;
-        if (path.includes('/travel/pages/')) return '../../../assets/img/profile-img.jpg';
+        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) return '../../../assets/img/profile-img.jpg';
+        if (path.includes('/travel/pages/')) return '../../assets/img/profile-img.jpg';
         if (path.includes('/travel/')) return '../../assets/img/profile-img.jpg';
         if (path.includes('/tech/')) return '../../assets/img/profile-img.jpg';
         if (path.includes('/gpt/')) return '../assets/img/profile-img.jpg';
         return 'assets/img/profile-img.jpg';
+    }
+
+    loadFonts() {
+        // Nunito must be loaded on every page, otherwise the nav falls back to a
+        // generic sans-serif and renders at a different weight/metrics per page.
+        if (document.querySelector('#nav-fonts')) return;
+        const preconnect = document.createElement('link');
+        preconnect.rel = 'preconnect';
+        preconnect.href = 'https://fonts.gstatic.com';
+        preconnect.crossOrigin = 'anonymous';
+        document.head.appendChild(preconnect);
+
+        const font = document.createElement('link');
+        font.id = 'nav-fonts';
+        font.rel = 'stylesheet';
+        font.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap';
+        document.head.appendChild(font);
     }
 
     addStyles() {
@@ -146,6 +168,44 @@ class Navigation {
                 }
                 #navbarNav {
                     padding-left: 10px;
+                    padding-top: 0;
+                    padding-bottom: 0;
+                }
+
+                /* Pin the navbar's own metrics so per-page stylesheets and body
+                   typography cannot change its height. These styles are injected last,
+                   so they win over page CSS at equal specificity. (The tech and GPT
+                   pages load travel/css/style_travel.css, which sets a 55px height and
+                   extra padding here; height:auto + min-height keeps the bar at the
+                   avatar's 50px on desktop while still expanding on mobile.) */
+                #mainDivNavBar {
+                    height: auto;
+                    min-height: 50px;
+                    padding-top: 0;
+                    padding-bottom: 0;
+                }
+                #navBarExpandBtn {
+                    padding-top: 0;
+                }
+                #mainDivNavBar,
+                #mainDivNavBar .navbar-nav .nav-link,
+                #mainDivNavBar .navbar-brand {
+                    line-height: 1.5;
+                }
+                /* The inner container is a centered flex child, so it is shorter than
+                   the nav's padding box. Painting the same colour on the nav itself
+                   prevents Bootstrap's bg-light showing as strips above/below. */
+                #mainNavBar {
+                    background: #d1d82f;
+                    padding-top: 0;
+                    padding-bottom: 0;
+                }
+                #mainDivNavBar .navbar-brand {
+                    font-family: 'Nunito', sans-serif;
+                    font-size: 1.25rem;
+                    font-weight: 600;
+                    margin: 0;
+                    padding: 0;
                 }
                 
                 /* Match travel blog navbar look */
@@ -257,7 +317,8 @@ class Navigation {
     }
 
     init() {
-        // Add styles
+        // Load webfonts, then styles
+        this.loadFonts();
         this.addStyles();
         
         // Find the navigation placeholder or create one
