@@ -1,17 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>
+    // Keep the address bar extensionless: /travel/ and /travel/pages/.../slug/
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Notre-Dame | Travel the Horizon</title>
   <meta name="description" content="Notre-Dame Cathedral reflections on Gothic grandeur and resilience.">
-  <link rel="icon" href="../../images/logo.png">
+  <link rel="icon" href="../../../images/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../../css/editorial.css">
+  <link rel="stylesheet" href="../../../css/editorial.css">
   <script>
     // Every page starts in English: a language choice applies only to the page it was made
     // on. The widget translates during start-up whenever it finds a googtrans cookie, so the
@@ -52,10 +59,10 @@
     };
   </script>
   <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
-  <script src="../../js/travel.js" defer></script>
+  <script src="../../../js/travel.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
   <!-- Navigation Component (shared with all site pages) -->
-  <script src="../../../assets/js/navigation.js"></script>
+  <script src="../../../../assets/js/navigation.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -63,32 +70,32 @@
   <div id="nav-placeholder"></div>
   <header class="site-header">
     <div class="container nav-shell">
-      <a class="brand" href="../../index.html">
+      <a class="brand" href="../../../">
         <strong>Travel the Horizon</strong>
         <span>Editorial Journeys</span>
       </a>
       <button class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">☰</button>
       <nav class="site-nav" aria-label="Primary">
-        <a href="../../index.html">Home</a>
+        <a href="../../../">Home</a>
         <details class="nav-dropdown">
           <summary>France</summary>
           <div class="dropdown-menu">
-                        <a href="paris.html">Paris</a>
-            <a href="palace_of_versailles.html">Versailles</a>
-            <a href="montmartre.html">Montmartre</a>
-            <a href="notre_dame.html" aria-current="page">Notre-Dame</a>
+                        <a href="../paris/">Paris</a>
+            <a href="../palace_of_versailles/">Versailles</a>
+            <a href="../montmartre/">Montmartre</a>
+            <a href="./" aria-current="page">Notre-Dame</a>
           </div>
         </details>
         <details class="nav-dropdown">
           <summary>Switzerland</summary>
           <div class="dropdown-menu">
-                        <a href="../switzerland/lucerne.html">Lucerne</a>
+                        <a href="../../switzerland/lucerne/">Lucerne</a>
           </div>
         </details>
         <details class="nav-dropdown">
           <summary>Italy</summary>
           <div class="dropdown-menu">
-                        <a href="../italy/venice.html">Venice</a>
+                        <a href="../../italy/venice/">Venice</a>
           </div>
         </details>
         <div class="translate-wrap">
@@ -99,13 +106,13 @@
     </div>
   </header>
   <main id="main-content">
-  <section class="article-hero"><div class="container"><p class="breadcrumbs"><a href="../../index.html">Home</a> / Notre-Dame</p><h1>Notre-Dame de Paris 🕍</h1><p class="article-deck">Scaffolding in the frame, still unforgettable from the bridges — plus ice cream on Île Saint-Louis afterward.</p><div class="article-meta"><span>By Admin</span><span>France</span><span>Gothic landmark</span></div></div>
+  <section class="article-hero"><div class="container"><p class="breadcrumbs"><a href="../../../">Home</a> / Notre-Dame</p><h1>Notre-Dame de Paris 🕍</h1><p class="article-deck">Scaffolding in the frame, still unforgettable from the bridges — plus ice cream on Île Saint-Louis afterward.</p><div class="article-meta"><span>By Admin</span><span>France</span><span>Gothic landmark</span></div></div>
     <div class="carousel post-carousel" data-carousel data-interval="4300" aria-label="Notre-Dame photo slideshow"><div class="carousel-track">
-      <figure class="slide is-active"><img src="../../images/pages/NotreDame/IMG_7976.jpg" alt="Notre-Dame facade view"></figure>
-      <figure class="slide"><img src="../../images/pages/NotreDame/IMG_7978.jpg" alt="Notre-Dame with surrounding city architecture"></figure>
-      <figure class="slide"><img src="../../images/pages/NotreDame/IMG_7983.jpg" alt="Riverside perspective of Notre-Dame"></figure>
-      <figure class="slide"><img src="../../images/pages/NotreDame/IMG_7987.jpg" alt="Close architectural details of cathedral exterior"></figure>
-      <figure class="slide"><img src="../../images/pages/NotreDame/IMG_7988.jpg" alt="Notre-Dame and Seine atmosphere at dusk"></figure>
+      <figure class="slide is-active"><img src="../../../images/pages/france/notre_dame/img_7976.jpg" alt="Notre-Dame facade view"></figure>
+      <figure class="slide"><img src="../../../images/pages/france/notre_dame/img_7978.jpg" alt="Notre-Dame with surrounding city architecture"></figure>
+      <figure class="slide"><img src="../../../images/pages/france/notre_dame/img_7983.jpg" alt="Riverside perspective of Notre-Dame"></figure>
+      <figure class="slide"><img src="../../../images/pages/france/notre_dame/img_7987.jpg" alt="Close architectural details of cathedral exterior"></figure>
+      <figure class="slide"><img src="../../../images/pages/france/notre_dame/img_7988.jpg" alt="Notre-Dame and Seine atmosphere at dusk"></figure>
     </div><div class="carousel-controls"><button class="carousel-button" type="button" data-carousel-action="previous" aria-label="Previous slide">←</button><button class="carousel-button" type="button" data-carousel-action="pause" aria-label="Pause slideshow" aria-pressed="false">Ⅱ</button><button class="carousel-button" type="button" data-carousel-action="next" aria-label="Next slide">→</button><div class="carousel-dots" aria-label="Select slide"></div></div><p class="carousel-status sr-only" aria-live="polite"></p></div>
   </section>
   <section class="container article-layout"><article class="article-body">
@@ -129,23 +136,23 @@
     <p>Notre-Dame is not a quick checkbox. Give it twenty unhurried minutes from different angles. The building changes with each one.</p>
 
     <blockquote>Even half-restored, Notre-Dame still feels like the city’s heartbeat made of stone.</blockquote>
-  </article><aside class="article-aside" aria-label="Featured posts"><h2>Featured posts</h2><a href="paris.html">Bonjour Paris</a><a href="palace_of_versailles.html">Versailles</a><a href="montmartre.html">Montmartre</a><a href="../switzerland/lucerne.html">Lucerne</a><a href="../italy/venice.html">Venice</a></aside></section>
-  <div class="container post-nav"><a href="montmartre.html">← Previous: Montmartre</a><a href="../switzerland/lucerne.html">Next: Lucerne →</a></div>
+  </article><aside class="article-aside" aria-label="Featured posts"><h2>Featured posts</h2><a href="../paris/">Bonjour Paris</a><a href="../palace_of_versailles/">Versailles</a><a href="../montmartre/">Montmartre</a><a href="../../switzerland/lucerne/">Lucerne</a><a href="../../italy/venice/">Venice</a></aside></section>
+  <div class="container post-nav"><a href="../montmartre/">← Previous: Montmartre</a><a href="../../switzerland/lucerne/">Next: Lucerne →</a></div>
 </main>
   <footer class="site-footer">
     <div class="container footer-grid">
       <div>
-        <a class="brand" href="../../index.html"><strong>Travel the Horizon</strong><span>Editorial Journeys</span></a>
+        <a class="brand" href="../../../"><strong>Travel the Horizon</strong><span>Editorial Journeys</span></a>
         <p class="copyright">© <span data-current-year></span> Travel the Horizon. Developed & maintained by Shubham.</p>
       </div>
       <nav class="footer-links" aria-label="Footer links">
-        <a href="../../index.html">Home</a>
-        <a href="paris.html">Paris</a><a href="palace_of_versailles.html">Versailles</a><a href="montmartre.html">Montmartre</a><a href="../switzerland/lucerne.html">Lucerne</a>
+        <a href="../../../">Home</a>
+        <a href="../paris/">Paris</a><a href="../palace_of_versailles/">Versailles</a><a href="../montmartre/">Montmartre</a><a href="../../switzerland/lucerne/">Lucerne</a>
       </nav>
     </div>
   </footer>
   <div class="audio-player" role="group" aria-label="Ambient audio control">
-    <audio data-travel-audio preload="auto" loop><source src="../../audio/The_Palace_Of_Versailles.mp3" type="audio/mpeg"></audio>
+    <audio data-travel-audio preload="auto" loop><source src="../../../audio/The_Palace_Of_Versailles.mp3" type="audio/mpeg"></audio>
     <button type="button" data-audio-control aria-label="Play ambient audio" aria-pressed="false">▶</button>
     <div class="audio-copy"><strong>Ambient soundtrack</strong><span data-audio-status>Tap play for ambience</span></div>
   </div>

@@ -15,21 +15,31 @@ class Navigation {
         return 'portfolio';
     }
 
-    getNavItems() {
-        const currentPage = this.currentPage;
-        const basePath = this.getBasePath();
+    // Counts path segments under a section so relative links stay correct after
+    // clean-URL folders (e.g. travel/pages/france/paris/) without hard-coding depth.
+    getSectionDepth(section) {
         const path = window.location.pathname;
-        
-        // Special handling for travel pages
-        let travelUrl = `${basePath}travel/index.html`;
-        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) {
-            travelUrl = '../../index.html'; // country subfolder -> travel/index.html
-        } else if (path.includes('/travel/pages/')) {
-            travelUrl = '../index.html'; // pages directory -> travel/index.html
+        const marker = new RegExp(`/${section}(?:/|$)`);
+        if (!marker.test(path)) return null;
+        const after = path.split(new RegExp(`/${section}/?`))[1] || '';
+        return after
+            .replace(/\/index\.html$/i, '')
+            .replace(/\/$/, '')
+            .split('/')
+            .filter(Boolean).length;
+    }
+
+    getNavItems() {
+        const basePath = this.getBasePath();
+        const travelDepth = this.getSectionDepth('travel');
+        // Prefer extensionless travel home: /travel/ rather than /travel/index.html
+        let travelUrl = `${basePath}travel/`;
+        if (travelDepth !== null) {
+            travelUrl = travelDepth === 0 ? './' : '../'.repeat(travelDepth);
         }
-        
+
         return [
-            { id: 'portfolio', text: 'Portfolio', url: `${basePath}index.html`, icon: 'fas fa-user' },
+            { id: 'portfolio', text: 'Portfolio', url: `${basePath}`, icon: 'fas fa-user' },
             { id: 'travel', text: 'Travel-Blog', url: travelUrl, icon: 'fas fa-plane' },
             { id: 'youtube', text: 'YouTube', url: 'https://www.youtube.com/@i-shubham-mallick', icon: 'fab fa-youtube', external: true },
             { id: 'tech', text: 'Tech-Blog', url: `${basePath}tech/tech-index.html`, icon: 'fas fa-code' },
@@ -39,10 +49,12 @@ class Navigation {
 
     getBasePath() {
         const path = window.location.pathname;
-        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) return '../../../';
-        if (path.includes('/travel/pages/')) return '../../';
-        if (path.includes('/travel/')) return '../../';
-        if (path.includes('/tech/')) return '../../';
+        const travelDepth = this.getSectionDepth('travel');
+        if (travelDepth !== null) {
+            // /travel/ → ../ ; /travel/pages/france/paris/ → ../../../../
+            return '../'.repeat(travelDepth + 1);
+        }
+        if (path.includes('/tech/')) return '../';
         if (path.includes('/gpt/')) return '../';
         return './';
     }
@@ -102,7 +114,7 @@ class Navigation {
                 <div class="container-fluid" id="mainDivNavBar">
                     <img id="navbarImg" src="${this.getProfileImagePath()}" alt="" class="img-fluid rounded-circle" onerror="this.onerror=null;this.src='${this.getBasePath()}assets/img/profile-img.jpg';">
                     <!-- Brand/Logo -->
-                    <a class="navbar-brand" href="${this.getBasePath()}index.html">
+                    <a class="navbar-brand" href="${this.getBasePath()}">
                         &nbsp;&nbsp;&nbsp;&nbsp;Shubham Mallick
                     </a>
 
@@ -128,13 +140,7 @@ class Navigation {
     }
 
     getProfileImagePath() {
-        const path = window.location.pathname;
-        if (path.includes('/travel/pages/') && path.split('/travel/pages/')[1].includes('/')) return '../../../assets/img/profile-img.jpg';
-        if (path.includes('/travel/pages/')) return '../../assets/img/profile-img.jpg';
-        if (path.includes('/travel/')) return '../../assets/img/profile-img.jpg';
-        if (path.includes('/tech/')) return '../../assets/img/profile-img.jpg';
-        if (path.includes('/gpt/')) return '../assets/img/profile-img.jpg';
-        return 'assets/img/profile-img.jpg';
+        return `${this.getBasePath()}assets/img/profile-img.jpg`;
     }
 
     loadFonts() {

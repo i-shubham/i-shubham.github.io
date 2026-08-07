@@ -142,7 +142,7 @@ body > main, body > .site-footer { margin-left: var(--sidebar-width); }
    photo's own aspect ratio and leave object-fit nothing to crop. */
 .hero .carousel, .hero .carousel-track,
 .hero .slide, .hero .slide.is-active { position: absolute; inset: 0; }
-.hero .slide::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10,29,24,.82), rgba(10,29,24,.22) 72%), linear-gradient(0deg, rgba(10,29,24,.45), transparent 45%); }
+.hero .slide::after { content: ""; position: absolute; z-index: 2; inset: 0; background: linear-gradient(90deg, rgba(10,29,24,.82), rgba(10,29,24,.22) 72%), linear-gradient(0deg, rgba(10,29,24,.45), transparent 45%); }
 .hero .slide img { width: 100%; height: 100%; object-fit: cover; }
 .hero-content { position: relative; z-index: 2; display: grid; align-content: end; min-height: min(760px, 82vh); padding-block: 7rem 6rem; }
 .hero .display { max-width: 830px; text-wrap: balance; }
@@ -158,6 +158,24 @@ body > main, body > .site-footer { margin-left: var(--sidebar-width); }
    photo inside the frame. */
 .slide { position: absolute; inset: 0; margin: 0; visibility: hidden; opacity: 0; transition: opacity .65s ease, visibility .65s; }
 .slide.is-active { position: relative; visibility: visible; opacity: 1; }
+/* Portrait photos are shown whole, without stretching or center-cropping. A blurred,
+   enlarged copy fills the unused side space so the carousel frame still feels complete. */
+.slide.is-portrait { overflow: hidden; background: #17211d; }
+.slide.is-portrait::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -24px;
+  background: var(--slide-background) center / cover no-repeat;
+  filter: blur(20px) brightness(.62) saturate(.85);
+  transform: scale(1.08);
+}
+.slide.is-portrait > img {
+  position: relative;
+  z-index: 1;
+  object-fit: contain;
+  object-position: center;
+}
 .carousel-controls { position: absolute; z-index: 4; right: 1.25rem; bottom: 1.25rem; display: flex; align-items: center; gap: .55rem; }
 .carousel-button { width: 2.75rem; height: 2.75rem; padding: 0; border: 1px solid rgba(255,255,255,.55); border-radius: 50%; color: #fff; background: rgba(15,32,27,.7); }
 .carousel-button:hover { background: var(--terracotta); }
@@ -196,7 +214,8 @@ body > main, body > .site-footer { margin-left: var(--sidebar-width); }
 .post-carousel { width: min(1320px, calc(100% - 2rem)); min-height: min(680px, 68vw); margin: 2rem auto 0; border-radius: var(--radius); box-shadow: var(--shadow); }
 .post-carousel .carousel-track, .post-carousel .slide { min-height: inherit; }
 .post-carousel .slide img { width: 100%; height: min(680px, 68vw); object-fit: cover; }
-.slide-caption { position: absolute; left: 1rem; bottom: 1rem; max-width: calc(100% - 15rem); margin: 0; padding: .45rem .7rem; border-radius: .45rem; color: #fff; background: rgba(15,32,27,.72); font-size: .78rem; }
+.post-carousel .slide.is-portrait > img { object-fit: contain; }
+.slide-caption { position: absolute; z-index: 2; left: 1rem; bottom: 1rem; max-width: calc(100% - 15rem); margin: 0; padding: .45rem .7rem; border-radius: .45rem; color: #fff; background: rgba(15,32,27,.72); font-size: .78rem; }
 .article-layout { display: grid; grid-template-columns: minmax(0, 730px) 250px; gap: clamp(2rem, 6vw, 6rem); justify-content: center; padding-block: clamp(3rem, 7vw, 6rem); }
 .article-body { font: 400 1.08rem/1.82 var(--serif); }
 .article-body > p:first-child::first-letter { float: left; margin: .08em .12em 0 0; color: var(--terracotta); font: 700 4.6rem/.72 var(--serif); }

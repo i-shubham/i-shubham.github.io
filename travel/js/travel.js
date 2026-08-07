@@ -1,7 +1,44 @@
 (() => {
   "use strict";
 
+  // Prefer extensionless URLs on GitHub Pages: /travel/ and /travel/pages/.../slug/
+  // instead of .../index.html. Old .html destination paths keep a stub redirect file.
+  if (/\/index\.html$/i.test(window.location.pathname)) {
+    const clean = window.location.pathname.replace(/\/index\.html$/i, "/")
+      + window.location.search
+      + window.location.hash;
+    window.location.replace(clean);
+    return;
+  }
+
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  // Portrait photos should remain fully visible instead of being cropped to fill a
+  // landscape carousel. Their own image becomes a soft, edge-to-edge backdrop while
+  // the original stays sharp and uses its natural proportions in the foreground.
+  const prepareSlideImage = (image) => {
+    const slide = image.closest(".slide");
+    if (!slide) return;
+
+    const applyOrientation = () => {
+      if (!image.naturalWidth || !image.naturalHeight) return;
+      const isPortrait = image.naturalHeight > image.naturalWidth;
+      slide.classList.toggle("is-portrait", isPortrait);
+
+      if (isPortrait) {
+        const source = image.currentSrc || image.src;
+        const safeSource = source.replace(/["\\]/g, encodeURIComponent);
+        slide.style.setProperty("--slide-background", `url("${safeSource}")`);
+      } else {
+        slide.style.removeProperty("--slide-background");
+      }
+    };
+
+    if (image.complete) applyOrientation();
+    else image.addEventListener("load", applyOrientation, { once: true });
+  };
+
+  document.querySelectorAll("[data-carousel] .slide img").forEach(prepareSlideImage);
 
   const menuButton = document.querySelector(".menu-toggle");
   const menu = document.querySelector(".site-nav");
