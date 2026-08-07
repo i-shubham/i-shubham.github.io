@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serialize and deserialize a binary tree | DSA | Engineering Notes</title>
+  <meta name="description" content="The trick isn’t JSON — it’s preserving shape when nulls matter and leaves aren’t evenly balanced.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Serialize and deserialize a binary tree</p>
+      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <h1>Serialize and deserialize a binary tree</h1>
+      <p class="problem-deck">The trick isn’t JSON — it’s preserving shape when nulls matter and leaves aren’t evenly balanced.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>General vs BST, value type, format flexibility.</p></div></div>
+            <div class="stack-step"><strong>5–15 min</strong><div><strong>Why nulls matter</strong><p>Draw a tree where preorder without nulls is ambiguous.</p></div></div>
+            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code DFS serialize + deserialize</strong><p>Preorder with &#x27;#&#x27; markers, iterator-based deserialize.</p></div></div>
+            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through example</strong><p>Build string from a 5-node tree, reconstruct it.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>BFS alternative + edge cases</strong><p>Level-order with null markers; empty tree; single node.</p></div></div>
+            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>BST preorder without nulls, n-ary tree, compact binary encoding.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d say the hard part isn&#x27;t picking a format — it&#x27;s preserving the tree&#x27;s shape including where nulls are. A BST can be reconstructed from preorder alone because the BST property constrains placement. A general binary tree can&#x27;t — you need null markers or you lose structural information.</p>
+          <p>I&#x27;d discuss two approaches: preorder DFS with null markers, and level-order BFS with null markers. Both work, both are O(n). I&#x27;d default to preorder DFS because the code is shorter and the recursion mirrors how we think about trees. But if the interviewer cares about streaming or partial deserialization, level-order is better because you can reconstruct top-down without a stack.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>General binary tree or BST? (BST doesn&#x27;t need null markers.)</li>
+            <li>Node values — integers, strings, can they contain the delimiter?</li>
+            <li>Any constraint on serialized format (JSON, custom string)?</li>
+            <li>Do we need to handle very deep trees (stack overflow concern)?</li>
+            <li>Single tree or a forest (multiple roots)?</li>
+            <li>Is the tree mutable after deserialization?</li>
+            <li>Compression — do we care about serialized size?</li>
+            <li>Should serialize → deserialize be a perfect round-trip?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: serialize and deserialize a general binary tree with integer values.</li>
+            <li>Out: n-ary trees, BST-specific optimization unless follow-up.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <ul class="ask-list">
+            <li>serialize(root) → string that encodes the full tree shape.</li>
+            <li>deserialize(data) → TreeNode root identical to original.</li>
+            <li>Round-trip: deserialize(serialize(tree)) produces a structurally identical tree.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Time</strong>
+              <p>O(n) for both serialize and deserialize — visit each node once.</p>
+            </div>
+            <div>
+              <strong>Space</strong>
+              <p>O(n) for the output string; O(h) recursion stack for DFS, O(w) queue for BFS.</p>
+            </div>
+            <div>
+              <strong>Null marker</strong>
+              <p>Use a sentinel like &#x27;#&#x27; or &#x27;null&#x27; that won&#x27;t collide with valid values.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>n limit</strong>
+              <p>up to 10^4 nodes in the LeetCode constraint</p>
+            </div>
+            <div>
+              <strong>Depth limit</strong>
+              <p>up to 10^4 — DFS recursion stack fits in most default limits (~10^4 frames)</p>
+            </div>
+            <div>
+              <strong>String size</strong>
+              <p>≤ 10^4 values + 2×10^4 nulls ≈ 30K tokens, each ≤ 5 chars → ~150 KB</p>
+            </div>
+            <div>
+              <strong>BFS width</strong>
+              <p>worst-case complete binary tree level has n/2 ≈ 5×10^3 nodes in queue</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>def serialize(root: Optional[TreeNode]) -&gt; str:
+def deserialize(data: str) -&gt; Optional[TreeNode]:</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>tokens: List[str]      # serialized token stream (values and &#x27;#&#x27; markers)
+iterator: Iterator     # used during deserialization to walk through tokens
+Encoding: preorder DFS with &#x27;#&#x27; for null children, comma-delimited</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>DFS preorder: visit root, write its value and a delimiter, recurse left, recurse right. For null children, write &#x27;#&#x27;. Example: tree [1, 2, 3, null, null, 4, 5] serializes to &#x27;1,2,#,#,3,4,#,#,5,#,#&#x27;.</p>
+          <p>Deserialize: split the string by delimiter into a list. Use an iterator (or index). Read the next token: if &#x27;#&#x27;, return None. Otherwise create a node, recurse for left child, recurse for right child. The iterator naturally advances through the preorder sequence.</p>
+          <p>BFS level-order: use a queue. Enqueue root. For each node, write its value and enqueue children (writing &#x27;#&#x27; for null children but not enqueueing them). Deserialize by reading tokens in pairs for each non-null node&#x27;s children.</p>
+          <p>The preorder DFS approach is more common in interviews because the recursive code is ~15 lines and the iterator trick is elegant. The BFS approach is more lines but easier to debug.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">root</span><b>→</b><span class="node accent">preorder DFS: val, left, right</span><b>→</b><span class="node">"1,2,#,#,3,4,#,#,5,#,#"</span></div><figcaption>Null markers (#) preserve tree shape — without them, "1,2" is ambiguous (left-child vs right-child)</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Tree A: root=1, left=2</span><b>→ "1,2,#,#,#"</b><span class="node accent">Tree B: root=1, right=2</span><b>→ "1,#,2,#,#"</b></div><figcaption>Without null markers both trees produce "1,2" — ambiguous and unrecoverable</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Tree:     1
+         / \
+        2   3
+           / \
+          4   5</p>
+          <p>Serialize (preorder DFS):
+Visit 1 → write &#x27;1&#x27;. Go left.
+Visit 2 → write &#x27;2&#x27;. Go left → null → write &#x27;#&#x27;. Go right → null → write &#x27;#&#x27;. Back to 1.
+Go right. Visit 3 → write &#x27;3&#x27;. Go left.
+Visit 4 → write &#x27;4&#x27;. Left null → &#x27;#&#x27;. Right null → &#x27;#&#x27;. Back to 3.
+Go right. Visit 5 → write &#x27;5&#x27;. Left null → &#x27;#&#x27;. Right null → &#x27;#&#x27;.
+Result: &#x27;1,2,#,#,3,4,#,#,5,#,#&#x27;</p>
+          <p>Deserialize: tokens = [&#x27;1&#x27;,&#x27;2&#x27;,&#x27;#&#x27;,&#x27;#&#x27;,&#x27;3&#x27;,&#x27;4&#x27;,&#x27;#&#x27;,&#x27;#&#x27;,&#x27;5&#x27;,&#x27;#&#x27;,&#x27;#&#x27;], iterator at 0.
+Read &#x27;1&#x27; → create node(1). Recurse left: read &#x27;2&#x27; → node(2). Recurse left: read &#x27;#&#x27; → None. Recurse right: read &#x27;#&#x27; → None. Return node(2). Recurse right for node(1): read &#x27;3&#x27; → node(3). Recurse left: read &#x27;4&#x27; → node(4). Left &#x27;#&#x27;→None. Right &#x27;#&#x27;→None. Return node(4). Recurse right: read &#x27;5&#x27; → node(5). Left &#x27;#&#x27;→None. Right &#x27;#&#x27;→None. Return node(5). Return node(3). Return node(1). Tree reconstructed.</p>
+          <p>Edge case: empty tree → serialize returns &#x27;#&#x27;. Deserialize reads &#x27;#&#x27;, returns None.</p>
+        </section>
+        <section class="problem-section">
+          <h2>DFS preorder serialize / deserialize (Codec class)</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from typing import Optional
+
+
+class TreeNode:
+    def __init__(self, val: int = 0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+
+class Codec:
+    &quot;&quot;&quot;DFS preorder serialization.
+    &#x27;#&#x27; marks null nodes so the tree can be reconstructed unambiguously.&quot;&quot;&quot;
+
+    def serialize(self, root: Optional[TreeNode]) -&gt; str:
+        tokens: list = []
+
+        def dfs(node: Optional[TreeNode]) -&gt; None:
+            if not node:
+                tokens.append(&quot;#&quot;)
+                return
+            tokens.append(str(node.val))
+            dfs(node.left)
+            dfs(node.right)
+
+        dfs(root)
+        return &quot;,&quot;.join(tokens)
+
+    def deserialize(self, data: str) -&gt; Optional[TreeNode]:
+        it = iter(data.split(&quot;,&quot;))
+
+        def dfs() -&gt; Optional[TreeNode]:
+            tok = next(it)
+            if tok == &quot;#&quot;:
+                return None
+            node = TreeNode(int(tok))
+            # Recursion order matches serialize: left first, then right
+            node.left = dfs()
+            node.right = dfs()
+            return node
+
+        return dfs()</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::cell::RefCell;
+use std::rc::Rc;
+
+type TreeLink = Option&lt;Rc&lt;RefCell&lt;TreeNode&gt;&gt;&gt;;
+
+struct TreeNode {
+    val: i32,
+    left: TreeLink,
+    right: TreeLink,
+}
+impl TreeNode {
+    fn new(val: i32) -&gt; Rc&lt;RefCell&lt;Self&gt;&gt; {
+        Rc::new(RefCell::new(Self { val, left: None, right: None }))
+    }
+}
+
+/// DFS preorder: &#x27;#&#x27; marks null nodes for unambiguous reconstruction.
+fn serialize(root: &amp;TreeLink) -&gt; String {
+    let mut tokens = Vec::new();
+    fn dfs(node: &amp;TreeLink, out: &amp;mut Vec&lt;String&gt;) {
+        match node {
+            None =&gt; out.push(&quot;#&quot;.to_string()),
+            Some(rc) =&gt; {
+                let n = rc.borrow();
+                out.push(n.val.to_string());
+                dfs(&amp;n.left, out);
+                dfs(&amp;n.right, out);
+            }
+        }
+    }
+    dfs(root, &amp;mut tokens);
+    tokens.join(&quot;,&quot;)
+}
+
+fn deserialize(data: &amp;str) -&gt; TreeLink {
+    let mut iter = data.split(&#x27;,&#x27;);
+    fn dfs(it: &amp;mut std::str::Split&lt;char&gt;) -&gt; TreeLink {
+        let tok = it.next()?;
+        if tok == &quot;#&quot; { return None; }
+        let node = TreeNode::new(tok.parse().ok()?);
+        // Recursion order matches serialize: left, then right
+        node.borrow_mut().left = dfs(it);
+        node.borrow_mut().right = dfs(it);
+        Some(node)
+    }
+    dfs(&amp;mut iter)
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+#include &lt;vector&gt;
+
+struct TreeNode {
+    int val;
+    TreeNode *left, *right;
+    TreeNode(int v) : val(v), left(nullptr), right(nullptr) {}
+};
+
+// DFS preorder: &#x27;#&#x27; marks null nodes for unambiguous reconstruction
+static std::string serialize(TreeNode *root) {
+    std::string out;
+    std::function&lt;void(TreeNode *)&gt; dfs = [&amp;](TreeNode *node) {
+        if (!node) { out += &quot;#,&quot;; return; }
+        out += std::to_string(node-&gt;val) + &quot;,&quot;;
+        dfs(node-&gt;left);
+        dfs(node-&gt;right);
+    };
+    dfs(root);
+    if (!out.empty()) out.pop_back(); // remove trailing comma
+    return out;
+}
+
+static TreeNode *deserialize(const std::string &amp;data) {
+    std::istringstream ss(data);
+    std::string tok;
+    // Recursive DFS mirrors the serialize order: val, left, right
+    std::function&lt;TreeNode *()&gt; dfs = [&amp;]() -&gt; TreeNode * {
+        if (!std::getline(ss, tok, &#x27;,&#x27;) || tok == &quot;#&quot;)
+            return nullptr;
+        TreeNode *node = new TreeNode(std::stoi(tok));
+        node-&gt;left = dfs();
+        node-&gt;right = dfs();
+        return node;
+    };
+    return dfs();
+}
+
+// NSString convenience wrappers
+static NSString *serializeTree(TreeNode *root) {
+    return @(serialize(root).c_str());
+}
+static TreeNode *deserializeTree(NSString *data) {
+    return deserialize(data.UTF8String);
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Serialize</span><p>visit 1 → "1", recurse left</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 2 → "2", left=# right=# → back to 1</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 3 → "3", recurse left</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 4 → "4", left=# right=# → back to 3, recurse right</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 5 → "5", left=# right=# → done: "1,2,#,#,3,4,#,#,5,#,#"</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>DFS vs BFS</strong>
+              <p>DFS is shorter code; BFS allows streaming top-down reconstruction.</p>
+            </div>
+            <div>
+              <strong>String vs binary</strong>
+              <p>Comma-separated string is human-readable; binary encoding is 2–3× smaller.</p>
+            </div>
+            <div>
+              <strong>Null sentinel</strong>
+              <p>&#x27;#&#x27; works for integers; for arbitrary strings, use length-prefixed encoding.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Forgetting null markers — tree shape becomes ambiguous.</li>
+            <li>Using a global index instead of an iterator — off-by-one between recursive calls.</li>
+            <li>Delimiter collision if values can contain the delimiter character.</li>
+            <li>Stack overflow on very deep trees (10^5 depth) — switch to iterative DFS.</li>
+            <li>Not handling empty tree (serialize should return &#x27;#&#x27;, not &#x27;&#x27;).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>BST serialization without null markers — preorder is enough because BST property constrains reconstruction.</li>
+            <li>N-ary tree serialization — write child count before children, or use level-end markers.</li>
+            <li>Compact binary encoding — 1 bit per node for structure (1=node, 0=null) + values array.</li>
+            <li>Streaming deserialization — BFS allows you to reconstruct level by level as bytes arrive.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain why null markers are necessary for general trees (the ambiguity argument), write clean DFS serialize and deserialize with the iterator trick, trace through a concrete tree showing every token, and mention the BST optimization where preorder alone suffices.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../course_schedule/">← Course schedule / cycle detection</a>
+          <a class="problem-nav-link back" href="../">All DSA problems</a>
+          <a class="problem-nav-link next" href="../median_stream/">Find median from data stream →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

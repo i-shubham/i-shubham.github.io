@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detect silent data quality drops | Big Data | Engineering Notes</title>
+  <meta name="description" content="The pipeline stayed green while revenue_null_rate went from 0.4% to 18% — silent failure is the default without checks.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Detect silent data quality drops</p>
+      <p class="eyebrow">Big Data · Medium · ~60 min</p>
+      <h1>Detect silent data quality drops</h1>
+      <p class="problem-deck">The pipeline stayed green while revenue_null_rate went from 0.4% to 18% — silent failure is the default without checks.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>What has broken before, which tables are critical, current tooling</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Check taxonomy</strong><p>Three tiers: volume, statistical, reconciliation — what each catches</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Threshold design</strong><p>Day-of-week baselines, rolling averages, holiday calendars</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Implementation</strong><p>Great Expectations or dbt tests integrated into the DAG</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Alert routing</strong><p>Severity tiers: P1 blocks pipeline + pages; P2 alerts Slack; P3 logs</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>False positive handling</strong><p>Auto-muting repeat alerts, human feedback loop, threshold adjustment</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Reconciliation</strong><p>Source-to-lake total comparison; tolerance windows for timing differences</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Silent data quality degradation is the default failure mode. I have seen a pipeline run green for 6 weeks while the null rate on revenue went from 0.4% to 18%. No alert fired because the checks only looked at row count (which was fine) and schema (which had not changed). The business discovered it when a finance report showed $0 revenue for 12% of orders — two weeks after the problem started.</p>
+          <p>The fix is multi-layer checks with appropriate sensitivity. Row count checks catch catastrophic failures (empty partitions, source outages). Statistical checks catch drift: null rates, value distributions, cardinality changes. Reconciliation checks catch systemic issues: our total revenue should match the source system&#x27;s total within 0.1%. Each layer catches a different class of failure.</p>
+          <p>The hard part is not writing checks — it is tuning thresholds and handling false positives. A 5% row count variance might be normal on Monday (fewer weekend orders) but alarming on Tuesday. Day-of-week baselines, rolling averages, and seasonal adjustments reduce false positives while catching genuine degradation.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What types of quality issues have bitten us before?</li>
+            <li>Which columns are business-critical — revenue, customer_id, status?</li>
+            <li>Do we have a source system to reconcile against?</li>
+            <li>What is the acceptable false-positive rate for alerts?</li>
+            <li>Should failed checks block the pipeline or only alert?</li>
+            <li>How fast must we detect a problem — minutes, hours, next day?</li>
+            <li>Are there known seasonal patterns (weekends, holidays)?</li>
+            <li>Who gets paged — data team, analytics, or product?</li>
+            <li>Current tooling: Great Expectations, dbt tests, custom?</li>
+            <li>Is schema evolution a source of quality issues?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Volume checks, null/distribution checks, reconciliation checks, alerting</li>
+            <li>In scope — Day-of-week baselines, false-positive reduction, tiered severity</li>
+            <li>Out of scope — ML-based anomaly detection, data lineage tracking</li>
+            <li>Defer — Data contracts with upstream teams, automated root-cause attribution</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Volume check</strong>
+              <p>Row count within ±10% of day-of-week baseline</p>
+            </div>
+            <div>
+              <strong>Null check</strong>
+              <p>Critical column null rates below configured thresholds</p>
+            </div>
+            <div>
+              <strong>Distribution check</strong>
+              <p>Cardinality, min/max, and percentile stability</p>
+            </div>
+            <div>
+              <strong>Reconciliation</strong>
+              <p>Aggregate totals match source system within tolerance</p>
+            </div>
+            <div>
+              <strong>Freshness check</strong>
+              <p>Data arrives within expected window</p>
+            </div>
+            <div>
+              <strong>Alert routing</strong>
+              <p>P1 pages on-call; P2 sends to Slack; P3 is logged</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Sensitivity</strong>
+              <p>Detect a 5% null-rate increase within one pipeline run</p>
+            </div>
+            <div>
+              <strong>Specificity</strong>
+              <p>False-positive rate below 5% of total check runs</p>
+            </div>
+            <div>
+              <strong>Speed</strong>
+              <p>All checks complete within 5 minutes per table</p>
+            </div>
+            <div>
+              <strong>Coverage</strong>
+              <p>Every production table has at least volume + null checks</p>
+            </div>
+            <div>
+              <strong>Actionability</strong>
+              <p>Alerts include the failing metric, threshold, and trend</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Tables monitored</strong>
+              <p>25 production tables</p>
+            </div>
+            <div>
+              <strong>Checks per table</strong>
+              <p>5–10 checks: 1 volume, 3–5 null/distribution, 1–2 reconciliation</p>
+            </div>
+            <div>
+              <strong>Total checks/run</strong>
+              <p>~150 check executions per daily pipeline run</p>
+            </div>
+            <div>
+              <strong>Check runtime</strong>
+              <p>Aggregation query per check: 10–30 sec; total: ~5 min per table</p>
+            </div>
+            <div>
+              <strong>Historical baselines</strong>
+              <p>28-day rolling window for each check metric; ~4KB per check per day</p>
+            </div>
+            <div>
+              <strong>Alert volume</strong>
+              <p>Target: 1–2 actionable alerts per week; &lt;5% false positive rate</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Quality check results history
+CREATE TABLE meta.quality_results (
+  check_id        STRING,
+  table_name      STRING,
+  check_name      STRING,
+  dt              STRING,
+  check_type      STRING,
+  metric_value    DOUBLE,
+  baseline_value  DOUBLE,
+  threshold       DOUBLE,
+  passed          BOOLEAN,
+  severity        STRING,
+  executed_at     TIMESTAMP,
+  PRIMARY KEY (check_id)
+);
+
+-- Baseline computation
+SELECT
+  check_name,
+  DAYOFWEEK(dt) AS dow,
+  AVG(metric_value) AS baseline,
+  STDDEV(metric_value) AS stddev
+FROM meta.quality_results
+WHERE dt &gt;= CURRENT_DATE - 28
+  AND passed = TRUE           -- exclude known-bad days
+GROUP BY check_name, DAYOFWEEK(dt);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The quality framework has three tiers, each catching a different failure class.</p>
+          <p>Tier 1 — Volume checks: these are the smoke test. COUNT(*) for the current date compared to the day-of-week rolling average over 28 days. Monday&#x27;s baseline is the average of the last 4 Mondays, not yesterday (which was Sunday). A variance &gt; 10% triggers a P1 alert and blocks the publish step. This catches: source outages (0 rows), partial loads (50% of expected), and unexpected surges (data duplication).</p>
+          <p>Tier 2 — Statistical checks: null rates, cardinality, and distribution metrics. For revenue, the null rate must stay below 1%. For status, the cardinality must match the expected set — a new unknown status value is a schema change that should be investigated. For numeric columns, I track p50/p95/p99 over time — a sudden shift in the p95 of order_total suggests a pricing change or data corruption. These checks alert at P2 (Slack notification) but do not block.</p>
+          <p>Tier 3 — Reconciliation: compare our aggregated totals against the source system. For orders, SUM(order_total) should match the source system&#x27;s daily total within 0.1%. This catches: dedup errors (we dropped or duplicated rows), transformation bugs (currency conversion), and schema misinterpretation (a column meaning changed). Reconciliation is the most expensive check (requires querying the source system) but catches the most insidious bugs.</p>
+          <p>False positive reduction: besides day-of-week baselines, I implement: (1) holiday calendar — widen thresholds on known holidays, (2) alert muting — if the same check fails 3 days in a row and has been acknowledged, auto-mute further alerts until the metric recovers, (3) human feedback loop — when an analyst marks an alert as false positive, feed that into baseline adjustment.</p>
+<figure class="diagram dark">
+  <figcaption>Quality Check Pipeline</figcaption>
+  <div class="flow-row">
+    <div class="node">Pipeline Output<br><small>staging table</small></div>
+    <div class="node">Volume Check<br><small>row count ±10%</small></div>
+    <div class="node accent">Stat Checks<br><small>nulls, distributions</small></div>
+    <div class="node">Reconciliation<br><small>vs source system</small></div>
+    <div class="node accent">Alert Router<br><small>P1/P2/P3</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Severity Tiers</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">P1 — Blocking</span><p>Row count, revenue null, reconciliation<br>Pages on-call, blocks publish</p></div>
+    <div class="node"><span class="label">P2 — Warning</span><p>Cardinality, distribution shift<br>Slack alert, publish continues</p></div>
+    <div class="node"><span class="label">P3 — Monitor</span><p>Schema change, freshness drift<br>Logged, reviewed weekly</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Day-of-Week Baseline</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Naive threshold</span><p>±10% of yesterday — false alarm every Monday</p></div>
+    <div class="node accent"><span class="label">DOW baseline</span><p>±10% of avg of last 4 same-weekdays — stable</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Great Expectations integration: I define expectations in a JSON suite per table, executed by a SparkDFValidation action within the Airflow DAG. The checkpoint runs after the transform task and before publish. Failed critical expectations raise an exception that stops the DAG. The validation result is stored in a GE data docs site (S3-hosted) for post-mortem review.</p>
+          <p>Statistical checks need care. A simple null-rate threshold of 1% works for revenue, but for optional fields like referrer, the baseline null rate might be 40%. The threshold should be relative: alert if null rate increases by more than 5 percentage points from the 28-day average, not if it exceeds an absolute value. This requires per-column baseline computation.</p>
+          <p>Reconciliation timing: source systems and the lake pipeline may process data at different times. If the source system reports 50M orders at 23:00 and our pipeline runs at 02:00, late-arriving orders in our pipeline may cause a positive discrepancy. I add a tolerance window: reconciliation compares our dt partition against the source&#x27;s dt minus a ±2% timing tolerance. If the discrepancy exceeds tolerance, I wait one hour and re-check — often the source system&#x27;s count catches up.</p>
+          <p>Anomaly detection at scale: for 25 tables with 150 checks, manual threshold tuning is unsustainable. I use a simple z-score approach: if today&#x27;s metric is &gt; 3 standard deviations from the 28-day same-DOW mean, alert. This automatically adapts to each check&#x27;s natural variance without manual threshold configuration. The exception: business-critical checks (revenue null rate, reconciliation) always have explicit hard thresholds regardless of historical variance.</p>
+          <p>Root cause attribution: when a check fails, the alert should include not just the failing metric but also what changed. I run a delta analysis: which partitions contributed the most null revenue? Which source files are new since the last good run? Which column changed the most? This turns a &#x27;revenue null rate is 18%&#x27; alert into &#x27;revenue null rate spiked to 18% in partition dt=2024-06-15, caused by file vendor_drop_eu.csv which has 100% null revenue column.&#x27;</p>
+        </section>
+        <section class="problem-section">
+          <h2>Volume and null-rate checks with DOW baselines</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class CheckResult:
+    name: str
+    metric_value: float
+    baseline: float
+    threshold: float
+    passed: bool
+    severity: str
+
+
+def volume_check(spark, table, dt, baseline_days=28) -&gt; CheckResult:
+    &quot;&quot;&quot;
+    Detect silent row count drops using day-of-week baselines.
+    Compares current count against the average for the same weekday
+    over the past N days. Flags if variance exceeds 10%.
+    &quot;&quot;&quot;
+    current = spark.sql(f&quot;SELECT COUNT(*) FROM {table} WHERE dt=&#x27;{dt}&#x27;&quot;).first()[0]
+
+    # Use same day-of-week baseline to account for weekly patterns
+    dow = get_day_of_week(dt)
+    baselines = spark.sql(f&quot;&quot;&quot;
+        SELECT AVG(row_count) AS avg_count
+        FROM meta.quality_results
+        WHERE table_name=&#x27;{table}&#x27;
+          AND check_name=&#x27;row_count&#x27;
+          AND DAYOFWEEK(dt) = {dow}
+          AND dt &gt;= DATE_SUB(&#x27;{dt}&#x27;, {baseline_days})
+          AND passed = TRUE
+    &quot;&quot;&quot;).first()
+
+    baseline = baselines.avg_count or current
+    variance = abs(current - baseline) / baseline if baseline &gt; 0 else 0
+
+    return CheckResult(
+        name=&#x27;row_count&#x27;,
+        metric_value=current,
+        baseline=baseline,
+        threshold=0.10,
+        passed=variance &lt;= 0.10,
+        severity=&#x27;P1&#x27;,
+    )
+
+
+def null_rate_check(spark, table, column, dt, max_rate=0.01) -&gt; CheckResult:
+    &quot;&quot;&quot;
+    Check null rate for a critical column.
+    Flags if null percentage exceeds the configured threshold.
+    &quot;&quot;&quot;
+    stats = spark.sql(f&quot;&quot;&quot;
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN {column} IS NULL THEN 1 ELSE 0 END) AS nulls
+        FROM {table} WHERE dt=&#x27;{dt}&#x27;
+    &quot;&quot;&quot;).first()
+
+    rate = stats.nulls / stats.total if stats.total &gt; 0 else 0
+
+    return CheckResult(
+        name=f&#x27;{column}_null_rate&#x27;,
+        metric_value=rate,
+        baseline=0,
+        threshold=max_rate,
+        passed=rate &lt;= max_rate,
+        severity=&#x27;P1&#x27;,
+    )</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Data quality checks implemented in Rust using Polars.
+// Suitable for running as a sidecar validator or compiled quality gate.
+
+use polars::prelude::*;
+use chrono::{NaiveDate, Datelike};
+
+#[derive(Debug)]
+pub struct CheckResult {
+    pub name: String,
+    pub metric_value: f64,
+    pub baseline: f64,
+    pub threshold: f64,
+    pub passed: bool,
+    pub severity: String,
+}
+
+/// Detect silent row count drops using day-of-week baselines.
+/// Compares current count against average for same weekday over past N days.
+pub fn volume_check(
+    current_df: &amp;DataFrame,
+    baseline_df: &amp;DataFrame,
+    table: &amp;str,
+    dt: &amp;str,
+    baseline_days: u32,
+) -&gt; CheckResult {
+    let current_count = current_df.height() as f64;
+
+    // Filter baseline to same day-of-week
+    let target_date = NaiveDate::parse_from_str(dt, &quot;%Y-%m-%d&quot;).unwrap();
+    let target_dow = target_date.weekday().num_days_from_sunday();
+
+    // Calculate baseline from historical quality results
+    let baseline_avg = baseline_df
+        .lazy()
+        .filter(
+            col(&quot;check_name&quot;).eq(lit(&quot;row_count&quot;))
+            .and(col(&quot;table_name&quot;).eq(lit(table)))
+            .and(col(&quot;passed&quot;).eq(lit(true)))
+        )
+        .select([col(&quot;row_count&quot;).mean().alias(&quot;avg_count&quot;)])
+        .collect()
+        .ok()
+        .and_then(|df| df.column(&quot;avg_count&quot;).ok()?.f64().ok()?.get(0))
+        .unwrap_or(current_count);
+
+    let variance = if baseline_avg &gt; 0.0 {
+        (current_count - baseline_avg).abs() / baseline_avg
+    } else {
+        0.0
+    };
+
+    CheckResult {
+        name: &quot;row_count&quot;.to_string(),
+        metric_value: current_count,
+        baseline: baseline_avg,
+        threshold: 0.10,
+        passed: variance &lt;= 0.10,
+        severity: &quot;P1&quot;.to_string(),
+    }
+}
+
+/// Check null rate for a critical column.
+/// Flags if null percentage exceeds the configured threshold.
+pub fn null_rate_check(
+    df: &amp;DataFrame,
+    column: &amp;str,
+    max_rate: f64,
+) -&gt; CheckResult {
+    let total = df.height() as f64;
+    let null_count = df.column(column)
+        .map(|s| s.null_count() as f64)
+        .unwrap_or(0.0);
+
+    let rate = if total &gt; 0.0 { null_count / total } else { 0.0 };
+
+    CheckResult {
+        name: format!(&quot;{}_null_rate&quot;, column),
+        metric_value: rate,
+        baseline: 0.0,
+        threshold: max_rate,
+        passed: rate &lt;= max_rate,
+        severity: &quot;P1&quot;.to_string(),
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;cmath&gt;
+
+// Data quality check framework.
+// Detects silent drops in volume and null rate violations.
+
+struct CheckResult {
+    std::string name;
+    double metric_value;
+    double baseline;
+    double threshold;
+    bool passed;
+    std::string severity;
+};
+
+@interface DataQualityChecker : NSObject
+@property (nonatomic, strong) NSString *sparkEndpoint;
+
+- (instancetype)initWithEndpoint:(NSString *)endpoint;
+- (CheckResult)volumeCheck:(NSString *)table
+                        dt:(NSString *)dt
+              baselineDays:(int)baselineDays;
+- (CheckResult)nullRateCheck:(NSString *)table
+                      column:(NSString *)column
+                          dt:(NSString *)dt
+                     maxRate:(double)maxRate;
+@end
+
+@implementation DataQualityChecker
+
+- (instancetype)initWithEndpoint:(NSString *)endpoint {
+    self = [super init];
+    if (self) { _sparkEndpoint = endpoint; }
+    return self;
+}
+
+/// Detect silent row count drops using day-of-week baselines.
+/// Compares current count against same-weekday average over baseline_days.
+- (CheckResult)volumeCheck:(NSString *)table
+                        dt:(NSString *)dt
+              baselineDays:(int)baselineDays {
+    CheckResult result;
+    result.name = &quot;row_count&quot;;
+    result.threshold = 0.10;
+    result.severity = &quot;P1&quot;;
+
+    // Query current row count via Spark SQL
+    NSString *countQuery = [NSString stringWithFormat:
+        @&quot;SELECT COUNT(*) FROM %@ WHERE dt=&#x27;%@&#x27;&quot;, table, dt];
+    double currentCount = [self executeScalarQuery:countQuery];
+    result.metric_value = currentCount;
+
+    // Get day-of-week for the target date
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @&quot;yyyy-MM-dd&quot;;
+    NSDate *date = [fmt dateFromString:dt];
+    NSCalendar *cal = [NSCalendar currentCalendar];
+    NSInteger dow = [cal component:NSCalendarUnitWeekday fromDate:date];
+
+    // Query baseline: average row count for same weekday over past N days
+    NSString *baselineQuery = [NSString stringWithFormat:
+        @&quot;SELECT AVG(row_count) FROM meta.quality_results &quot;
+        @&quot;WHERE table_name=&#x27;%@&#x27; AND check_name=&#x27;row_count&#x27; &quot;
+        @&quot;AND DAYOFWEEK(dt) = %ld AND dt &gt;= DATE_SUB(&#x27;%@&#x27;, %d) &quot;
+        @&quot;AND passed = TRUE&quot;,
+        table, (long)dow, dt, baselineDays];
+    double baselineAvg = [self executeScalarQuery:baselineQuery];
+    if (baselineAvg == 0) baselineAvg = currentCount;
+    result.baseline = baselineAvg;
+
+    // Check variance against threshold
+    double variance = (baselineAvg &gt; 0)
+        ? std::abs(currentCount - baselineAvg) / baselineAvg
+        : 0.0;
+    result.passed = (variance &lt;= result.threshold);
+
+    return result;
+}
+
+/// Check null rate for a critical column against max allowed rate.
+- (CheckResult)nullRateCheck:(NSString *)table
+                      column:(NSString *)column
+                          dt:(NSString *)dt
+                     maxRate:(double)maxRate {
+    CheckResult result;
+    result.name = std::string([column UTF8String]) + &quot;_null_rate&quot;;
+    result.baseline = 0.0;
+    result.threshold = maxRate;
+    result.severity = &quot;P1&quot;;
+
+    NSString *query = [NSString stringWithFormat:
+        @&quot;SELECT COUNT(*) AS total, &quot;
+        @&quot;SUM(CASE WHEN %@ IS NULL THEN 1 ELSE 0 END) AS nulls &quot;
+        @&quot;FROM %@ WHERE dt=&#x27;%@&#x27;&quot;,
+        column, table, dt];
+
+    // Execute and parse results
+    NSDictionary *stats = [self executeRowQuery:query];
+    double total = [stats[@&quot;total&quot;] doubleValue];
+    double nulls = [stats[@&quot;nulls&quot;] doubleValue];
+    double rate = (total &gt; 0) ? nulls / total : 0.0;
+
+    result.metric_value = rate;
+    result.passed = (rate &lt;= maxRate);
+    return result;
+}
+
+// Helpers: execute queries via Spark SQL REST endpoint
+- (double)executeScalarQuery:(NSString *)query { return 0; }
+- (NSDictionary *)executeRowQuery:(NSString *)query {
+    return @{@&quot;total&quot;: @1000000, @&quot;nulls&quot;: @50};
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Pipeline</span><p>Transform completes: 48M rows written to staging.orders dt=2024-06-15</p></div>
+    <div class="seq-row"><span class="actor">Volume Check</span><p>COUNT(*) = 48M; DOW baseline = 47.5M; variance +1.1% ✓ (threshold ±10%)</p></div>
+    <div class="seq-row"><span class="actor">Null Check</span><p>revenue null rate = 0.3%; threshold = 1% ✓</p></div>
+    <div class="seq-row"><span class="actor">Cardinality</span><p>status values: {pending, confirmed, shipped, delivered, cancelled, REFUNDED}; new value detected ⚠️ P2</p></div>
+    <div class="seq-row"><span class="actor">Reconciliation</span><p>Our SUM = $12.4M; Source SUM = $12.42M; delta = 0.16% > 0.1% ⚠️ P1</p></div>
+    <div class="seq-row"><span class="actor">Alert Router</span><p>P1: page on-call (reconciliation). P2: Slack (new status value). Pipeline blocked pending review</p></div>
+    <div class="seq-row"><span class="actor">On-call</span><p>Investigate: $20K delta from currency conversion change. Approve override → publish proceeds</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Hard thresholds vs adaptive</strong>
+              <p>Hard thresholds are simple but need manual tuning. Adaptive (z-score) handles variance automatically but may miss slow drift that stays within bounds</p>
+            </div>
+            <div>
+              <strong>Blocking vs alerting</strong>
+              <p>Blocking checks prevent bad data from reaching consumers but can halt the pipeline on false positives. Alert-only is safer for availability but risks serving bad data</p>
+            </div>
+            <div>
+              <strong>GE vs dbt tests vs custom</strong>
+              <p>Great Expectations has rich validation logic. dbt tests are simpler and native to dbt workflows. Custom checks offer full flexibility but need more maintenance</p>
+            </div>
+            <div>
+              <strong>Check granularity</strong>
+              <p>Per-column checks catch more issues but multiply runtime and alert volume. Per-table checks are faster but miss column-level degradation</p>
+            </div>
+            <div>
+              <strong>Real-time vs batch</strong>
+              <p>Batch checks after pipeline completion detect issues once. Real-time streaming checks catch degradation earlier but add operational complexity</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Volume check false alarm on a holiday: Monday after Thanksgiving has 30% fewer orders — use a holiday calendar to widen thresholds</li>
+            <li>Reconciliation fails due to source system timing: source updates its count at 04:00, pipeline runs at 02:00 — add a retry with 2-hour delay</li>
+            <li>Alert fatigue: 10 P2 alerts per day → team ignores all of them — reduce sensitivity, improve specificity, use auto-muting for persistent known issues</li>
+            <li>Null rate drifts slowly: 0.4% → 0.6% → 0.9% → 1.1% over 4 weeks — z-score misses because each day is within 1 stddev; need trend detection</li>
+            <li>Schema change breaks check: new column added, old check references removed column — checks must be version-aware or fail gracefully</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you build a data contract system with upstream producers?</li>
+            <li>How do you prioritize which tables get quality checks first?</li>
+            <li>How would you detect data quality issues in a streaming pipeline?</li>
+            <li>How do you handle a quality check that has been failing for weeks and the team has not fixed the root cause?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: the three-tier check taxonomy (volume, statistical, reconciliation), day-of-week baselines for reducing false positives, severity-based alert routing (P1 blocks, P2 warns), and an honest discussion of the false-positive vs false-negative tradeoff. You should give a concrete example of a silent quality drop and how your checks would catch it.</p>
+          <p>You do not need to design the full monitoring dashboard or the ML-based anomaly detection system. The interviewer wants to see: understanding that quality checks are about sensitivity AND specificity, practical experience with false positives, and a tiered approach that matches severity to business impact.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../large_backfill/">← Backfill 18 months without melting the cluster</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../scd2_scale/">Model slowly changing dimensions at scale →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

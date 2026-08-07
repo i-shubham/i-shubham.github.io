@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a URL shortener | System Design | Engineering Notes</title>
+  <meta name="description" content="Short links look trivial until a celebrity posts one, analytics want every click, and someone asks for custom vanity URLs that never collide.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a URL shortener</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a URL shortener</h1>
+      <p class="problem-deck">Short links look trivial until a celebrity posts one, analytics want every click, and someone asks for custom vanity URLs that never collide.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Read-to-write ratio, custom aliases, analytics depth, link expiry policy.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Core redirect, creation API, basic analytics. Defer abuse detection.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>100M new URLs/month, 10:1 read ratio, 7-year horizon.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>API gateway → write service → DB; read path through cache → DB.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>ID generation deep dive</strong><p>Auto-increment vs hash vs counter service; base62 encoding.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Scaling reads</strong><p>Cache hierarchy, 301 vs 302, geographic PoPs.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Analytics pipeline</strong><p>Kafka click stream, async aggregation, avoid blocking redirects.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Failure modes, follow-ups, vanity collision handling.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by pinning down the read-to-write ratio — URL shorteners are overwhelmingly read-heavy. A typical service sees maybe 100M new links per month but billions of redirects. That tells me the write path can afford a round-trip to a relational DB, but the read path needs aggressive caching. I&#x27;d also ask whether custom vanity aliases are in scope, because they turn a simple auto-increment problem into a uniqueness-contention problem.</p>
+          <p>The other question that shapes architecture is analytics. If we just redirect, the system is almost stateless on reads. But if product wants per-click tracking — referer, geo, device — every redirect becomes a write. I&#x27;d push that to an async pipeline so the user never waits on analytics.</p>
+          <p>I&#x27;d sketch three components: a write service that mints short codes, a redirect service backed by a massive cache, and an analytics pipeline that tails a click-event stream. Then I&#x27;d drill into the ID-generation strategy, which is where most designs either shine or fall apart.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the expected read-to-write ratio?</li>
+            <li>Do we support custom vanity aliases or only system-generated codes?</li>
+            <li>What analytics do we need — just click count, or full referer/geo/device breakdown?</li>
+            <li>Should links expire, and if so, what is the default TTL?</li>
+            <li>Do we need to block malicious or phishing URLs?</li>
+            <li>Is there a maximum length for the original URL?</li>
+            <li>Do we need user accounts, or is it anonymous creation?</li>
+            <li>What latency target for the redirect — sub-50 ms?</li>
+            <li>Do we serve a 301 (permanent) or 302 (temporary) redirect?</li>
+            <li>Should the same long URL always produce the same short code?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: short-code generation, redirect, basic click analytics, custom aliases.</li>
+            <li>In: cache layer for redirect reads, async analytics pipeline.</li>
+            <li>Out: abuse/phishing detection, OAuth user management, link-in-bio pages.</li>
+            <li>Defer: A/B testing on redirect targets, QR code generation.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Create</strong>
+              <p>POST /api/v1/urls with long_url returns a short code. Optional custom alias.</p>
+            </div>
+            <div>
+              <strong>Redirect</strong>
+              <p>GET /{code} returns 302 with Location header pointing to original URL.</p>
+            </div>
+            <div>
+              <strong>Analytics</strong>
+              <p>GET /api/v1/urls/{code}/stats returns click count, top referers, geo breakdown.</p>
+            </div>
+            <div>
+              <strong>Delete</strong>
+              <p>DELETE /api/v1/urls/{code} marks the link as inactive.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Read latency</strong>
+              <p>p99 &lt; 50 ms for redirects, served from cache.</p>
+            </div>
+            <div>
+              <strong>Write throughput</strong>
+              <p>~40 creates/sec sustained (100M/month).</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.99% for redirects — a dead short link breaks trust.</p>
+            </div>
+            <div>
+              <strong>Durability</strong>
+              <p>Zero data loss on mappings; analytics can tolerate small gaps.</p>
+            </div>
+            <div>
+              <strong>Code length</strong>
+              <p>7-char base62 gives 62^7 ≈ 3.5 trillion codes — plenty for decades.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>New URLs/month</strong>
+              <p>100M → ~40 writes/sec average, ~400/sec peak.</p>
+            </div>
+            <div>
+              <strong>Redirects/month</strong>
+              <p>10× reads → 1B/month → ~400 reads/sec avg, ~4K/sec peak.</p>
+            </div>
+            <div>
+              <strong>Storage per link</strong>
+              <p>short_code(7B) + long_url(avg 200B) + metadata(100B) ≈ 300B.</p>
+            </div>
+            <div>
+              <strong>Storage/year</strong>
+              <p>1.2B links × 300B ≈ 360 GB — fits one Postgres node comfortably.</p>
+            </div>
+            <div>
+              <strong>Cache</strong>
+              <p>Hot 20% of links = 240M × 300B ≈ 72 GB — fits in Redis cluster.</p>
+            </div>
+            <div>
+              <strong>Analytics events</strong>
+              <p>1B clicks/month × 200B per event ≈ 200 GB/month raw.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/urls
+  Body: { long_url, custom_alias?, expires_at? }
+  Response 201: { short_url, code, created_at, expires_at }
+
+GET /{code}
+  Response 302: Location: &lt;long_url&gt;
+  (also emits click event to analytics pipeline)
+
+GET /api/v1/urls/{code}/stats
+  Response 200: { total_clicks, clicks_24h, top_referers[], geo_breakdown[] }
+
+DELETE /api/v1/urls/{code}
+  Response 204</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Core mapping table
+CREATE TABLE urls (
+  id          BIGINT PRIMARY KEY,        -- snowflake or auto-increment
+  short_code  CHAR(7) UNIQUE NOT NULL,   -- base62 encoded
+  long_url    TEXT NOT NULL,
+  user_id     BIGINT,                     -- nullable for anon
+  created_at  TIMESTAMP DEFAULT now(),
+  expires_at  TIMESTAMP,
+  is_active   BOOLEAN DEFAULT true
+);
+CREATE INDEX idx_urls_short_code ON urls(short_code);
+
+-- Analytics (stored in columnar DB like ClickHouse)
+CREATE TABLE click_events (
+  event_id    UUID,
+  short_code  CHAR(7),
+  clicked_at  TIMESTAMP,
+  referer     VARCHAR(2048),
+  user_agent  VARCHAR(512),
+  ip_country  CHAR(2),
+  device_type VARCHAR(16)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The write path starts at an API gateway that validates the long URL and checks for duplicates if idempotency is desired. For ID generation I&#x27;d use a counter-based approach: a Snowflake-style ID generator gives each application server a pre-allocated range of IDs (e.g., 1000 IDs at a time from a coordination service like ZooKeeper). The server base62-encodes the ID into a 7-character code. This avoids write contention — no two servers ever mint the same ID. Custom aliases go through a separate path that does a uniqueness check against the DB with a unique constraint as the final safety net.</p>
+          <p>The read path is where performance matters. A user clicks a short link and expects an instant redirect. The redirect service first checks a local in-process cache (LRU, ~1M entries), then a Redis cluster holding the hot set, and finally falls back to the database. Cache hit rates above 95% are realistic because link access follows a heavy power-law distribution — a tiny fraction of links get the vast majority of clicks.</p>
+          <p>I&#x27;d use 302 (temporary) redirects by default instead of 301 (permanent), because 301 lets browsers cache the redirect and skip our service entirely — which means we lose analytics data and cannot change the destination later. The trade-off is slightly higher load on our servers, but that is manageable with the caching layer.</p>
+          <p>For analytics, every redirect emits a click event to a Kafka topic. A stream processor (Flink or Spark Streaming) aggregates counts, geo breakdowns, and referer stats into a columnar store like ClickHouse. This keeps the redirect path fast — the analytics write is async and non-blocking. Pre-aggregated rollups serve the stats API without scanning raw events.</p>
+          <p>For geographic distribution I&#x27;d put redirect PoPs in major regions. Each PoP has its own Redis replica. Cache misses go to the primary database region. Since the mapping is immutable after creation, cache invalidation is trivial — only link deletion or expiry requires a cache bust.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node">API Gateway</span><b>&rarr;</b><span class="node accent">Write Service</span><b>&rarr;</b><span class="node">Postgres</span></div><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node">Redirect Service</span><b>&rarr;</b><span class="node accent">Redis Cache</span><b>&rarr;</b><span class="node">Postgres</span></div><figcaption>Write path (top) vs read/redirect path (bottom)</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Redirect Service</span><b>&rarr;</b><span class="node accent">Kafka (click events)</span><b>&rarr;</b><span class="node">Flink Aggregator</span><b>&rarr;</b><span class="node">ClickHouse</span></div><figcaption>Analytics pipeline — async, never blocks the redirect</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Counter Service (ZooKeeper)</span><span class="node accent">Range: [5000, 5999]</span><span class="node">App Server base62-encodes each ID</span><span class="node accent">5000 &rarr; &quot;1Lg&quot; &hellip; 5999 &rarr; &quot;1Wz&quot;</span></div><figcaption>Pre-allocated ID ranges avoid write contention</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>The ID generation strategy deserves close scrutiny. Auto-increment is simple but creates a single-writer bottleneck and leaks creation order (competitor can enumerate your total link count). MD5/SHA256 hashing of the long URL gives deterministic codes but produces 128+ bit outputs that need truncation, introducing collision risk. A counter service that pre-allocates ranges is my preferred approach: each app server fetches a batch of 1,000 sequential IDs from ZooKeeper or etcd. Within that batch, it encodes IDs locally with zero coordination. When the batch runs out, it fetches the next one. Failure mid-batch wastes at most 1,000 IDs — negligible in a 3.5-trillion code space.</p>
+          <p>Base62 encoding (a-z, A-Z, 0-9) maps a 64-bit integer to a compact string. A 7-character code supports 62^7 ≈ 3.5 trillion unique values. The encoding is a simple repeated mod-62 operation. I&#x27;d avoid base64 because the &#x27;+&#x27; and &#x27;/&#x27; characters are URL-unfriendly and require percent-encoding, which defeats the purpose of a short URL.</p>
+          <p>Custom vanity aliases add a uniqueness challenge. The user submits &#x27;myco/launch&#x27; and we need to guarantee no collision with system-generated codes. I&#x27;d reserve a separate namespace: system codes are always exactly 7 characters; custom aliases can be 3–20 characters. A unique index on short_code is the safety net, but I&#x27;d also check Redis first to give a fast &#x27;alias taken&#x27; response without hitting the DB on every attempt.</p>
+          <p>Cache invalidation is simple because URL mappings are essentially immutable. The only mutations are deletion and expiry. For deletion, we publish an invalidation event to Redis Pub/Sub so all PoP caches evict the key within seconds. For expiry, we set a Redis TTL matching the link&#x27;s expiry time so the cache self-evicts. The database is the source of truth — on a cache miss, we re-check is_active and expires_at before serving the redirect.</p>
+          <p>Hot-link thundering herd is the real production headache. When a celebrity tweets a short link, thousands of requests hit the same key simultaneously. If that key is not in cache (cold start or cache eviction), all requests stampede to the database. I&#x27;d use a request-coalescing pattern: the first cache miss starts a DB lookup and all other concurrent requests for the same key wait on that single lookup via a local mutex or a distributed lock with a short TTL. This collapses N identical queries into one.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Counter-based ID generator with base62 encoding</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import string, threading
+
+# Base62 alphabet: [a-z][A-Z][0-9] → 62^7 ≈ 3.5 trillion unique codes
+BASE62 = string.ascii_lowercase + string.ascii_uppercase + string.digits
+
+
+def base62_encode(num: int) -&gt; str:
+    &quot;&quot;&quot;Convert a non-negative integer to a compact base-62 string.&quot;&quot;&quot;
+    if num == 0:
+        return BASE62[0]
+    chars = []
+    while num &gt; 0:
+        chars.append(BASE62[num % 62])
+        num //= 62
+    return &quot;&quot;.join(reversed(chars))
+
+
+class CounterService:
+    &quot;&quot;&quot;Simulates a ZooKeeper-backed range allocator.
+    Each app node claims a disjoint batch to avoid cross-node contention.&quot;&quot;&quot;
+
+    def __init__(self, batch_size=1000):
+        self._counter = 0
+        self._batch = batch_size
+        self._lock = threading.Lock()
+
+    def allocate_range(self) -&gt; tuple[int, int]:
+        with self._lock:
+            start = self._counter
+            self._counter += self._batch
+            return start, start + self._batch - 1
+
+
+class URLShortener:
+    def __init__(self, counter_svc: CounterService):
+        self._counter_svc = counter_svc
+        self._current_id = 0
+        self._max_id = -1
+        self._store: dict[str, str] = {}  # short_code → long_url
+        self._lock = threading.Lock()
+
+    def _next_id(self) -&gt; int:
+        with self._lock:
+            # Fetch a fresh batch when the local range is exhausted
+            if self._current_id &gt; self._max_id:
+                self._current_id, self._max_id = (
+                    self._counter_svc.allocate_range()
+                )
+            nid = self._current_id
+            self._current_id += 1
+            return nid
+
+    def shorten(self, long_url: str, custom_alias: str = None) -&gt; str:
+        if custom_alias:
+            if custom_alias in self._store:
+                raise ValueError(&quot;Alias already taken&quot;)
+            self._store[custom_alias] = long_url
+            return custom_alias
+        # Pad to 7 chars so every short URL has uniform length
+        code = base62_encode(self._next_id()).rjust(7, BASE62[0])
+        self._store[code] = long_url
+        return code
+
+    def resolve(self, code: str) -&gt; str | None:
+        return self._store.get(code)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+use std::sync::Mutex;
+
+const BASE62: &amp;[u8] = b&quot;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&quot;;
+
+fn base62_encode(mut num: u64) -&gt; String {
+    if num == 0 {
+        return String::from(BASE62[0] as char);
+    }
+    let mut chars = Vec::new();
+    while num &gt; 0 {
+        chars.push(BASE62[(num % 62) as usize] as char);
+        num /= 62;
+    }
+    chars.iter().rev().collect()
+}
+
+/// Simulates ZooKeeper range allocator — each node claims a disjoint batch
+struct CounterService {
+    counter: Mutex&lt;u64&gt;,
+    batch_size: u64,
+}
+impl CounterService {
+    fn new(batch: u64) -&gt; Self {
+        Self { counter: Mutex::new(0), batch_size: batch }
+    }
+    fn allocate_range(&amp;self) -&gt; (u64, u64) {
+        let mut c = self.counter.lock().unwrap();
+        let start = *c;
+        *c += self.batch_size;
+        (start, start + self.batch_size - 1)
+    }
+}
+
+struct URLShortener {
+    svc: CounterService,
+    cur: Mutex&lt;u64&gt;,
+    max: Mutex&lt;u64&gt;,
+    store: Mutex&lt;HashMap&lt;String, String&gt;&gt;, // short_code → long_url
+}
+impl URLShortener {
+    fn new(svc: CounterService) -&gt; Self {
+        Self { svc, cur: Mutex::new(0), max: Mutex::new(0), store: Mutex::new(HashMap::new()) }
+    }
+    fn next_id(&amp;self) -&gt; u64 {
+        let mut cur = self.cur.lock().unwrap();
+        let mut max = self.max.lock().unwrap();
+        if *cur &gt; *max {
+            // Replenish batch from the counter service
+            (*cur, *max) = self.svc.allocate_range();
+        }
+        let id = *cur;
+        *cur += 1;
+        id
+    }
+    /// Returns Ok(short_code) or Err if alias is taken
+    fn shorten(&amp;self, long_url: &amp;str, alias: Option&lt;&amp;str&gt;) -&gt; Result&lt;String, &amp;&#x27;static str&gt; {
+        let mut store = self.store.lock().unwrap();
+        if let Some(a) = alias {
+            if store.contains_key(a) {
+                return Err(&quot;Alias already taken&quot;);
+            }
+            store.insert(a.into(), long_url.into());
+            return Ok(a.into());
+        }
+        // Pad to 7 chars for uniform length
+        let raw = base62_encode(self.next_id());
+        let code = format!(&quot;{:a&gt;7}&quot;, raw);
+        store.insert(code.clone(), long_url.into());
+        Ok(code)
+    }
+    fn resolve(&amp;self, code: &amp;str) -&gt; Option&lt;String&gt; {
+        self.store.lock().unwrap().get(code).cloned()
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;mutex&gt;
+
+static const char *kBase62 =
+    &quot;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&quot;;
+
+static std::string base62Encode(uint64_t num) {
+    if (num == 0) return std::string(1, kBase62[0]);
+    std::string chars;
+    while (num &gt; 0) {
+        chars.push_back(kBase62[num % 62]);
+        num /= 62;
+    }
+    return std::string(chars.rbegin(), chars.rend()); // reverse in-place
+}
+
+// ObjC class wrapping C++ internals for thread-safe URL shortening
+@interface URLShortener : NSObject
+- (NSString *)shorten:(NSString *)longURL alias:(NSString *)alias;
+- (NSString *)resolve:(NSString *)code;
+@end
+
+@implementation URLShortener {
+    std::unordered_map&lt;std::string, std::string&gt; _store; // code → URL
+    std::mutex _mu;
+    uint64_t _curID, _maxID, _counter, _batch;
+}
+- (instancetype)init {
+    if (self = [super init]) { _batch = 1000; _maxID = 0; _counter = 0; }
+    return self;
+}
+- (uint64_t)_nextID {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    if (_curID &gt; _maxID) {
+        _curID = _counter;           // allocate next batch
+        _counter += _batch;
+        _maxID = _curID + _batch - 1;
+    }
+    return _curID++;
+}
+- (NSString *)shorten:(NSString *)longURL alias:(NSString *)alias {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    if (alias) {
+        std::string a = alias.UTF8String;
+        if (_store.count(a)) return nil; // alias already taken
+        _store[a] = longURL.UTF8String;
+        return alias;
+    }
+    std::string code = base62Encode([self _nextID]);
+    while (code.size() &lt; 7) code.insert(code.begin(), kBase62[0]); // pad
+    _store[code] = longURL.UTF8String;
+    return @(code.c_str()); // bridge C++ string back to NSString
+}
+- (NSString *)resolve:(NSString *)code {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    auto it = _store.find(code.UTF8String);
+    return it != _store.end() ? @(it-&gt;second.c_str()) : nil;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>POST /api/v1/urls {long_url: "https://example.com/very/long/path"}</p></div><div class="seq-row"><span class="actor">API Gateway</span><p>Validates URL format, checks rate limit</p></div><div class="seq-row"><span class="actor">Write Service</span><p>Takes next ID from pre-allocated range, base62-encodes to "aB3x7Kp"</p></div><div class="seq-row"><span class="actor">Postgres</span><p>INSERT INTO urls (id, short_code, long_url) — unique constraint guards collisions</p></div><div class="seq-row"><span class="actor">Write Service</span><p>Warms Redis cache with new mapping</p></div><div class="seq-row"><span class="actor">Client</span><p>Receives 201 {short_url: "https://sho.rt/aB3x7Kp"}</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Auto-increment vs counter service</strong>
+              <p>Auto-increment is simpler but creates a write bottleneck and leaks total count.</p>
+            </div>
+            <div>
+              <strong>301 vs 302 redirect</strong>
+              <p>301 saves server load but loses analytics and prevents destination changes.</p>
+            </div>
+            <div>
+              <strong>Hash-based vs counter-based codes</strong>
+              <p>Hashing is stateless but risks collisions; counters need coordination but guarantee uniqueness.</p>
+            </div>
+            <div>
+              <strong>Inline analytics vs async pipeline</strong>
+              <p>Inline is simpler but adds 5-10 ms latency to every redirect.</p>
+            </div>
+            <div>
+              <strong>Single DB vs sharded</strong>
+              <p>Single node handles 360 GB/year easily; sharding only needed at 10B+ links.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Counter service goes down — app servers exhaust their pre-allocated range and cannot mint new codes.</li>
+            <li>Cache stampede on a viral link — thousands of simultaneous cache misses overwhelm the database.</li>
+            <li>Custom alias collision under concurrent requests — two users claim the same alias in a race window.</li>
+            <li>Analytics pipeline lag during traffic spikes — Kafka consumer falls behind, stats become stale.</li>
+            <li>Link expiry not enforced in cache — expired links keep redirecting until the cache TTL expires.</li>
+            <li>Base62 decode collision if code length changes — mixing 6-char and 7-char codes without namespace separation.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add rate limiting per user to prevent link-creation abuse?</li>
+            <li>Design a URL preview/unfurl feature that fetches OpenGraph metadata at creation time.</li>
+            <li>How would you handle multi-region active-active writes with global uniqueness?</li>
+            <li>Add link click fraud detection — bot traffic inflating analytics.</li>
+            <li>How would you migrate from auto-increment IDs to a counter service with zero downtime?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers the three-tier architecture (write service, redirect cache, analytics pipeline), explains counter-based ID generation with base62 encoding, and walks through the read path with caching. Mentioning the 301 vs 302 trade-off and the thundering-herd problem shows production awareness. You don&#x27;t need to fully design the analytics pipeline or solve multi-region replication in 60 minutes — acknowledging them as deferred concerns is fine.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../news_feed/">Design a news feed →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Explain CAP for a shopping cart | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="CAP is not a vibe — for a cart, say which user-visible failure you choose when the network splits.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Explain CAP for a shopping cart</p>
+      <p class="eyebrow">Distributed Systems · Easy · ~60 min</p>
+      <h1>Explain CAP for a shopping cart</h1>
+      <p class="problem-deck">CAP is not a vibe — for a cart, say which user-visible failure you choose when the network splits.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>State CAP theorem precisely</strong><p>Consistency, Availability, Partition tolerance — pick 2 of 3.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Why partitions are non-negotiable</strong><p>Network failures happen — the real choice is C vs A.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Shopping cart under CP</strong><p>Reject writes during partition — user sees &#x27;cart unavailable.&#x27;</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Shopping cart under AP</strong><p>Accept writes everywhere — user might see stale cart, merge later.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Conflict resolution for carts</strong><p>CRDT-style merge: OR-Set for items, PN-Counter for quantities.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Real-world examples</strong><p>DynamoDB (AP), Spanner (CP), Cassandra tunable consistency.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Beyond CAP and wrap-up</strong><p>PACELC — what happens when there is no partition?</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I think the most common mistake with CAP is treating it as a philosophy instead of an engineering decision with concrete consequences. For a shopping cart, the question isn&#x27;t &#x27;do we want consistency or availability&#x27; in the abstract — it&#x27;s &#x27;when the network between our data centers splits, does the user see an error page or a potentially stale cart?&#x27;</p>
+          <p>For most e-commerce carts, I&#x27;d choose AP: let every region accept writes (adds, removes, quantity changes) even during a partition. The user can keep shopping. When the partition heals, merge the carts. The merge isn&#x27;t trivial — if user added item X in region A and removed item X in region B during the partition, what&#x27;s the final state? — but it&#x27;s solvable with CRDTs (an OR-Set for the item set, a PN-Counter for quantities).</p>
+          <p>The CP alternative: during a partition, refuse cart writes. The user gets a 503 or a &#x27;cart temporarily unavailable&#x27; message. This is appropriate for inventory-sensitive items (limited edition, flash sales) where overselling is worse than a brief outage. In practice, many systems are AP for the cart and CP for the checkout (payment + inventory decrement).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Is the cart single-region or multi-region?</li>
+            <li>What&#x27;s more important: always letting users add to cart, or never showing stale data?</li>
+            <li>How many regions need to serve writes?</li>
+            <li>Is inventory check part of add-to-cart or deferred to checkout?</li>
+            <li>Are there flash-sale or limited-edition items where overselling is unacceptable?</li>
+            <li>What&#x27;s the expected cart conflict rate (same user, different regions)?</li>
+            <li>Do we need the cart to survive a full region outage?</li>
+            <li>How long do network partitions typically last in our environment?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: CAP theorem, CP vs AP trade-off for a shopping cart, conflict resolution, CRDT approach.</li>
+            <li>Out: full distributed database implementation, PACELC deep dive.</li>
+            <li>Stretch: explain how DynamoDB&#x27;s shopping cart (Amazon&#x27;s original use case) works.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>add_to_cart(user_id, item_id, qty)</strong>
+              <p>Adds item to cart — always succeeds under AP, may reject under CP.</p>
+            </div>
+            <div>
+              <strong>remove_from_cart(user_id, item_id)</strong>
+              <p>Removes item — accepted locally, reconciled on merge.</p>
+            </div>
+            <div>
+              <strong>view_cart(user_id)</strong>
+              <p>Returns current cart state — may be stale under AP during partition.</p>
+            </div>
+            <div>
+              <strong>merge_carts(cart_a, cart_b)</strong>
+              <p>Deterministic merge after partition heals.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Availability (AP choice)</strong>
+              <p>Cart operations succeed 99.99% of the time, including during partitions.</p>
+            </div>
+            <div>
+              <strong>Convergence</strong>
+              <p>After partition heals, all replicas converge to the same cart within 5 seconds.</p>
+            </div>
+            <div>
+              <strong>Merge correctness</strong>
+              <p>Merged cart contains all items added and respects all removals — no phantom items.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>Cart reads and writes &lt; 10 ms local, no cross-region round trip.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Regions</strong>
+              <p>2 active (US-East, EU-West), RTT ~80 ms between regions.</p>
+            </div>
+            <div>
+              <strong>Cart operations</strong>
+              <p>~50 000 cart writes/s globally, ~200 000 cart reads/s.</p>
+            </div>
+            <div>
+              <strong>Avg items per cart</strong>
+              <p>8 items, avg 2 KB per cart document.</p>
+            </div>
+            <div>
+              <strong>Partition duration</strong>
+              <p>Typical: 5–60 seconds; worst-case: minutes.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Cart API
+POST /cart/{user_id}/items
+  Body: {&quot;item_id&quot;: &quot;SKU-123&quot;, &quot;qty&quot;: 2}
+  Response: 200 {&quot;cart&quot;: [...], &quot;causal_token&quot;: &quot;us-east:42&quot;}
+
+DELETE /cart/{user_id}/items/{item_id}
+  Response: 200 {&quot;cart&quot;: [...]}
+
+GET /cart/{user_id}
+  Response: 200 {&quot;items&quot;: [{&quot;item_id&quot;: &quot;SKU-123&quot;, &quot;qty&quot;: 2}], &quot;region&quot;: &quot;us-east&quot;}
+
+# During partition (AP mode)
+POST /cart/{user_id}/items → 200 OK (accepted locally)
+# After partition heals → background merge</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Cart document (per user, per region)
+{
+  &quot;user_id&quot;: &quot;u-12345&quot;,
+  &quot;items&quot;: {
+    &quot;SKU-123&quot;: {&quot;qty_increments&quot;: {&quot;us-east&quot;: 2, &quot;eu-west&quot;: 0},
+                 &quot;qty_decrements&quot;: {&quot;us-east&quot;: 0, &quot;eu-west&quot;: 0},
+                 &quot;added&quot;: {&quot;us-east:1&quot;: true},
+                 &quot;removed&quot;: {}},
+    &quot;SKU-456&quot;: {&quot;qty_increments&quot;: {&quot;us-east&quot;: 1},
+                 &quot;qty_decrements&quot;: {},
+                 &quot;added&quot;: {&quot;us-east:2&quot;: true},
+                 &quot;removed&quot;: {}}
+  },
+  &quot;version_vector&quot;: {&quot;us-east&quot;: 42, &quot;eu-west&quot;: 38}
+}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>CAP states: in the presence of a network partition (P), a distributed system must choose between consistency (C — every read sees the most recent write) and availability (A — every request gets a non-error response). Since network partitions happen in practice, P is not optional — the real choice is CP or AP.</p>
+          <p>CP for a shopping cart: during a partition, the cart service refuses writes because it can&#x27;t confirm whether the other region has conflicting updates. The user sees &#x27;cart temporarily unavailable.&#x27; No data conflicts, no merge needed. This is appropriate when correctness is critical — e.g., inventory-tracked items where overselling is unacceptable.</p>
+          <p>AP for a shopping cart: both regions accept writes during a partition. The user keeps shopping. But now there might be two divergent versions of the same cart. When the partition heals, we merge them. The merge strategy matters: last-writer-wins drops one side&#x27;s changes. A CRDT-based merge preserves all operations.</p>
+          <p>CRDT merge for carts: model each item as an OR-Set entry (add wins over concurrent remove) and each quantity as a PN-Counter (increments and decrements merge independently). User adds item X in US-East and removes item X in EU-West during partition. Merge policy: if the add has a unique tag that wasn&#x27;t in the remove&#x27;s observed set, the add wins — item X is in the merged cart. This is Amazon&#x27;s original Dynamo paper approach.</p>
+          <p>In practice, the hybrid approach is most common: AP for the cart (let users keep shopping), CP for checkout (the payment + inventory decrement must be consistent). This matches the business reality: a slightly stale cart is tolerable, but a double-charged payment is not.</p>
+<figure class="diagram dark" aria-label="CAP trade-off for shopping cart">
+  <div class="flow-row">
+    <div class="node">Network Partition occurs</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">CP: Reject cart writes → "unavailable"</div>
+    <div class="node accent">AP: Accept writes in both regions</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">CP: No conflicts, user frustrated</div>
+    <div class="node accent">AP: User happy, merge on heal</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Cart merge after partition">
+  <div class="flow-row">
+    <div class="node">US-East cart: {X: 2, Y: 1}</div>
+    <div class="node">EU-West cart: {X: removed, Z: 3}</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">Merged (OR-Set): {X: 2, Y: 1, Z: 3}</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Add wins over concurrent remove (OR-Set semantics)</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s trace a concrete partition scenario. User Alice has a cart with {SKU-123: qty 1}. The network between US-East and EU-West splits. Alice&#x27;s browser is routed to US-East. She adds SKU-456 (qty 2). Meanwhile, a background process in EU-West expires SKU-123 from her cart (items expire after 24 hours). Now:</p>
+          <p>US-East cart: {SKU-123: 1, SKU-456: 2}
+EU-West cart: {}</p>
+          <p>The partition heals. How do we merge? With LWW on the whole cart, one side wins — either Alice loses her new item (SKU-456) or the expired item (SKU-123) comes back. Both are wrong.</p>
+          <p>With per-item OR-Set: SKU-123 was in the original set. EU-West removed it. US-East didn&#x27;t touch it. The remove wins (it observed the original add and removed it). SKU-456 was added in US-East with a new unique tag. EU-West never observed this tag, so it can&#x27;t remove it. The add is preserved. Merged cart: {SKU-456: 2}. This is the correct result: the expiry is respected, and the new addition is preserved.</p>
+          <p>Now consider a trickier case: Alice adds SKU-789 in US-East during the partition. At the same time, she&#x27;s on her phone, routed to EU-West, and also adds SKU-789 with qty 3. US-East cart: {SKU-789: qty 1}. EU-West cart: {SKU-789: qty 3}. With a PN-Counter: US-East incremented by 1, EU-West incremented by 3. Merge: total = 1 + 3 = 4. But Alice probably wanted qty 3, not 4. This is a known CRDT limitation — the merge is mathematically correct (it preserves all increments) but semantically surprising. Solutions: use a last-writer-wins register for quantity (simpler, loses one write) or prompt the user on next cart view (&#x27;you have 4 of SKU-789 — is that right?&#x27;).</p>
+          <p>PACELC extension: CAP only describes behavior during partitions. PACELC adds: else (E, when there&#x27;s no partition), do you favor latency (L) or consistency (C)? DynamoDB is PA/EL: available during partitions, low-latency during normal operation. Spanner is PC/EC: consistent during partitions (it stalls), consistent during normal operation (external consistency via TrueTime). Most shopping carts are PA/EL — optimize for latency and availability, accept eventual consistency.</p>
+        </section>
+        <section class="problem-section">
+          <h2>CRDT shopping cart with OR-Set items and PN-Counter quantities</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass, field
+from typing import Dict, Set
+
+
+@dataclass
+class CartItem:
+    add_tags: Set[str] = field(default_factory=set)
+    remove_tags: Set[str] = field(default_factory=set)
+    qty_inc: Dict[str, int] = field(default_factory=dict)
+    qty_dec: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def present(self) -&gt; bool:
+        return bool(self.add_tags - self.remove_tags)
+
+    @property
+    def qty(self) -&gt; int:
+        return max(0, sum(self.qty_inc.values()) - sum(self.qty_dec.values()))
+
+
+class CRDTCart:
+    def __init__(self, region: str):
+        self.region = region
+        self.items: Dict[str, CartItem] = {}
+        self.seq = 0
+
+    def _tag(self) -&gt; str:
+        self.seq += 1
+        return f&#x27;{self.region}:{self.seq}&#x27;
+
+    def add(self, item_id: str, qty: int = 1):
+        item = self.items.setdefault(item_id, CartItem())
+        item.add_tags.add(self._tag())
+        item.qty_inc[self.region] = item.qty_inc.get(self.region, 0) + qty
+
+    def remove(self, item_id: str):
+        if item_id in self.items:
+            item = self.items[item_id]
+            item.remove_tags |= item.add_tags.copy()
+
+    def view(self) -&gt; dict:
+        return {iid: it.qty for iid, it in self.items.items() if it.present and it.qty &gt; 0}
+
+    def merge(self, other: &#x27;CRDTCart&#x27;) -&gt; &#x27;CRDTCart&#x27;:
+        merged = CRDTCart(self.region)
+        all_ids = set(self.items) | set(other.items)
+        for iid in all_ids:
+            a = self.items.get(iid, CartItem())
+            b = other.items.get(iid, CartItem())
+            m = CartItem(
+                add_tags=a.add_tags | b.add_tags,
+                remove_tags=a.remove_tags | b.remove_tags,
+            )
+            for region in set(a.qty_inc) | set(b.qty_inc):
+                m.qty_inc[region] = max(a.qty_inc.get(region, 0),
+                                        b.qty_inc.get(region, 0))
+            for region in set(a.qty_dec) | set(b.qty_dec):
+                m.qty_dec[region] = max(a.qty_dec.get(region, 0),
+                                        b.qty_dec.get(region, 0))
+            merged.items[iid] = m
+        return merged</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone, Default)]
+pub struct CartItem {
+    pub add_tags: HashSet&lt;String&gt;,
+    pub remove_tags: HashSet&lt;String&gt;,
+    pub qty_inc: HashMap&lt;String, i64&gt;,
+    pub qty_dec: HashMap&lt;String, i64&gt;,
+}
+
+impl CartItem {
+    /// Item is present when at least one add-tag has not been removed.
+    pub fn present(&amp;self) -&gt; bool {
+        self.add_tags.difference(&amp;self.remove_tags).next().is_some()
+    }
+
+    pub fn qty(&amp;self) -&gt; i64 {
+        let inc: i64 = self.qty_inc.values().sum();
+        let dec: i64 = self.qty_dec.values().sum();
+        (inc - dec).max(0)
+    }
+}
+
+pub struct CRDTCart {
+    region: String,
+    items: HashMap&lt;String, CartItem&gt;,
+    seq: u64,
+}
+
+impl CRDTCart {
+    pub fn new(region: &amp;str) -&gt; Self {
+        Self { region: region.into(), items: HashMap::new(), seq: 0 }
+    }
+
+    fn tag(&amp;mut self) -&gt; String {
+        self.seq += 1;
+        format!(&quot;{}:{}&quot;, self.region, self.seq)
+    }
+
+    pub fn add(&amp;mut self, item_id: &amp;str, qty: i64) {
+        let tag = self.tag();
+        let item = self.items.entry(item_id.into()).or_default();
+        item.add_tags.insert(tag);
+        *item.qty_inc.entry(self.region.clone()).or_insert(0) += qty;
+    }
+
+    pub fn remove(&amp;mut self, item_id: &amp;str) {
+        if let Some(item) = self.items.get_mut(item_id) {
+            let tags: HashSet&lt;String&gt; = item.add_tags.clone();
+            item.remove_tags.extend(tags);
+        }
+    }
+
+    pub fn view(&amp;self) -&gt; HashMap&lt;String, i64&gt; {
+        self.items.iter()
+            .filter(|(_, it)| it.present() &amp;&amp; it.qty() &gt; 0)
+            .map(|(id, it)| (id.clone(), it.qty()))
+            .collect()
+    }
+
+    pub fn merge(&amp;self, other: &amp;CRDTCart) -&gt; CRDTCart {
+        let mut merged = CRDTCart::new(&amp;self.region);
+        let all_ids: HashSet&lt;&amp;String&gt; =
+            self.items.keys().chain(other.items.keys()).collect();
+
+        for iid in all_ids {
+            let a = self.items.get(iid.as_str()).cloned().unwrap_or_default();
+            let b = other.items.get(iid.as_str()).cloned().unwrap_or_default();
+            let mut m = CartItem {
+                add_tags: &amp;a.add_tags | &amp;b.add_tags,
+                remove_tags: &amp;a.remove_tags | &amp;b.remove_tags,
+                ..Default::default()
+            };
+            for r in a.qty_inc.keys().chain(b.qty_inc.keys()) {
+                let va = a.qty_inc.get(r).copied().unwrap_or(0);
+                let vb = b.qty_inc.get(r).copied().unwrap_or(0);
+                m.qty_inc.insert(r.clone(), va.max(vb));
+            }
+            for r in a.qty_dec.keys().chain(b.qty_dec.keys()) {
+                let va = a.qty_dec.get(r).copied().unwrap_or(0);
+                let vb = b.qty_dec.get(r).copied().unwrap_or(0);
+                m.qty_dec.insert(r.clone(), va.max(vb));
+            }
+            merged.items.insert(iid.clone(), m);
+        }
+        merged
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;map&gt;
+#include &lt;set&gt;
+#include &lt;algorithm&gt;
+
+// ── CartItem: OR-Set membership + PN-Counter quantity ────────────────
+
+struct CartItem {
+    std::set&lt;std::string&gt; addTags;
+    std::set&lt;std::string&gt; removeTags;
+    std::map&lt;std::string, int64_t&gt; qtyInc; // region -&gt; count
+    std::map&lt;std::string, int64_t&gt; qtyDec;
+
+    bool present() const {
+        for (auto &amp;t : addTags)
+            if (removeTags.find(t) == removeTags.end()) return true;
+        return false;
+    }
+
+    int64_t qty() const {
+        int64_t inc = 0, dec = 0;
+        for (auto &amp;[_, v] : qtyInc) inc += v;
+        for (auto &amp;[_, v] : qtyDec) dec += v;
+        return std::max&lt;int64_t&gt;(0, inc - dec);
+    }
+};
+
+// ── CRDTCart ─────────────────────────────────────────────────────────
+
+@interface CRDTCart : NSObject {
+    std::string _region;
+    std::map&lt;std::string, CartItem&gt; _items;
+    uint64_t _seq;
+}
+- (instancetype)initWithRegion:(NSString *)region;
+- (void)addItem:(NSString *)itemId qty:(int64_t)qty;
+- (void)removeItem:(NSString *)itemId;
+- (NSDictionary&lt;NSString *, NSNumber *&gt; *)view;
+- (CRDTCart *)mergeWith:(CRDTCart *)other;
+@end
+
+@implementation CRDTCart
+
+- (instancetype)initWithRegion:(NSString *)region {
+    if ((self = [super init])) {
+        _region = region.UTF8String;
+        _seq = 0;
+    }
+    return self;
+}
+
+- (std::string)_tag {
+    _seq += 1;
+    return _region + &quot;:&quot; + std::to_string(_seq);
+}
+
+- (void)addItem:(NSString *)itemId qty:(int64_t)qty {
+    std::string iid = itemId.UTF8String;
+    auto &amp;item = _items[iid];
+    item.addTags.insert([self _tag]);
+    item.qtyInc[_region] += qty;
+}
+
+- (void)removeItem:(NSString *)itemId {
+    auto it = _items.find(itemId.UTF8String);
+    if (it != _items.end())
+        it-&gt;second.removeTags.insert(it-&gt;second.addTags.begin(),
+                                     it-&gt;second.addTags.end());
+}
+
+- (NSDictionary&lt;NSString *, NSNumber *&gt; *)view {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    for (auto &amp;[iid, item] : _items) {
+        if (item.present() &amp;&amp; item.qty() &gt; 0)
+            result[@(iid.c_str())] = @(item.qty());
+    }
+    return result;
+}
+
+- (CRDTCart *)mergeWith:(CRDTCart *)other {
+    CRDTCart *merged = [[CRDTCart alloc]
+        initWithRegion:@(_region.c_str())];
+
+    std::set&lt;std::string&gt; allIds;
+    for (auto &amp;[k, _] : _items) allIds.insert(k);
+    for (auto &amp;[k, _] : other-&gt;_items) allIds.insert(k);
+
+    for (auto &amp;iid : allIds) {
+        CartItem a, b;
+        if (_items.count(iid)) a = _items[iid];
+        if (other-&gt;_items.count(iid)) b = other-&gt;_items[iid];
+        CartItem m;
+        m.addTags.insert(a.addTags.begin(), a.addTags.end());
+        m.addTags.insert(b.addTags.begin(), b.addTags.end());
+        m.removeTags.insert(a.removeTags.begin(), a.removeTags.end());
+        m.removeTags.insert(b.removeTags.begin(), b.removeTags.end());
+
+        std::set&lt;std::string&gt; regions;
+        for (auto &amp;[r, _] : a.qtyInc) regions.insert(r);
+        for (auto &amp;[r, _] : b.qtyInc) regions.insert(r);
+        for (auto &amp;r : regions)
+            m.qtyInc[r] = std::max(a.qtyInc[r], b.qtyInc[r]);
+
+        regions.clear();
+        for (auto &amp;[r, _] : a.qtyDec) regions.insert(r);
+        for (auto &amp;[r, _] : b.qtyDec) regions.insert(r);
+        for (auto &amp;r : regions)
+            m.qtyDec[r] = std::max(a.qtyDec[r], b.qtyDec[r]);
+
+        merged-&gt;_items[iid] = m;
+    }
+    return merged;
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Cart operations during partition">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Alice</span><p>Adds SKU-456 (qty 2) — routed to US-East</p></div>
+    <div class="seq-row"><span class="actor">US-East</span><p>Accepts write locally — cart: {SKU-123:1, SKU-456:2}</p></div>
+    <div class="seq-row"><span class="actor">EU-West</span><p>TTL expiry removes SKU-123 — cart: {}</p></div>
+    <div class="seq-row"><span class="actor">Network</span><p>Partition heals — replication resumes</p></div>
+    <div class="seq-row"><span class="actor">Merge</span><p>OR-Set: SKU-123 removed (observed-remove), SKU-456 added (new tag)</p></div>
+    <div class="seq-row"><span class="actor">Result</span><p>Converged cart: {SKU-456: 2}</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>AP (availability) vs CP (consistency)</strong>
+              <p>AP lets users keep shopping during partitions but requires conflict merge; CP avoids conflicts but shows errors.</p>
+            </div>
+            <div>
+              <strong>LWW vs CRDT merge</strong>
+              <p>LWW is simple but loses one side&#x27;s writes; CRDTs preserve all operations but can produce surprising quantities.</p>
+            </div>
+            <div>
+              <strong>Cart AP + checkout CP</strong>
+              <p>Matches business reality — stale cart is OK, double-charge is not — but adds architectural complexity.</p>
+            </div>
+            <div>
+              <strong>OR-Set &#x27;add wins&#x27; vs &#x27;remove wins&#x27;</strong>
+              <p>Add-wins is better for commerce (don&#x27;t lose items from cart); remove-wins risks phantom items.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Treating CAP as a permanent system-wide choice instead of per-operation.</li>
+            <li>LWW on entire cart document — one region&#x27;s changes completely overwrite the other&#x27;s.</li>
+            <li>Not handling the add+remove conflict for the same item during partition.</li>
+            <li>CRDT quantity counter giving unexpected sums when user sets absolute quantity.</li>
+            <li>Forgetting that checkout must be CP even if cart is AP — overselling or double-charging.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Design the checkout flow as CP — how does inventory reservation work under partition?</li>
+            <li>Implement a &#x27;cart conflict detected&#x27; UI that lets the user resolve ambiguous merges.</li>
+            <li>Extend to PACELC: what consistency/latency trade-off do we make when there&#x27;s no partition?</li>
+            <li>Compare DynamoDB Global Tables&#x27; conflict resolution with this CRDT approach.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>State CAP precisely — not as a vibe but as a concrete choice under partition. For a shopping cart, explain why AP is usually the right call (let users keep shopping) and what the merge challenge looks like. Walk through an OR-Set merge with a concrete example. Mention the hybrid pattern: AP for cart, CP for checkout. The candidate who connects this to Amazon&#x27;s Dynamo paper shows they understand the history.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../safe_deploy_drain/">← Detect and drain a bad deploy safely</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Move a monolith to ECS/EKS without a big bang | Cloud | Engineering Notes</title>
+  <meta name="description" content="The risky part isn&#x27;t Docker — it&#x27;s cutting traffic while the monolith and new services still share a database.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Move a monolith to ECS/EKS without a big bang</p>
+      <p class="eyebrow">Cloud · Hard · ~60 min</p>
+      <h1>Move a monolith to ECS/EKS without a big bang</h1>
+      <p class="problem-deck">The risky part isn&#x27;t Docker — it&#x27;s cutting traffic while the monolith and new services still share a database.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Monolith tech stack, team experience, timeline, first extraction candidate</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Strangler pattern</strong><p>New service per route group, ALB path routing, feature flags for cutover</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Container setup</strong><p>Dockerfile, ECS task definition, service discovery, load balancing</p></div></div>
+            <div class="stack-step"><strong>22-32m</strong><div><strong>Traffic routing</strong><p>ALB rules: /api/orders → ECS service; /api/* → monolith. Weighted targets for canary</p></div></div>
+            <div class="stack-step"><strong>32-40m</strong><div><strong>Database strategy</strong><p>Shared DB during transition; service accesses monolith API first, then direct DB after full migration</p></div></div>
+            <div class="stack-step"><strong>40-48m</strong><div><strong>CI/CD + deployment</strong><p>GitHub Actions → ECR → ECS rolling update with health checks</p></div></div>
+            <div class="stack-step"><strong>48-55m</strong><div><strong>Rollback</strong><p>ALB rule change or feature flag; no redeploy needed</p></div></div>
+            <div class="stack-step"><strong>55-60m</strong><div><strong>Failure modes</strong><p>Container OOM, database contention, session management during migration</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Containerizing a monolith is a migration problem, not a Docker problem. The Dockerfile is the easiest part. The hard parts are: routing traffic between the monolith and new services during the transition, managing a shared database when both systems write to it, and having a rollback plan that does not require a meeting.</p>
+          <p>I use the strangler fig pattern: new functionality goes to a container service, and existing functionality migrates one route at a time. An API gateway or ALB path-based routing sends /api/v2/orders to the new ECS service and everything else to the monolith. The monolith shrinks over 6–12 months until nothing is left.</p>
+          <p>The database is the real constraint. Both the monolith and the new service read and write the same tables. During the transition, you have dual-write risks, schema migration coordination, and transaction boundary mismatches. The clean approach is: the monolith keeps ownership of the database, and the new service calls the monolith&#x27;s API for data access until the route is fully migrated. Only then does the new service get direct database access, and the monolith stops serving that route.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What language/framework is the monolith (Java, Python, Node)?</li>
+            <li>How big is the monolith — lines of code, number of routes?</li>
+            <li>Which services to extract first — highest-risk or most independent?</li>
+            <li>Does the team have container/K8s experience?</li>
+            <li>ECS (Fargate) or EKS — build vs operate tradeoff?</li>
+            <li>Current deployment method for the monolith?</li>
+            <li>CI/CD pipeline maturity?</li>
+            <li>Database — single Postgres, multiple databases, or NoSQL?</li>
+            <li>Session management — sticky sessions, Redis, JWT?</li>
+            <li>Timeline pressure — 3 months or 12 months?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Strangler migration: containerize routes incrementally, traffic routing, shared DB management</li>
+            <li>In scope — ECS/EKS setup, CI/CD pipeline for new services, rollback strategy</li>
+            <li>Out of scope — Full microservices architecture with event sourcing</li>
+            <li>Defer — Service mesh, distributed tracing infrastructure, database decomposition</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Traffic routing</strong>
+              <p>ALB path-based routing: new routes to container service, rest to monolith</p>
+            </div>
+            <div>
+              <strong>Feature flag</strong>
+              <p>Toggle routes between monolith and service without deploy</p>
+            </div>
+            <div>
+              <strong>Health checks</strong>
+              <p>New service must pass health checks before receiving traffic</p>
+            </div>
+            <div>
+              <strong>Rollback</strong>
+              <p>Flip route back to monolith within 60 seconds via ALB rule or feature flag</p>
+            </div>
+            <div>
+              <strong>Shared DB</strong>
+              <p>Both systems access the same database during transition; no dual-write conflicts</p>
+            </div>
+            <div>
+              <strong>CI/CD</strong>
+              <p>Automated build, test, deploy pipeline for containerized services</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Zero downtime</strong>
+              <p>Migration steps must not cause downtime for end users</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>New containerized service must match or beat monolith latency (p99 &lt; 200ms)</p>
+            </div>
+            <div>
+              <strong>Rollback time</strong>
+              <p>Route can be flipped back to monolith in &lt; 60 seconds</p>
+            </div>
+            <div>
+              <strong>Timeline</strong>
+              <p>First service extracted within 4 weeks; full migration within 6-12 months</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Container infrastructure cost should not exceed 130% of current until monolith is decommissioned</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Monolith</strong>
+              <p>200K LoC, 45 API routes, 15 database tables, 500 RPS peak</p>
+            </div>
+            <div>
+              <strong>First extraction</strong>
+              <p>Orders API: 5 routes, 3 tables, 120 RPS peak</p>
+            </div>
+            <div>
+              <strong>Container sizing</strong>
+              <p>2 vCPU, 4GB memory per task; 3 tasks minimum for HA</p>
+            </div>
+            <div>
+              <strong>ECS cost</strong>
+              <p>3 tasks × Fargate (2vCPU, 4GB) = 3 × $0.10/hr = $7.20/day = $216/month</p>
+            </div>
+            <div>
+              <strong>Monolith cost</strong>
+              <p>2 × m5.2xlarge = $0.384/hr × 2 × 730h = $560/month</p>
+            </div>
+            <div>
+              <strong>Migration overlap</strong>
+              <p>Both running for ~6 months → $216 + $560 = $776/month (39% overhead)</p>
+            </div>
+            <div>
+              <strong>Post-migration</strong>
+              <p>Monolith decommissioned → $216-$350/month for ECS (depending on final service count)</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># ALB path-based routing rules (in priority order)
+# ──────────────────────────────────────────────────
+
+# Rule 1: Migrated routes → new ECS service
+Condition: path-pattern = /api/v2/orders/*
+Action:    forward to target-group: orders-service-tg
+Priority:  1
+
+# Rule 2: Canary for routes being migrated (10% traffic)
+Condition: path-pattern = /api/v2/inventory/*
+Action:    forward to target-groups:
+           - monolith-tg (weight: 90)
+           - inventory-service-tg (weight: 10)
+Priority:  2
+
+# Rule 3: Everything else → monolith
+Condition: path-pattern = /*
+Action:    forward to target-group: monolith-tg
+Priority:  99 (default)
+
+# ECS task definition (simplified)
+{
+  &quot;family&quot;: &quot;orders-service&quot;,
+  &quot;cpu&quot;: &quot;2048&quot;, &quot;memory&quot;: &quot;4096&quot;,
+  &quot;containerDefinitions&quot;: [{
+    &quot;name&quot;: &quot;orders&quot;,
+    &quot;image&quot;: &quot;123456.dkr.ecr.us-east-1.amazonaws.com/orders:v1.2.3&quot;,
+    &quot;portMappings&quot;: [{&quot;containerPort&quot;: 8080}],
+    &quot;healthCheck&quot;: {&quot;command&quot;: [&quot;CMD-SHELL&quot;, &quot;curl -f http://localhost:8080/health&quot;]},
+    &quot;environment&quot;: [{&quot;name&quot;: &quot;DB_HOST&quot;, &quot;value&quot;: &quot;prod-rds.xxxxx.us-east-1.rds.amazonaws.com&quot;}]
+  }]
+}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Migration state tracking
+# ────────────────────────────────────
+
+# Route migration status
+| Route Group    | Status      | Target     | Traffic % | Rollback Ready |
+| -------------- | ----------- | ---------- | --------- | -------------- |
+| /api/orders    | Migrated    | ECS        | 100%      | Yes (ALB rule) |
+| /api/inventory | Canary      | ECS + Mono | 10% / 90% | Yes (weight=0) |
+| /api/users     | Planned     | Monolith   | 0%        | N/A            |
+| /api/payments  | Not started | Monolith   | 0%        | N/A            |
+| /api/reports   | Not started | Monolith   | 0%        | N/A            |
+
+# Database table ownership during migration
+| Table          | Owner During Migration | Post-Migration Owner  |
+| -------------- | ---------------------- | --------------------- |
+| orders         | Monolith (orders-svc   | orders-service        |
+|                |   reads via API)       |                       |
+| order_items    | Monolith               | orders-service        |
+| inventory      | Monolith               | inventory-service     |
+| users          | Monolith               | users-service         |</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The migration follows three phases: lift, strangle, and decommission.</p>
+          <p>Phase 1 — Lift (Week 1-4): containerize the monolith itself first. Create a Dockerfile, deploy it on ECS alongside the existing EC2 deployment, and route 1% of traffic to the container via ALB weighted targets. This validates that the monolith works in a container (environment variables, file system assumptions, session handling) without extracting any services yet. Once the containerized monolith is stable at 100% traffic, decommission the EC2 instances.</p>
+          <p>Phase 2 — Strangle (Month 2-9): extract services one route group at a time. Start with the most independent, highest-value route — Orders API has 5 routes and touches 3 tables. Extract the code into a new repository, write a separate ECS task definition, and deploy with 0% traffic. Run shadow traffic (duplicate requests to the new service, compare responses, discard the new response) for 1 week. Then canary at 10% with real traffic, monitoring error rate and latency. Increase to 50%, then 100% over 2 weeks.</p>
+          <p>Database strategy during strangling: the new Orders service initially calls the monolith&#x27;s internal API for database access. This avoids dual-write issues — the monolith is the single writer. Once the route is fully migrated (100% traffic to the new service), we give the service direct database access and remove the monolith&#x27;s code for those routes. The database tables transfer ownership.</p>
+          <p>Phase 3 — Decommission (Month 9-12): once all routes are migrated, the monolith serves no traffic. Keep it running for 2 weeks as a rollback safety net. Then shut it down. Clean up the shared database: each service gets its own schema or database, enforced by connection credentials.</p>
+          <p>Rollback at every stage: ALB rule changes are instant (&lt; 60 seconds). If the new service has errors, flip the ALB rule to send 100% to the monolith. Feature flags provide a second layer: the monolith&#x27;s code path is never deleted until the service has been stable for 30 days.</p>
+<figure class="diagram dark">
+  <figcaption>Strangler Fig Pattern</figcaption>
+  <div class="flow-row">
+    <div class="node">Client</div>
+    <div class="node accent">ALB<br><small>path-based routing</small></div>
+    <div class="node">Monolith<br><small>shrinking routes</small></div>
+    <div class="node accent">Orders Service<br><small>ECS/Fargate</small></div>
+    <div class="node">Shared DB<br><small>Postgres</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Traffic Migration Phases</figcaption>
+  <div class="flow-row">
+    <div class="node">Shadow<br><small>0% real traffic</small></div>
+    <div class="node">Canary<br><small>10% traffic</small></div>
+    <div class="node accent">Ramp<br><small>50% traffic</small></div>
+    <div class="node accent">Full<br><small>100% traffic</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>DB Ownership Transition</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">During migration</span><p>New service → monolith API → DB<br>Single writer, no conflicts</p></div>
+    <div class="node accent"><span class="label">Post migration</span><p>New service → DB directly<br>Monolith route removed</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>ECS vs EKS decision: ECS with Fargate is operationally simpler — no cluster management, no node scaling, no Kubernetes version upgrades. But EKS gives you the Kubernetes ecosystem: Helm charts, Istio service mesh, custom operators. My default: start with ECS Fargate unless the team already has Kubernetes expertise or needs features like CronJobs, DaemonSets, or custom scheduling. For most monolith-to-container migrations, ECS is sufficient and reduces operational overhead during a period when the team is already learning new patterns.</p>
+          <p>Session management: if the monolith uses server-side sessions (Express session, Django sessions), containerization breaks sticky sessions because containers scale and terminate freely. The fix: externalize sessions to Redis/ElastiCache before containerizing. This is a prerequisite for the migration, not something you discover after deployment.</p>
+          <p>Health check design: the ECS health check must distinguish between &#x27;service is starting up&#x27; and &#x27;service is unhealthy.&#x27; I use a two-stage approach: a startup probe (check that the DB connection is established and migrations are run) and a readiness probe (check that the service can serve requests). ECS supports a startPeriod parameter — health check failures during this period are ignored. I set startPeriod=60 seconds for services that need warm-up time.</p>
+          <p>Database connection pooling: the monolith maintains 10 persistent connections to Postgres. When the new service also opens 10 connections, the total doubles. With 5 containerized services at 10 connections each = 50 + monolith&#x27;s 10 = 60. Postgres default max_connections is 100, but performance degrades above 50. Use PgBouncer as a connection pooler: all services connect to PgBouncer, which maintains a smaller pool to Postgres. This is essential before decomposing the monolith into multiple services.</p>
+          <p>Shadow traffic for validation: before routing real traffic, I replay production requests to the new service and compare responses. This catches: serialization differences (date formats, null handling), missing query parameters, incorrect database queries, and performance issues. The shadow is implemented by the ALB&#x27;s ability to forward to multiple target groups — but ALB does not support true mirroring. Alternative: a lightweight proxy (nginx mirror module) that duplicates requests to the new service and logs discrepancies.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Extracted service Dockerfile with health check</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">&quot;&quot;&quot;
+Equivalent of the Dockerfile&#x27;s CMD + HEALTHCHECK for the extracted service.
+
+Dockerfile reference:
+  HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3
+    CMD curl -f http://localhost:8080/health || exit 1
+  CMD [&quot;gunicorn&quot;, &quot;--bind&quot;, &quot;0.0.0.0:8080&quot;, &quot;--workers&quot;, &quot;4&quot;, &quot;app:create_app()&quot;]
+&quot;&quot;&quot;
+import time, threading
+from flask import Flask, jsonify
+
+def create_app() -&gt; Flask:
+    app = Flask(__name__)
+    _startup_time = time.monotonic()
+
+    @app.route(&#x27;/health&#x27;)
+    def health():
+        &quot;&quot;&quot;Mirrors the Docker HEALTHCHECK endpoint.&quot;&quot;&quot;
+        uptime = time.monotonic() - _startup_time
+        return jsonify(status=&#x27;ok&#x27;, uptime_s=round(uptime, 1))
+
+    @app.route(&#x27;/&#x27;)
+    def index():
+        return jsonify(service=&#x27;extracted-svc&#x27;, version=&#x27;1.0&#x27;)
+
+    return app
+
+
+if __name__ == &#x27;__main__&#x27;:
+    # Matches Dockerfile CMD: gunicorn 0.0.0.0:8080, 4 workers.
+    # Here we use the dev server; production uses gunicorn.
+    app = create_app()
+    app.run(host=&#x27;0.0.0.0&#x27;, port=8080)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">//! Rust equivalent of the Dockerfile&#x27;s CMD + HEALTHCHECK logic.
+//!
+//! Dockerfile reference:
+//!   HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3
+//!     CMD curl -f http://localhost:8080/health || exit 1
+//!   CMD [&quot;gunicorn&quot;, &quot;--bind&quot;, &quot;0.0.0.0:8080&quot;, &quot;--workers&quot;, &quot;4&quot;, ...]
+
+use actix_web::{web, App, HttpServer, HttpResponse};
+use std::time::Instant;
+use std::sync::Arc;
+
+struct AppData {
+    startup: Instant,
+}
+
+/// Mirrors the Docker HEALTHCHECK endpoint.
+async fn health(data: web::Data&lt;Arc&lt;AppData&gt;&gt;) -&gt; HttpResponse {
+    let uptime = data.startup.elapsed().as_secs_f64();
+    HttpResponse::Ok().json(serde_json::json!({
+        &quot;status&quot;: &quot;ok&quot;,
+        &quot;uptime_s&quot;: (uptime * 10.0).round() / 10.0,
+    }))
+}
+
+async fn index() -&gt; HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({
+        &quot;service&quot;: &quot;extracted-svc&quot;,
+        &quot;version&quot;: &quot;1.0&quot;,
+    }))
+}
+
+#[actix_web::main]
+async fn main() -&gt; std::io::Result&lt;()&gt; {
+    let data = Arc::new(AppData { startup: Instant::now() });
+
+    // Matches Dockerfile: bind 0.0.0.0:8080, 4 worker threads.
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(data.clone()))
+            .route(&quot;/health&quot;, web::get().to(health))
+            .route(&quot;/&quot;, web::get().to(index))
+    })
+    .bind(&quot;0.0.0.0:8080&quot;)?
+    .workers(4)
+    .run()
+    .await
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">/*
+ * ObjC++ equivalent of the Dockerfile&#x27;s CMD + HEALTHCHECK logic.
+ *
+ * Dockerfile reference:
+ *   HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3
+ *     CMD curl -f http://localhost:8080/health || exit 1
+ *   CMD [&quot;gunicorn&quot;, &quot;--bind&quot;, &quot;0.0.0.0:8080&quot;, ...]
+ */
+#import &lt;Foundation/Foundation.h&gt;
+#include &lt;chrono&gt;
+#include &lt;string&gt;
+
+static auto gStartup = std::chrono::steady_clock::now();
+
+// ── Health endpoint (mirrors Docker HEALTHCHECK target) ──────────────
+
+@interface HealthCheckHandler : NSObject
++ (NSDictionary *)healthResponse;
++ (NSDictionary *)indexResponse;
+@end
+
+@implementation HealthCheckHandler
+
++ (NSDictionary *)healthResponse {
+    auto elapsed = std::chrono::steady_clock::now() - gStartup;
+    double uptimeS = std::chrono::duration&lt;double&gt;(elapsed).count();
+    return @{
+        @&quot;status&quot;: @&quot;ok&quot;,
+        @&quot;uptime_s&quot;: @(round(uptimeS * 10.0) / 10.0),
+    };
+}
+
++ (NSDictionary *)indexResponse {
+    return @{
+        @&quot;service&quot;: @&quot;extracted-svc&quot;,
+        @&quot;version&quot;: @&quot;1.0&quot;,
+    };
+}
+
+@end
+
+// ── Minimal HTTP server sketch (matches Dockerfile EXPOSE 8080) ──────
+
+@interface ServiceBootstrap : NSObject
+// Bind 0.0.0.0:8080 with worker threads — mirrors Docker CMD + workers.
+- (void)startOnPort:(uint16_t)port workers:(int)n;
+@end
+
+@implementation ServiceBootstrap
+
+- (void)startOnPort:(uint16_t)port workers:(int)n {
+    // Production: open BSD socket, spawn `n` dispatch worker queues,
+    // route /health -&gt; [HealthCheckHandler healthResponse],
+    // route /      -&gt; [HealthCheckHandler indexResponse].
+    NSLog(@&quot;Service listening on 0.0.0.0:%d with %d workers&quot;, port, n);
+}
+
+@end
+
+int main() {
+    @autoreleasepool {
+        ServiceBootstrap *svc = [[ServiceBootstrap alloc] init];
+        // Matches Dockerfile CMD: 4 workers on port 8080
+        [svc startOnPort:8080 workers:4];
+        [[NSRunLoop mainRunLoop] run];
+    }
+    return 0;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Week 1</span><p>Containerize monolith: Dockerfile, ECS task def, deploy alongside EC2 at 0% traffic</p></div>
+    <div class="seq-row"><span class="actor">Week 2</span><p>Canary: 10% traffic to containerized monolith, compare error rates → stable</p></div>
+    <div class="seq-row"><span class="actor">Week 3</span><p>Ramp to 100% container, decommission EC2 instances. Monolith now runs on ECS</p></div>
+    <div class="seq-row"><span class="actor">Week 5</span><p>Extract Orders service: new repo, separate ECS task, shadow traffic for validation</p></div>
+    <div class="seq-row"><span class="actor">Week 6</span><p>Canary: 10% of /api/orders to new service, 90% to monolith. Monitor p99 and errors</p></div>
+    <div class="seq-row"><span class="actor">Week 8</span><p>Full cutover: 100% /api/orders to new service. Monolith code for orders marked deprecated</p></div>
+    <div class="seq-row"><span class="actor">Week 10</span><p>Grant direct DB access to orders-service; remove monolith→DB path for order tables</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>ECS Fargate vs EKS</strong>
+              <p>Fargate is simpler (no cluster ops) but less flexible. EKS gives Kubernetes ecosystem but requires cluster management expertise</p>
+            </div>
+            <div>
+              <strong>Lift-and-shift first vs extract first</strong>
+              <p>Containerizing the monolith first validates the container runtime. Extracting directly is faster but riskier — you change two things at once</p>
+            </div>
+            <div>
+              <strong>API gateway vs ALB path routing</strong>
+              <p>API gateway (Kong, AWS API GW) gives rate limiting, auth, transforms. ALB is simpler and cheaper for basic routing during migration</p>
+            </div>
+            <div>
+              <strong>Shared DB vs API calls during transition</strong>
+              <p>Shared DB is simpler but risks dual-write bugs. API calls add latency but enforce single writer</p>
+            </div>
+            <div>
+              <strong>Big bang vs gradual migration</strong>
+              <p>Big bang is faster but all-or-nothing. Gradual (strangler) is slower but each step is independently rollback-able</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Container OOM because memory limit set too low — monitor memory usage during shadow testing; set limits at 2× observed peak</li>
+            <li>Session loss after migration — externalize sessions to Redis before containerizing; not after</li>
+            <li>Database connection exhaustion: 5 services × 10 connections = 50 plus monolith&#x27;s 10 → PgBouncer needed</li>
+            <li>ALB path routing conflict: /api/orders and /api/orders/batch match different rules → order ALB rules by specificity</li>
+            <li>Rollback after schema migration: new service added a DB column that monolith does not know about → use additive-only migrations</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle stateful components (file uploads, cron jobs) during migration?</li>
+            <li>How do you manage API versioning when monolith and service return slightly different responses?</li>
+            <li>When would you decompose the database into per-service schemas?</li>
+            <li>How would you add distributed tracing across the monolith and new services?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: the strangler fig pattern with ALB path routing, phased traffic migration (shadow → canary → full), database ownership strategy during transition, and instant rollback via ALB rules. Mention the lift-and-shift-first approach to de-risk the container runtime.</p>
+          <p>You do not need to design the full Kubernetes manifest or the service mesh. The interviewer wants to see: awareness that the database (not Docker) is the hard part, a rollback plan at every stage, and a migration approach that is incrementally shippable — not a 6-month silence followed by a big bang.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../vpc_multitier/">← Design a VPC for a multi-tier app</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../s3_landing_zone/">Build an S3-backed data lake landing zone →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

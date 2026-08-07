@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a schema for multi-tenant SaaS | Database | Engineering Notes</title>
+  <meta name="description" content="Tenancy is a product and ops decision dressed as a schema choice — isolation, cost, and migrations all pull different directions.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Design a schema for multi-tenant SaaS</p>
+      <p class="eyebrow">Database · Hard · ~60 min</p>
+      <h1>Design a schema for multi-tenant SaaS</h1>
+      <p class="problem-deck">Tenancy is a product and ops decision dressed as a schema choice — isolation, cost, and migrations all pull different directions.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify tenancy model</strong><p>How many tenants, size skew, compliance needs.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Enumerate approaches</strong><p>Shared table, schema-per-tenant, DB-per-tenant, hybrid.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Schema design</strong><p>Row-level tenant_id, RLS policies, composite PKs.</p></div></div>
+            <div class="stack-step"><strong>25–40</strong><div><strong>Deep dive shared table</strong><p>Index strategies, query rewrite, noisy-neighbor mitigation.</p></div></div>
+            <div class="stack-step"><strong>40–50</strong><div><strong>Migration and onboarding</strong><p>Expand/contract DDL across 2,000 tenants.</p></div></div>
+            <div class="stack-step"><strong>50–60</strong><div><strong>Trade-offs and follow-ups</strong><p>Cost, isolation, compliance, shard-nothing escape hatch.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d open by asking how many tenants we expect and how much variance in size they&#x27;ll have. A B2B SaaS with 50 enterprise clients is a completely different animal from a platform with 200,000 SMBs. The former can tolerate DB-per-tenant; the latter cannot.</p>
+          <p>Then I&#x27;d ask about compliance — do any tenants require data residency in a specific region, or SOC-2 isolation guarantees? That single question can eliminate shared-table as an option for some cohorts. I&#x27;ve seen teams build a shared model and then retrofit isolation for one whale customer, which is painful.</p>
+          <p>Finally I&#x27;d discuss the migration story. Schema-per-tenant sounds clean until you need to ALTER TABLE across 2,000 schemas and some of them are on Postgres 12 replicas that lag 30 seconds behind.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many tenants day-one and at steady state (hundreds vs hundreds of thousands)?</li>
+            <li>What is the size distribution — are 5% of tenants 90% of data?</li>
+            <li>Do any tenants require dedicated infrastructure for compliance?</li>
+            <li>Are there cross-tenant queries (analytics, admin dashboards)?</li>
+            <li>How frequently do we run DDL migrations?</li>
+            <li>What is the target onboarding latency for a new tenant?</li>
+            <li>Do tenants need independent backup and restore?</li>
+            <li>Is there a free tier that should have minimal operational cost?</li>
+            <li>Will we support tenant-specific feature flags at the DB level?</li>
+            <li>What database engine are we on — Postgres, MySQL, managed cloud?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: schema layout, tenant isolation, index strategy, migration workflow.</li>
+            <li>Out: application-layer auth, billing, UI multi-tenancy.</li>
+            <li>Out: full sharding strategy (separate problem).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Tenant CRUD</strong>
+              <p>Create, read, update, delete tenant data with strict isolation.</p>
+            </div>
+            <div>
+              <strong>Onboarding</strong>
+              <p>Provision a new tenant in under 5 seconds.</p>
+            </div>
+            <div>
+              <strong>Cross-tenant analytics</strong>
+              <p>Admin can query aggregates across all tenants.</p>
+            </div>
+            <div>
+              <strong>Tenant export</strong>
+              <p>Export all data for a single tenant for portability.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Isolation</strong>
+              <p>Tenant A&#x27;s queries must never return tenant B&#x27;s rows.</p>
+            </div>
+            <div>
+              <strong>Performance</strong>
+              <p>p99 query latency &lt; 20 ms with 10,000 concurrent tenants.</p>
+            </div>
+            <div>
+              <strong>Scalability</strong>
+              <p>Schema supports 500M total rows across all tenants.</p>
+            </div>
+            <div>
+              <strong>Migration safety</strong>
+              <p>DDL changes apply to all tenants atomically or with rollback.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Tenants</strong>
+              <p>200,000 SMB tenants, median 2,500 rows each = 500M rows.</p>
+            </div>
+            <div>
+              <strong>Row size</strong>
+              <p>~400 bytes average → 500M × 400B = 200 GB raw data.</p>
+            </div>
+            <div>
+              <strong>Indexes</strong>
+              <p>Composite (tenant_id, entity_id) adds ~40% overhead → 280 GB total.</p>
+            </div>
+            <div>
+              <strong>IOPS</strong>
+              <p>Peak 50,000 reads/s; 5,000 writes/s. Shared table must not funnel into one btree.</p>
+            </div>
+            <div>
+              <strong>Connections</strong>
+              <p>Connection pooling required; 200k tenants × 1 conn = impossible without PgBouncer.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Tenant-scoped read (RLS enforces tenant_id)
+SET app.current_tenant = &#x27;{{tenant_id}}&#x27;;
+SELECT * FROM orders WHERE status = &#x27;active&#x27; ORDER BY created_at DESC LIMIT 20;
+
+-- Admin cross-tenant aggregate
+SELECT tenant_id, COUNT(*) AS order_count
+FROM orders
+GROUP BY tenant_id
+ORDER BY order_count DESC
+LIMIT 100;
+
+-- Onboard new tenant
+INSERT INTO tenants (id, name, plan, created_at)
+VALUES (gen_random_uuid(), &#x27;Acme Corp&#x27;, &#x27;pro&#x27;, now());</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE tenants (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    plan        TEXT NOT NULL DEFAULT &#x27;free&#x27;,
+    region      TEXT NOT NULL DEFAULT &#x27;us-east-1&#x27;,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE orders (
+    tenant_id   UUID NOT NULL REFERENCES tenants(id),
+    id          UUID NOT NULL DEFAULT gen_random_uuid(),
+    customer_id UUID NOT NULL,
+    status      TEXT NOT NULL DEFAULT &#x27;pending&#x27;,
+    total_cents BIGINT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+
+-- Row-Level Security
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON orders
+    USING (tenant_id = current_setting(&#x27;app.current_tenant&#x27;)::UUID);
+
+CREATE INDEX idx_orders_tenant_status ON orders (tenant_id, status, created_at DESC);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>There are three classic models. Shared table: all tenants in one table, discriminated by a tenant_id column. Schema-per-tenant: each tenant gets its own Postgres schema inside a shared database. DB-per-tenant: each tenant gets a dedicated database or cluster. The right answer is almost always a hybrid.</p>
+          <p>For the shared-table path, the tenant_id must be the leading column in every composite primary key and every index. Postgres RLS enforces isolation at the engine level — even a buggy application query cannot leak data. The cost is that every query plan includes a tenant_id filter, and the planner must have accurate per-tenant statistics.</p>
+          <p>Schema-per-tenant gives stronger isolation without the operational cost of separate databases. Each schema has identical DDL, so migrations run in a loop. The downside is connection management: PgBouncer or pgpool must set search_path per connection, and schema count above 10,000 starts hurting catalog performance.</p>
+          <p>DB-per-tenant is the nuclear option — full isolation, independent backups, per-tenant scaling. But operational cost scales linearly with tenant count. I&#x27;ve used this for regulated enterprises (healthcare, finance) where a shared-anything model fails an audit.</p>
+          <p>The hybrid I prefer: shared table for free and standard tiers, schema-per-tenant for premium, DB-per-tenant for enterprise. A routing layer resolves tenant_id to the correct connection pool. This lets you optimize cost for the long tail and isolation for the whales.</p>
+<figure class="diagram dark" aria-label="Multi-tenant schema models">
+  <div class="flow-row">
+    <div class="node">Shared Table<br>tenant_id column<br>200k tenants</div>
+    <div class="node">Schema-per-Tenant<br>search_path routing<br>1k–10k tenants</div>
+    <div class="node accent">DB-per-Tenant<br>full isolation<br>10–100 tenants</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Hybrid routing layer">
+  <div class="flow-row">
+    <div class="node">App request</div>
+    <div class="node accent">Tenant Router</div>
+    <div class="node">Free tier → shared table</div>
+  </div>
+  <div class="flow-row">
+    <div class="node"></div>
+    <div class="node accent">Tenant Router</div>
+    <div class="node">Enterprise → dedicated DB</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s walk through shared-table RLS in Postgres. When a request arrives, the app sets a session variable: SET app.current_tenant = &#x27;uuid-here&#x27;. The RLS policy on each table says USING (tenant_id = current_setting(&#x27;app.current_tenant&#x27;)::UUID). Every SELECT, UPDATE, and DELETE is automatically filtered — even a rogue SELECT * FROM orders returns only that tenant&#x27;s rows.</p>
+          <p>The gotcha is superuser and table owner bypass RLS by default. You must create a restricted application role and GRANT it only the needed privileges. SET ROW SECURITY FOR the role, or use FORCE ROW LEVEL SECURITY on the policy. Miss this, and your admin dashboard leaks all tenants.</p>
+          <p>Index design matters more than people think. A naive index on (status) means the planner scans 500M rows for one tenant&#x27;s &#x27;active&#x27; orders. The composite index (tenant_id, status, created_at DESC) turns that into an index-only scan over ~2,500 rows. I&#x27;ve seen 400× speedups just from fixing index prefix order.</p>
+          <p>Migration strategy: for shared tables, standard ALTER TABLE applies to everyone at once — good for adding nullable columns. For schema-per-tenant, you loop over schemas and run the DDL inside a transaction per schema. If schema 1,247 fails, you roll back that one and continue. A migration status table tracks which schemas have been upgraded, enabling idempotent retries. For DB-per-tenant, you treat it like a fleet deployment: rolling upgrades with canary tenants first.</p>
+          <p>Noisy-neighbor mitigation in shared tables: set statement_timeout per tenant plan (free: 5s, pro: 30s). Use pg_stat_statements to identify tenants generating disproportionate load. In extreme cases, move the offending tenant to its own schema or database — your hybrid routing layer makes this a config change, not a code change.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Tenant-scoped query flow">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">App</span><p>SET app.current_tenant = tenant_uuid</p></div>
+    <div class="seq-row"><span class="actor">PgBouncer</span><p>Route to correct pool, set search_path</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>RLS policy filters rows by tenant_id</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>Return only tenant-scoped result set</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Render response (no tenant_id in WHERE needed)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Shared table vs schema-per-tenant</strong>
+              <p>Lower cost and simpler ops vs stronger isolation and easier per-tenant backup.</p>
+            </div>
+            <div>
+              <strong>RLS vs application-level filtering</strong>
+              <p>RLS is defense-in-depth but adds ~2-5% overhead per query; app filtering is faster but one bug leaks data.</p>
+            </div>
+            <div>
+              <strong>Composite PK (tenant_id, id) vs surrogate PK</strong>
+              <p>Composite enables partition pruning and co-located indexes; surrogate simplifies ORM mapping.</p>
+            </div>
+            <div>
+              <strong>Connection pooling</strong>
+              <p>PgBouncer in transaction mode is mandatory at scale but breaks SET commands — use SET LOCAL inside transactions.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Forgetting to set tenant context before a query — RLS returns empty set or wrong tenant&#x27;s data.</li>
+            <li>Superuser bypassing RLS by default; must use a restricted app role.</li>
+            <li>Index missing tenant_id as leading column — full table scan on 500M rows.</li>
+            <li>Schema-per-tenant with 50,000 schemas — catalog bloat crashes pg_dump.</li>
+            <li>Migrations that lock a shared table for ALTER — blocks all tenants.</li>
+            <li>Not testing RLS with the actual app role during development.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you partition the shared table by tenant_id for very large deployments?</li>
+            <li>What changes for multi-region with data residency requirements?</li>
+            <li>How do you handle tenant deletion and GDPR right-to-erasure?</li>
+            <li>How would you implement per-tenant rate limiting at the database level?</li>
+            <li>What monitoring would you add to detect noisy neighbors early?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Discuss all three models with clear criteria for choosing each. Show a shared-table schema with tenant_id-leading indexes and Postgres RLS. Mention the hybrid approach for mixed workloads. Address migration strategy and noisy-neighbor mitigation — that separates senior engineers from candidates who just read the blog post.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../slow_order_limit/">Fix a slow ORDER BY + LIMIT query →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

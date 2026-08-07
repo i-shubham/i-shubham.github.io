@@ -32,19 +32,37 @@ class Navigation {
     getNavItems() {
         const basePath = this.getBasePath();
         const travelDepth = this.getSectionDepth('travel');
+        const techDepth = this.getIndexedSectionDepth('tech');
         // Prefer extensionless travel home: /travel/ rather than /travel/index.html
         let travelUrl = `${basePath}travel/`;
         if (travelDepth !== null) {
             travelUrl = travelDepth === 0 ? './' : '../'.repeat(travelDepth);
+        }
+        let techUrl = `${basePath}tech/tech-index.html`;
+        if (techDepth !== null) {
+            techUrl = techDepth === 0 ? './tech-index.html' : '../'.repeat(techDepth) + 'tech-index.html';
         }
 
         return [
             { id: 'portfolio', text: 'Portfolio', url: `${basePath}`, icon: 'fas fa-user' },
             { id: 'travel', text: 'Travel-Blog', url: travelUrl, icon: 'fas fa-plane' },
             { id: 'youtube', text: 'YouTube', url: 'https://www.youtube.com/@i-shubham-mallick', icon: 'fab fa-youtube', external: true },
-            { id: 'tech', text: 'Tech-Blog', url: `${basePath}tech/tech-index.html`, icon: 'fas fa-code' },
+            { id: 'tech', text: 'Tech-Blog', url: techUrl, icon: 'fas fa-code' },
             { id: 'gpt', text: 'Open-GPT', url: `${basePath}gpt/gpt-index.html`, icon: 'fas fa-robot', special: true }
         ];
+    }
+
+    // Like getSectionDepth, but treats files such as tech-index.html as the section root
+    // so nested posts (tech/posts/...) still resolve assets correctly.
+    getIndexedSectionDepth(section) {
+        const path = window.location.pathname;
+        const marker = new RegExp(`/${section}(?:/|$)`);
+        if (!marker.test(path)) return null;
+        const after = (path.split(new RegExp(`/${section}/?`))[1] || '')
+            .replace(/\/index\.html$/i, '')
+            .replace(/\/$/, '')
+            .replace(/^[\w-]+-index\.html$/i, '');
+        return after.split('/').filter(Boolean).length;
     }
 
     getBasePath() {
@@ -54,7 +72,8 @@ class Navigation {
             // /travel/ → ../ ; /travel/pages/france/paris/ → ../../../../
             return '../'.repeat(travelDepth + 1);
         }
-        if (path.includes('/tech/')) return '../';
+        const techDepth = this.getIndexedSectionDepth('tech');
+        if (techDepth !== null) return '../'.repeat(techDepth + 1);
         if (path.includes('/gpt/')) return '../';
         return './';
     }

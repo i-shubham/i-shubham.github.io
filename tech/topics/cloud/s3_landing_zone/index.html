@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build an S3-backed data lake landing zone | Cloud | Engineering Notes</title>
+  <meta name="description" content="A landing zone is policy and layout — buckets without lifecycle or IAM fences become infinite expensive junk drawers.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Build an S3-backed data lake landing zone</p>
+      <p class="eyebrow">Cloud · Medium · ~60 min</p>
+      <h1>Build an S3-backed data lake landing zone</h1>
+      <p class="problem-deck">A landing zone is policy and layout — buckets without lifecycle or IAM fences become infinite expensive junk drawers.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Data volume, source count, compliance, encryption requirements</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Layer architecture</strong><p>Raw (immutable), staging (transient), curated (governed)</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Prefix + bucket design</strong><p>One bucket per layer or shared with prefix separation; partition layout</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>IAM policies</strong><p>Role per team, scoped by layer and domain; bucket policies for guardrails</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Lifecycle rules</strong><p>Raw to IA/Glacier, staging auto-delete, curated retention management</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Encryption + logging</strong><p>SSE-KMS default, deny unencrypted, CloudTrail for audit</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Failure modes</strong><p>Accidental deletion, cost explosion from unmanaged data, permission creep</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>A data lake landing zone is not a bucket with some folders — it is a set of policies, access controls, and conventions that prevent the lake from becoming an expensive, ungovernable junk drawer. I have inherited lakes where 40% of storage cost was unreferenced files, encryption was inconsistent, and every team had full read/write to every prefix.</p>
+          <p>The landing zone defines three layers: raw (immutable source data), staging (transformed intermediate data), and curated (clean, governed, queryable tables). Each layer has different access policies, lifecycle rules, and retention requirements. Raw data is append-only — nobody deletes or modifies raw files. Staging has a 7-day TTL. Curated is the production layer with strict access control.</p>
+          <p>The prefix structure matters for IAM policies and Athena/Spark partition pruning. I use: s3://{bucket}/{layer}/{domain}/{table}/dt={date}/. IAM policies scope access by layer and domain — the analytics team can read curated/* but not raw/*, and each domain team owns their raw/{domain}/ prefix.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many source systems and domains?</li>
+            <li>Expected data volume per day/month?</li>
+            <li>Encryption requirement — SSE-S3, SSE-KMS, or client-side?</li>
+            <li>Compliance framework — do we need audit logs on every access?</li>
+            <li>Who needs access — data eng, analytics, ML, external partners?</li>
+            <li>Retention policies — how long to keep raw, staging, curated?</li>
+            <li>Cross-account access — multiple AWS accounts?</li>
+            <li>File formats — CSV, JSON, Parquet, Avro?</li>
+            <li>Query engine — Athena, Spark, Trino?</li>
+            <li>Existing lake or greenfield?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Bucket structure, prefix layout, lifecycle rules, IAM policies, encryption, logging</li>
+            <li>In scope — Three-layer architecture: raw → staging → curated</li>
+            <li>Out of scope — ETL pipeline design, table format selection (Iceberg vs Delta)</li>
+            <li>Defer — Data catalog integration, data quality framework</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Prefix layout</strong>
+              <p>Consistent {layer}/{domain}/{table}/dt={date}/ structure</p>
+            </div>
+            <div>
+              <strong>Access control</strong>
+              <p>IAM policies scoped by layer and domain; least privilege</p>
+            </div>
+            <div>
+              <strong>Lifecycle rules</strong>
+              <p>Raw: 90-day IA, 365-day Glacier. Staging: 7-day delete. Curated: no expiry</p>
+            </div>
+            <div>
+              <strong>Encryption</strong>
+              <p>SSE-KMS by default; bucket policy denies unencrypted uploads</p>
+            </div>
+            <div>
+              <strong>Logging</strong>
+              <p>S3 access logs + CloudTrail data events for audit</p>
+            </div>
+            <div>
+              <strong>Versioning</strong>
+              <p>Enabled on raw bucket for accidental deletion protection</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cost</strong>
+              <p>Lifecycle rules save 40%+ on raw storage via tiering</p>
+            </div>
+            <div>
+              <strong>Security</strong>
+              <p>No public access; encryption enforced; least-privilege IAM</p>
+            </div>
+            <div>
+              <strong>Auditability</strong>
+              <p>Every read/write logged with identity, timestamp, and object</p>
+            </div>
+            <div>
+              <strong>Scalability</strong>
+              <p>Support 50+ source domains without restructuring</p>
+            </div>
+            <div>
+              <strong>Performance</strong>
+              <p>Prefix layout supports partition pruning for time-range queries</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Daily ingest</strong>
+              <p>500GB/day raw across 15 domains</p>
+            </div>
+            <div>
+              <strong>Raw storage (1 year)</strong>
+              <p>500GB × 365 = 182TB; after lifecycle (90-day IA, 365-day Glacier): effective cost 40% less</p>
+            </div>
+            <div>
+              <strong>Staging</strong>
+              <p>200GB/day × 7-day TTL = 1.4TB steady state</p>
+            </div>
+            <div>
+              <strong>Curated</strong>
+              <p>100GB/day net growth (compressed Parquet); 36TB/year</p>
+            </div>
+            <div>
+              <strong>Cost without lifecycle</strong>
+              <p>182TB × $0.023/GB = $4,186/month for raw alone</p>
+            </div>
+            <div>
+              <strong>Cost with lifecycle</strong>
+              <p>90 days Standard + IA + Glacier ≈ $2,500/month for raw (40% savings)</p>
+            </div>
+            <div>
+              <strong>Access logs</strong>
+              <p>~10GB/day of log data at $0.023/GB = $0.23/day (negligible)</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Lifecycle rules configuration
+# ─────────────────────────────────────────
+
+# Raw bucket: tiered storage
+lifecycle_rules:
+  - id: raw-to-ia
+    prefix: &quot;&quot;
+    transitions:
+      - days: 90
+        storage_class: STANDARD_IA
+      - days: 365
+        storage_class: GLACIER
+    expiration:
+      days: 2555  # 7 years for compliance
+
+# Staging bucket: auto-delete
+lifecycle_rules:
+  - id: staging-cleanup
+    prefix: &quot;&quot;
+    expiration:
+      days: 7
+    noncurrent_version_expiration:
+      days: 1
+
+# IAM role mapping
+# ─────────────────────────────────────────
+# data-eng-role:  s3:GetObject on lake-raw-prod/*, s3:* on lake-staging-prod/*, s3:* on lake-curated-prod/*
+# analytics-role: s3:GetObject on lake-curated-prod/*
+# ml-role:        s3:GetObject on lake-curated-prod/*, s3:PutObject on lake-ml-artifacts/
+# domain-orders:  s3:PutObject on lake-raw-prod/orders/*</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The landing zone design has four pillars: structure, access, cost, and audit.</p>
+          <p>Structure: I use one bucket per layer (raw, staging, curated) rather than one mega-bucket with prefix-based separation. Separate buckets allow: different lifecycle rules per bucket (staging auto-deletes, raw transitions to Glacier), different IAM policies at the bucket level (simpler than prefix-level conditions), and independent versioning settings (raw is versioned, staging is not). Within each bucket, the prefix follows {domain}/{table}/dt={date}/. This aligns with Hive-style partitioning for query engines.</p>
+          <p>Access: IAM roles are scoped by team and layer. The data engineering team has read/write on raw and staging, plus read/write on curated (they publish tables). Analytics has read-only on curated — they cannot touch raw or staging. Domain teams (e.g., the orders team) can write to raw/orders/ but not raw/payments/. Bucket policies enforce guardrails that IAM alone cannot: deny unencrypted uploads, deny public access, require specific KMS key for encryption.</p>
+          <p>Cost: lifecycle rules are the single biggest cost lever. Raw data transitions from Standard to Standard-IA at 90 days ($0.023 → $0.0125/GB, 46% savings) and to Glacier at 365 days ($0.004/GB, 83% savings). Staging auto-deletes after 7 days. For curated, I add intelligent tiering on partitions older than 180 days. At 182TB of raw data, lifecycle rules save ~$1,700/month.</p>
+          <p>Audit: CloudTrail data events log every S3 read and write with the IAM identity, timestamp, and object key. This is required for SOC2 and HIPAA. S3 access logs provide additional detail (referrer, TLS version) but overlap with CloudTrail. I enable CloudTrail data events and skip S3 access logs unless compliance specifically requires both. Flow: CloudTrail → S3 → Athena for ad-hoc audit queries.</p>
+<figure class="diagram dark">
+  <figcaption>Landing Zone Layers</figcaption>
+  <div class="flow-row">
+    <div class="node">Sources<br><small>15 domains</small></div>
+    <div class="node accent">Raw Bucket<br><small>immutable, versioned</small></div>
+    <div class="node">Staging Bucket<br><small>7-day TTL</small></div>
+    <div class="node accent">Curated Bucket<br><small>governed, queryable</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Storage Tiering (Raw)</figcaption>
+  <div class="flow-row">
+    <div class="node accent">Standard<br><small>0-90 days, $0.023/GB</small></div>
+    <div class="node">Standard-IA<br><small>90-365 days, $0.0125/GB</small></div>
+    <div class="node">Glacier<br><small>365+ days, $0.004/GB</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Access Control Matrix</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">Data Eng</span><p>raw: R/W, staging: R/W, curated: R/W</p></div>
+    <div class="node"><span class="label">Analytics</span><p>curated: R only</p></div>
+    <div class="node"><span class="label">ML Team</span><p>curated: R, ml-artifacts: R/W</p></div>
+    <div class="node"><span class="label">Domain Team</span><p>raw/{domain}: W only</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Bucket per layer vs single bucket: a single bucket with prefix separation is simpler to manage but harder to govern. Lifecycle rules apply per prefix, which works, but IAM conditions on prefixes (s3:prefix) are error-prone — a trailing slash or wildcard mismatch silently grants broader access than intended. Separate buckets make IAM simple: arn:aws:s3:::lake-curated-prod/* is unambiguous. The trade-off: managing 3-4 buckets per environment instead of 1.</p>
+          <p>S3 request rate limits: S3 supports 5,500 GET and 3,500 PUT requests per second per prefix. With the Hive-style prefix layout, each dt= partition is a separate prefix, so request limits are effectively unlimited for time-partitioned data. But if all writes target a single prefix (e.g., streaming to a non-partitioned bucket), you can hit limits. Mitigation: add random prefix entropy or use hourly partitions.</p>
+          <p>Encryption key management: SSE-KMS with a customer-managed key (CMK) gives audit trails on who accessed the key (CloudTrail key events) and the ability to revoke access by disabling the key. But KMS has a request rate limit: 30,000 requests/second per key per region. At high read volumes (millions of S3 GETs/hour), you can hit KMS throttling. Mitigation: use S3 Bucket Keys, which cache the data encryption key at the bucket level, reducing KMS calls by 99%.</p>
+          <p>Cross-account access: if the lake serves multiple AWS accounts (prod, staging, analytics), bucket policies grant cross-account access to specific IAM roles. The analytics account&#x27;s role assumes access via sts:AssumeRole with an external ID. The bucket policy grants the role&#x27;s ARN read access to lake-curated-prod/*. This is more secure than making the bucket public or sharing IAM credentials.</p>
+          <p>Data retention and compliance: for GDPR, we may need to delete specific records from raw data — but raw is designed as immutable. The approach: tag files containing PII, and when a deletion request arrives, rewrite the affected files with the specific records removed. Iceberg/Delta on the curated layer handle this natively with row-level deletes. Raw file rewriting is expensive and should be batched monthly.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Landing zone bucket setup with encryption and public access block</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+import json
+
+def setup_landing_zone(env=&#x27;prod&#x27;, region=&#x27;us-east-1&#x27;):
+    s3 = boto3.client(&#x27;s3&#x27;, region_name=region)
+    layers = [&#x27;raw&#x27;, &#x27;staging&#x27;, &#x27;curated&#x27;]
+
+    for layer in layers:
+        bucket = f&#x27;lake-{layer}-{env}&#x27;
+        s3.create_bucket(Bucket=bucket)
+
+        # Block all public access
+        s3.put_public_access_block(
+            Bucket=bucket,
+            PublicAccessBlockConfiguration={
+                &#x27;BlockPublicAcls&#x27;: True, &#x27;IgnorePublicAcls&#x27;: True,
+                &#x27;BlockPublicPolicy&#x27;: True, &#x27;RestrictPublicBuckets&#x27;: True
+            }
+        )
+
+        # Enable default encryption (SSE-KMS)
+        s3.put_bucket_encryption(
+            Bucket=bucket,
+            ServerSideEncryptionConfiguration={
+                &#x27;Rules&#x27;: [{&#x27;ApplyServerSideEncryptionByDefault&#x27;: {
+                    &#x27;SSEAlgorithm&#x27;: &#x27;aws:kms&#x27;,
+                    &#x27;KMSMasterKeyID&#x27;: f&#x27;alias/lake-{layer}-key&#x27;
+                }, &#x27;BucketKeyEnabled&#x27;: True}]
+            }
+        )
+
+        # Versioning on raw only
+        if layer == &#x27;raw&#x27;:
+            s3.put_bucket_versioning(
+                Bucket=bucket,
+                VersioningConfiguration={&#x27;Status&#x27;: &#x27;Enabled&#x27;}
+            )</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_s3 as s3;
+use s3::types::{
+    BucketVersioningStatus, PublicAccessBlockConfiguration,
+    ServerSideEncryptionByDefault, ServerSideEncryptionConfiguration,
+    ServerSideEncryptionRule, VersioningConfiguration,
+};
+
+pub async fn setup_landing_zone(env: &amp;str, region: &amp;str) {
+    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(region.to_string()))
+        .load()
+        .await;
+    let client = s3::Client::new(&amp;config);
+    let layers = [&quot;raw&quot;, &quot;staging&quot;, &quot;curated&quot;];
+
+    for layer in &amp;layers {
+        let bucket = format!(&quot;lake-{layer}-{env}&quot;);
+
+        client.create_bucket().bucket(&amp;bucket).send().await.unwrap();
+
+        // Block all public access
+        client
+            .put_public_access_block()
+            .bucket(&amp;bucket)
+            .public_access_block_configuration(
+                PublicAccessBlockConfiguration::builder()
+                    .block_public_acls(true)
+                    .ignore_public_acls(true)
+                    .block_public_policy(true)
+                    .restrict_public_buckets(true)
+                    .build(),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        // SSE-KMS default encryption
+        let sse = ServerSideEncryptionConfiguration::builder()
+            .rules(
+                ServerSideEncryptionRule::builder()
+                    .apply_server_side_encryption_by_default(
+                        ServerSideEncryptionByDefault::builder()
+                            .sse_algorithm(s3::types::ServerSideEncryption::AwsKms)
+                            .kms_master_key_id(format!(&quot;alias/lake-{layer}-key&quot;))
+                            .build(),
+                    )
+                    .bucket_key_enabled(true)
+                    .build(),
+            )
+            .build();
+        client
+            .put_bucket_encryption()
+            .bucket(&amp;bucket)
+            .server_side_encryption_configuration(sse)
+            .send()
+            .await
+            .unwrap();
+
+        // Versioning on raw layer only
+        if *layer == &quot;raw&quot; {
+            client
+                .put_bucket_versioning()
+                .bucket(&amp;bucket)
+                .versioning_configuration(
+                    VersioningConfiguration::builder()
+                        .status(BucketVersioningStatus::Enabled)
+                        .build(),
+                )
+                .send()
+                .await
+                .unwrap();
+        }
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Conceptual AWS S3 client protocol — production would use the
+// AWS C++ SDK or signed REST calls.
+@protocol AWSS3Client &lt;NSObject&gt;
+- (void)createBucket:(NSString *)bucket;
+- (void)putPublicAccessBlock:(NSString *)bucket config:(NSDictionary *)cfg;
+- (void)putBucketEncryption:(NSString *)bucket config:(NSDictionary *)cfg;
+- (void)putBucketVersioning:(NSString *)bucket enabled:(BOOL)enabled;
+@end
+
+static void setupLandingZone(id&lt;AWSS3Client&gt; s3,
+                             NSString *env,
+                             NSString *region) {
+    NSArray *layers = @[@&quot;raw&quot;, @&quot;staging&quot;, @&quot;curated&quot;];
+
+    for (NSString *layer in layers) {
+        NSString *bucket = [NSString stringWithFormat:@&quot;lake-%@-%@&quot;, layer, env];
+
+        [s3 createBucket:bucket];
+
+        // Block all public access
+        [s3 putPublicAccessBlock:bucket config:@{
+            @&quot;BlockPublicAcls&quot;:       @YES,
+            @&quot;IgnorePublicAcls&quot;:      @YES,
+            @&quot;BlockPublicPolicy&quot;:     @YES,
+            @&quot;RestrictPublicBuckets&quot;: @YES,
+        }];
+
+        // SSE-KMS default encryption
+        NSString *kmsKey = [NSString stringWithFormat:
+                            @&quot;alias/lake-%@-key&quot;, layer];
+        [s3 putBucketEncryption:bucket config:@{
+            @&quot;SSEAlgorithm&quot;:    @&quot;aws:kms&quot;,
+            @&quot;KMSMasterKeyID&quot;:  kmsKey,
+            @&quot;BucketKeyEnabled&quot;: @YES,
+        }];
+
+        // Versioning on raw layer only
+        if ([layer isEqualToString:@&quot;raw&quot;])
+            [s3 putBucketVersioning:bucket enabled:YES];
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Source</span><p>Orders system uploads daily file to s3://lake-raw-prod/orders/dt=2024-06-15/run_id=af83c1/</p></div>
+    <div class="seq-row"><span class="actor">S3</span><p>Bucket policy check: KMS encryption ✓, IAM role domain-orders has PutObject ✓</p></div>
+    <div class="seq-row"><span class="actor">CloudTrail</span><p>Log: PutObject by role/domain-orders on lake-raw-prod/orders/dt=2024-06-15/...</p></div>
+    <div class="seq-row"><span class="actor">Pipeline</span><p>Spark reads raw, transforms, writes to s3://lake-staging-prod/orders/dt=2024-06-15/</p></div>
+    <div class="seq-row"><span class="actor">Quality Gate</span><p>Checks pass → publish to s3://lake-curated-prod/orders/dt=2024-06-15/</p></div>
+    <div class="seq-row"><span class="actor">Lifecycle</span><p>After 90 days: raw file transitions to Standard-IA. After 365 days: Glacier</p></div>
+    <div class="seq-row"><span class="actor">Lifecycle</span><p>After 7 days: staging file auto-deleted</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>One bucket per layer vs single bucket</strong>
+              <p>Separate buckets simplify IAM and lifecycle. Single bucket is easier to manage but harder to govern</p>
+            </div>
+            <div>
+              <strong>SSE-S3 vs SSE-KMS</strong>
+              <p>SSE-S3 is free and simpler. SSE-KMS gives key audit trail and revocation but has request rate limits and ~$1/month per key</p>
+            </div>
+            <div>
+              <strong>Versioning on all vs raw only</strong>
+              <p>Versioning on raw protects against accidental deletion. On staging/curated it doubles storage cost for transient data</p>
+            </div>
+            <div>
+              <strong>CloudTrail data events vs S3 access logs</strong>
+              <p>CloudTrail integrates with IAM identity and is queryable via Athena. S3 access logs are free but harder to analyze</p>
+            </div>
+            <div>
+              <strong>Hive-style vs flat prefixes</strong>
+              <p>Hive-style (dt=2024-06-15/) enables automatic partition discovery. Flat paths are simpler but require manual partition registration</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>No lifecycle rules: raw bucket accumulates 500GB/day forever → $4K/month at year 1, $48K/year by year 2; add lifecycle on day 1</li>
+            <li>Staging TTL too short: pipeline retries need staging data that was already deleted → increase staging TTL or pin during retry windows</li>
+            <li>KMS throttling at high read volume: Athena scan triggers millions of decrypt calls → enable S3 Bucket Keys to reduce KMS calls by 99%</li>
+            <li>IAM policy too broad: analytics role with s3:* on curated accidentally deletes production table files → use s3:GetObject only, deny Delete</li>
+            <li>CIDR overlap with peered account: raw bucket inaccessible from analytics account → plan CIDRs and bucket policies before peering</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add a data catalog (Glue, Unity Catalog) on top of the landing zone?</li>
+            <li>How do you handle PII data in the lake — tokenization, masking, or separate buckets?</li>
+            <li>How would you manage the landing zone across 10+ AWS accounts?</li>
+            <li>How do you prevent cost regression as new teams start dumping data into raw?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: three-layer architecture (raw, staging, curated), prefix layout for partition pruning, lifecycle rules with concrete tier transitions and cost savings, IAM policies scoped by layer and team, encryption enforcement via bucket policy, and audit logging with CloudTrail.</p>
+          <p>You do not need to design the data catalog, ETL pipelines, or compliance automation. The interviewer wants to see: understanding that a lake without governance becomes a junk drawer, specific lifecycle rule configuration with cost math, and least-privilege access design.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../monolith_to_containers/">← Move a monolith to ECS/EKS without a big bang</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../cut_cloud_bill/">Cut a surprising cloud bill in half →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

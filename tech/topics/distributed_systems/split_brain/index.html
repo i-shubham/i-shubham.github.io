@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Handle split-brain in a leader election | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Two leaders are worse than none — fencing and quorums are how you keep reality single.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Handle split-brain in a leader election</p>
+      <p class="eyebrow">Distributed Systems · Hard · ~60 min</p>
+      <h1>Handle split-brain in a leader election</h1>
+      <p class="problem-deck">Two leaders are worse than none — fencing and quorums are how you keep reality single.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Define split-brain</strong><p>Network partition isolates old leader; followers elect a new one.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Why two leaders are dangerous</strong><p>Both accept writes → conflicting state, data loss on merge.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Quorum-based prevention</strong><p>Leader must contact majority to confirm authority — minority leader stalls.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Term / epoch numbers</strong><p>Each election increments term; followers reject requests from old terms.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Fencing and STONITH</strong><p>I/O fencing, storage-level token, shoot-the-other-node-in-the-head.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code: term-based request rejection</strong><p>Pseudocode for follower rejecting stale leader.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Real-world examples</strong><p>ZooKeeper, etcd, Raft — how they handle it.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Split-brain is the scenario where a network partition isolates the current leader, and the remaining nodes elect a new leader. Now you have two nodes that both believe they&#x27;re the leader. If both accept writes, you get divergent state that&#x27;s extremely hard to reconcile — especially for non-commutative operations like balance decrements.</p>
+          <p>The core defense has three layers. First, quorum: a leader must be able to reach a majority of nodes to serve writes. A partitioned leader that can only reach a minority automatically stalls. Second, term numbers: each election increments a monotonic term. Followers reject requests from leaders with stale terms. Third, fencing: even if the old leader doesn&#x27;t know it&#x27;s been deposed, the storage layer rejects its writes using a fencing token tied to the current term.</p>
+          <p>I&#x27;d walk through a concrete 5-node cluster where the leader gets isolated with 1 follower — the other 3 elect a new leader at term 4. The old leader at term 3 tries to replicate to its 1 follower, but that follower hears from the new leader at term 4 and rejects term 3 requests. The old leader can&#x27;t get quorum (needs 3, has 1) and steps down.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many nodes in the cluster — 3, 5, 7?</li>
+            <li>What consensus protocol is in use — Raft, ZAB, Paxos?</li>
+            <li>What kind of state does the leader manage — replicated log, K-V store, metadata?</li>
+            <li>Is the storage layer separate from the consensus nodes?</li>
+            <li>Can we use a shared storage device with SCSI fencing?</li>
+            <li>What is the acceptable unavailability window during leader election?</li>
+            <li>Do we need to handle asymmetric partitions (A can reach B but not C)?</li>
+            <li>Is there an external failure detector (e.g., a watchdog or IPMI)?</li>
+            <li>What is the heartbeat interval and election timeout?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: split-brain definition, quorum, term numbers, fencing, STONITH.</li>
+            <li>Out: full Raft / Paxos implementation, Byzantine fault tolerance.</li>
+            <li>Stretch: compare Raft&#x27;s leader lease with ZooKeeper&#x27;s session semantics.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>elect_leader(cluster)</strong>
+              <p>Exactly one leader per term, elected by majority vote.</p>
+            </div>
+            <div>
+              <strong>replicate(entry, term)</strong>
+              <p>Leader replicates log entry; followers accept only if term is current.</p>
+            </div>
+            <div>
+              <strong>step_down(leader, reason)</strong>
+              <p>Leader relinquishes role when it detects loss of quorum.</p>
+            </div>
+            <div>
+              <strong>fence_write(storage, term, data)</strong>
+              <p>Storage rejects writes from terms older than current.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Safety</strong>
+              <p>At most one leader can commit writes in any given term — no split-brain commits.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>New leader elected within 2× election timeout (~2–10 seconds).</p>
+            </div>
+            <div>
+              <strong>Consistency</strong>
+              <p>Committed entries are never lost — the new leader has all committed entries.</p>
+            </div>
+            <div>
+              <strong>Partition tolerance</strong>
+              <p>Minority partition stalls gracefully; majority continues serving.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cluster size</strong>
+              <p>5 nodes — tolerates 2 failures, quorum = 3.</p>
+            </div>
+            <div>
+              <strong>Heartbeat interval</strong>
+              <p>150 ms; election timeout randomized 300–500 ms.</p>
+            </div>
+            <div>
+              <strong>Write throughput</strong>
+              <p>~10 000 replicated writes/s with batching on leader.</p>
+            </div>
+            <div>
+              <strong>Leader election time</strong>
+              <p>p99 &lt; 2 seconds from failure detection to new leader.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Raft-style RPC interfaces
+
+RequestVote(term, candidate_id, last_log_index, last_log_term)
+  → (term, vote_granted: bool)
+
+AppendEntries(term, leader_id, prev_log_index, prev_log_term, entries[], leader_commit)
+  → (term, success: bool)
+
+# Fencing interface (storage layer)
+FencedWrite(term, key, value)
+  → OK if term &gt;= storage.current_term
+  → REJECTED if term &lt; storage.current_term</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Per-node persistent state
+current_term: int          # latest term seen
+voted_for: str | None      # candidate voted for in current term
+log: List[Entry]           # log entries: (term, index, command)
+
+# Per-node volatile state (leader only)
+next_index: Dict[peer, int]   # next log index to send to each follower
+match_index: Dict[peer, int]  # highest replicated index per follower
+
+# Fencing token store
+storage.current_term: int  # highest term that successfully wrote</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Split-brain occurs when a network partition separates the leader from the majority. The leader on the minority side continues to believe it&#x27;s the leader (it hasn&#x27;t received a higher term message). Meanwhile, the majority side times out on heartbeats and starts an election. A candidate with the most up-to-date log gets elected at term+1.</p>
+          <p>Quorum prevents the old leader from committing: to commit an entry, the leader must replicate it to a majority (including itself). If the old leader only has 1 follower in a 5-node cluster, it can&#x27;t reach quorum (needs 3). Its writes stall. Client requests time out. The old leader eventually receives a message with a higher term and steps down.</p>
+          <p>Term numbers are the universal protocol-level defense. Every message carries a term. If a follower receives an AppendEntries from term 3 but its current_term is 4 (because it voted in a new election), it rejects the request and responds with term 4. The old leader sees a term higher than its own and immediately steps down.</p>
+          <p>Fencing adds defense-in-depth at the storage layer. Even if the old leader somehow gets a write past the consensus layer (shouldn&#x27;t happen, but defense-in-depth), the storage rejects writes from stale terms. STONITH (Shoot The Other Node In The Head) goes further: the new leader power-cycles the old leader&#x27;s machine via IPMI/BMC, guaranteeing it can&#x27;t write. This is common in database HA setups (Pacemaker/Corosync).</p>
+          <p>In practice, the combination of quorum + term numbers is sufficient for well-implemented consensus protocols. Fencing and STONITH are extra layers for environments where the consensus implementation might have bugs or where shared storage is involved.</p>
+<figure class="diagram dark" aria-label="Split-brain scenario and resolution">
+  <div class="flow-row">
+    <div class="node">Partition A: Leader (term 3) + Node 2</div>
+    <div class="node">||  network split  ||</div>
+    <div class="node">Partition B: Node 3, 4, 5</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Leader: can't reach quorum (2/5)</div>
+    <div class="node accent">Partition B: elects Node 4 at term 4</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Old leader sees term 4 → steps down</div>
+    <div class="node accent">Node 4 serves writes with quorum 3/5</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Term number rejection">
+  <div class="flow-row">
+    <div class="node">Old Leader (term 3)</div>
+    <div class="node">AppendEntries(term=3, ...)</div>
+    <div class="node">Follower (current_term=4)</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">Follower rejects: my term 4 &gt; your term 3</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Consider a 5-node Raft cluster: nodes A (leader, term 3), B, C, D, E. A network partition isolates A and B from C, D, E. Node A continues sending AppendEntries(term=3) to B. B accepts because its current_term is 3 and A is the known leader.</p>
+          <p>Meanwhile, C, D, E stop receiving heartbeats. After a randomized election timeout (say C times out first at 350 ms), C increments its term to 4, votes for itself, and sends RequestVote(term=4) to D and E. Both have current_term=3, so they grant votes. C wins with 3/5 votes and becomes leader for term 4.</p>
+          <p>Now there are two &#x27;leaders&#x27;: A at term 3, C at term 4. But A can only replicate to B — that&#x27;s 2 nodes, not a majority. A&#x27;s writes stall at the replication step. No entry is committed because A needs match_index confirmation from at least 2 followers. Meanwhile, C can replicate to D and E (3 nodes total with itself) and commits normally.</p>
+          <p>When the partition heals, A sends a heartbeat to C (or any node in the other partition). The response includes term=4. A sees 4 &gt; 3, immediately sets current_term=4, transitions to follower, and clears voted_for. Any uncommitted entries on A from term 3 get overwritten by C&#x27;s log during the next AppendEntries. This is safe because those entries were never committed — no client got an acknowledgment.</p>
+          <p>The STONITH variant: in an active-passive database setup (e.g., PostgreSQL with Patroni), the standby that gets promoted sends an IPMI power-off command to the old primary. This prevents the old primary from accepting writes during the window between promotion and the old primary receiving the demotion notice. It&#x27;s brutal but effective when shared storage makes fencing tokens impractical.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Raft node with term-based stale leader rejection</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass, field
+
+@dataclass
+class RaftNode:
+    node_id: str
+    current_term: int = 0
+    voted_for: str | None = None
+    role: str = &#x27;follower&#x27;  # follower | candidate | leader
+    log: list = field(default_factory=list)
+    cluster_size: int = 5
+
+    @property
+    def quorum(self) -&gt; int:
+        return self.cluster_size // 2 + 1
+
+    def on_append_entries(self, term: int, leader_id: str, entries: list) -&gt; tuple:
+        if term &lt; self.current_term:
+            return (self.current_term, False)  # reject stale leader
+        if term &gt; self.current_term:
+            self.current_term = term
+            self.role = &#x27;follower&#x27;
+            self.voted_for = None
+        self.log.extend(entries)
+        return (self.current_term, True)
+
+    def on_request_vote(self, term: int, candidate_id: str, last_log_idx: int) -&gt; tuple:
+        if term &lt; self.current_term:
+            return (self.current_term, False)
+        if term &gt; self.current_term:
+            self.current_term = term
+            self.role = &#x27;follower&#x27;
+            self.voted_for = None
+        if self.voted_for is None or self.voted_for == candidate_id:
+            if last_log_idx &gt;= len(self.log) - 1:
+                self.voted_for = candidate_id
+                return (self.current_term, True)
+        return (self.current_term, False)
+
+    def start_election(self):
+        self.current_term += 1
+        self.role = &#x27;candidate&#x27;
+        self.voted_for = self.node_id
+        votes = 1  # self-vote
+        return self.current_term, votes
+
+    def become_leader(self):
+        self.role = &#x27;leader&#x27;
+
+    def step_down(self, new_term: int):
+        self.current_term = new_term
+        self.role = &#x27;follower&#x27;
+        self.voted_for = None</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::fmt;
+
+#[derive(Debug, Clone, PartialEq)]
+enum Role { Follower, Candidate, Leader }
+
+#[derive(Debug, Clone)]
+struct LogEntry(String); // simplified payload
+
+pub struct RaftNode {
+    node_id: String,
+    current_term: u64,
+    voted_for: Option&lt;String&gt;,
+    role: Role,
+    log: Vec&lt;LogEntry&gt;,
+    cluster_size: usize,
+}
+
+impl RaftNode {
+    pub fn new(node_id: &amp;str, cluster_size: usize) -&gt; Self {
+        Self {
+            node_id: node_id.into(),
+            current_term: 0,
+            voted_for: None,
+            role: Role::Follower,
+            log: Vec::new(),
+            cluster_size,
+        }
+    }
+
+    pub fn quorum(&amp;self) -&gt; usize {
+        self.cluster_size / 2 + 1
+    }
+
+    /// Reject stale leader (term &lt; ours); step down if term is newer.
+    pub fn on_append_entries(
+        &amp;mut self, term: u64, _leader_id: &amp;str, entries: Vec&lt;LogEntry&gt;,
+    ) -&gt; (u64, bool) {
+        if term &lt; self.current_term {
+            return (self.current_term, false);
+        }
+        if term &gt; self.current_term {
+            self.current_term = term;
+            self.role = Role::Follower;
+            self.voted_for = None;
+        }
+        self.log.extend(entries);
+        (self.current_term, true)
+    }
+
+    pub fn on_request_vote(
+        &amp;mut self, term: u64, candidate_id: &amp;str, last_log_idx: usize,
+    ) -&gt; (u64, bool) {
+        if term &lt; self.current_term {
+            return (self.current_term, false);
+        }
+        if term &gt; self.current_term {
+            self.current_term = term;
+            self.role = Role::Follower;
+            self.voted_for = None;
+        }
+        let dominated = self.log.len().saturating_sub(1);
+        let can_vote = self.voted_for.is_none()
+            || self.voted_for.as_deref() == Some(candidate_id);
+        if can_vote &amp;&amp; last_log_idx &gt;= dominated {
+            self.voted_for = Some(candidate_id.into());
+            return (self.current_term, true);
+        }
+        (self.current_term, false)
+    }
+
+    pub fn start_election(&amp;mut self) -&gt; (u64, usize) {
+        self.current_term += 1;
+        self.role = Role::Candidate;
+        self.voted_for = Some(self.node_id.clone());
+        (self.current_term, 1) // 1 = self-vote
+    }
+
+    pub fn become_leader(&amp;mut self) { self.role = Role::Leader; }
+
+    pub fn step_down(&amp;mut self, new_term: u64) {
+        self.current_term = new_term;
+        self.role = Role::Follower;
+        self.voted_for = None;
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;optional&gt;
+
+typedef NS_ENUM(NSInteger, RaftRole) {
+    RaftRoleFollower,
+    RaftRoleCandidate,
+    RaftRoleLeader,
+};
+
+@interface RaftNode : NSObject {
+    NSString            *_nodeId;
+    uint64_t             _currentTerm;
+    NSString            *_votedFor;   // nil when no vote cast
+    RaftRole             _role;
+    std::vector&lt;std::string&gt; _log;
+    NSUInteger           _clusterSize;
+}
+
+- (instancetype)initWithId:(NSString *)nodeId clusterSize:(NSUInteger)sz;
+- (NSUInteger)quorum;
+
+// Returns (term, granted).
+- (std::pair&lt;uint64_t, BOOL&gt;)onAppendEntries:(uint64_t)term
+                                    leaderId:(NSString *)leaderId
+                                     entries:(const std::vector&lt;std::string&gt; &amp;)entries;
+
+- (std::pair&lt;uint64_t, BOOL&gt;)onRequestVote:(uint64_t)term
+                               candidateId:(NSString *)candidateId
+                                lastLogIdx:(NSUInteger)lastLogIdx;
+
+- (std::pair&lt;uint64_t, NSUInteger&gt;)startElection;
+- (void)becomeLeader;
+- (void)stepDown:(uint64_t)newTerm;
+@end
+
+@implementation RaftNode
+
+- (instancetype)initWithId:(NSString *)nodeId clusterSize:(NSUInteger)sz {
+    if ((self = [super init])) {
+        _nodeId      = [nodeId copy];
+        _currentTerm = 0;
+        _votedFor    = nil;
+        _role        = RaftRoleFollower;
+        _clusterSize = sz;
+    }
+    return self;
+}
+
+- (NSUInteger)quorum { return _clusterSize / 2 + 1; }
+
+- (std::pair&lt;uint64_t, BOOL&gt;)onAppendEntries:(uint64_t)term
+                                    leaderId:(NSString *)leaderId
+                                     entries:(const std::vector&lt;std::string&gt; &amp;)entries {
+    if (term &lt; _currentTerm)
+        return {_currentTerm, NO}; // reject stale leader
+
+    if (term &gt; _currentTerm) {
+        _currentTerm = term;
+        _role        = RaftRoleFollower;
+        _votedFor    = nil;
+    }
+    _log.insert(_log.end(), entries.begin(), entries.end());
+    return {_currentTerm, YES};
+}
+
+- (std::pair&lt;uint64_t, BOOL&gt;)onRequestVote:(uint64_t)term
+                               candidateId:(NSString *)candidateId
+                                lastLogIdx:(NSUInteger)lastLogIdx {
+    if (term &lt; _currentTerm)
+        return {_currentTerm, NO};
+
+    if (term &gt; _currentTerm) {
+        _currentTerm = term;
+        _role        = RaftRoleFollower;
+        _votedFor    = nil;
+    }
+    NSUInteger dominated = _log.empty() ? 0 : _log.size() - 1;
+    BOOL canVote = (_votedFor == nil || [_votedFor isEqualToString:candidateId]);
+    if (canVote &amp;&amp; lastLogIdx &gt;= dominated) {
+        _votedFor = [candidateId copy];
+        return {_currentTerm, YES};
+    }
+    return {_currentTerm, NO};
+}
+
+- (std::pair&lt;uint64_t, NSUInteger&gt;)startElection {
+    _currentTerm += 1;
+    _role     = RaftRoleCandidate;
+    _votedFor = [_nodeId copy];
+    return {_currentTerm, 1}; // 1 = self-vote
+}
+
+- (void)becomeLeader { _role = RaftRoleLeader; }
+
+- (void)stepDown:(uint64_t)newTerm {
+    _currentTerm = newTerm;
+    _role        = RaftRoleFollower;
+    _votedFor    = nil;
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Split-brain detection and resolution">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Node A</span><p>Leader at term 3, sends heartbeats to B</p></div>
+    <div class="seq-row"><span class="actor">Node C</span><p>Election timeout → increments to term 4, sends RequestVote</p></div>
+    <div class="seq-row"><span class="actor">Nodes D, E</span><p>Grant vote to C (term 4 &gt; their term 3)</p></div>
+    <div class="seq-row"><span class="actor">Node C</span><p>Wins election — leader at term 4, begins replicating</p></div>
+    <div class="seq-row"><span class="actor">Node A</span><p>Partition heals, receives term 4 in response — steps down</p></div>
+    <div class="seq-row"><span class="actor">Node A</span><p>Truncates uncommitted term-3 entries, follows Node C</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Quorum size vs availability</strong>
+              <p>Larger quorum is safer but tolerates fewer failures — 5-node cluster tolerates 2 vs 3-node&#x27;s 1.</p>
+            </div>
+            <div>
+              <strong>Election timeout tuning</strong>
+              <p>Too short → spurious elections under load; too long → slow failover.</p>
+            </div>
+            <div>
+              <strong>STONITH vs graceful stepdown</strong>
+              <p>STONITH is immediate but requires IPMI/BMC; graceful stepdown depends on the old leader cooperating.</p>
+            </div>
+            <div>
+              <strong>Fencing tokens vs trusting consensus</strong>
+              <p>Fencing is defense-in-depth but adds complexity to the storage layer.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Election timeout too similar across nodes — multiple candidates split votes indefinitely.</li>
+            <li>Not persisting current_term and voted_for before responding — violates safety after crash.</li>
+            <li>Old leader not stepping down on receiving higher term — continues accepting writes.</li>
+            <li>Truncating committed entries on leader change — data loss.</li>
+            <li>Asymmetric partition where old leader can reach storage but not followers — bypasses quorum.</li>
+            <li>Clock-based leader lease that doesn&#x27;t account for clock skew between nodes.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Implement pre-vote protocol to prevent disruptive elections from partitioned nodes.</li>
+            <li>Add read leases so followers can serve linearizable reads without leader round-trip.</li>
+            <li>Design a joint-consensus protocol for safe cluster membership changes.</li>
+            <li>Build a split-brain detector that alerts when quorum loss is detected.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Clearly define the split-brain scenario with a concrete partition example. Explain the three layers of defense: quorum prevents commitment, term numbers enable stale-leader rejection, and fencing tokens protect the storage layer. Walk through the step-down sequence when the partition heals. Bonus for mentioning STONITH and the trade-off between election timeout and failover speed.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../exactly_once_consumer/">← Design an exactly-once consumer</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../retry_policy/">Build a retry policy that does not amplify outages →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

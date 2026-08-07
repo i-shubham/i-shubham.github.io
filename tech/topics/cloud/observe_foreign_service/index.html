@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Observe a service you did not write | Cloud | Engineering Notes</title>
+  <meta name="description" content="Inherited services rarely lack code — they lack golden signals and a working dependency map.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Observe a service you did not write</p>
+      <p class="eyebrow">Cloud · Easy · ~60 min</p>
+      <h1>Observe a service you did not write</h1>
+      <p class="problem-deck">Inherited services rarely lack code — they lack golden signals and a working dependency map.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Service type, existing observability, known dependencies, last incident</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Golden signals</strong><p>Four signals: latency, traffic, errors, saturation — what exists, what is missing</p></div></div>
+            <div class="stack-step"><strong>12-20m</strong><div><strong>Quick wins</strong><p>ALB metrics for latency/errors, CloudWatch for CPU/memory, log parsing for exceptions</p></div></div>
+            <div class="stack-step"><strong>20-28m</strong><div><strong>Dependency discovery</strong><p>Read code or network traffic to identify DBs, APIs, caches the service uses</p></div></div>
+            <div class="stack-step"><strong>28-35m</strong><div><strong>Alerting</strong><p>Error rate alert, latency alert, health check alert — severity tiers</p></div></div>
+            <div class="stack-step"><strong>35-42m</strong><div><strong>Dashboard</strong><p>Single-pane-of-glass with all golden signals, dependency health, and deployment markers</p></div></div>
+            <div class="stack-step"><strong>42-50m</strong><div><strong>Runbook</strong><p>Decision tree: alert fires → check dashboard → identify dependency → known fix or escalate</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>You just inherited a service. The previous team is gone or busy. The README is 18 months old. There are no runbooks. The last incident was resolved by someone who &#x27;just knew&#x27; where to look. Your job is to make this service observable enough that when it breaks at 3 AM, you can diagnose it without reading every line of code.</p>
+          <p>I start with the four golden signals: latency, traffic, errors, and saturation. Before reading any code, I check what is already instrumented. Most services have something — CloudWatch metrics from the load balancer, basic application logs, maybe a health check endpoint. My goal in week 1 is not full observability — it is enough visibility to be paged correctly and diagnose the most common failures.</p>
+          <p>The order matters: (1) health check and uptime monitoring, (2) error rate alerting from logs or ALB metrics, (3) latency percentiles from the load balancer or APM, (4) dependency map — what does this service call and what calls it, (5) resource saturation — CPU, memory, disk, connection pool usage. Each step gives more diagnostic power. By the end of week 2, I should have a dashboard and an on-call runbook.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What does this service do — API, worker, cron job?</li>
+            <li>What observability exists today — any metrics, logs, traces?</li>
+            <li>How is it deployed — ECS, EKS, EC2, Lambda?</li>
+            <li>What are the known downstream dependencies?</li>
+            <li>Is there an existing health check endpoint?</li>
+            <li>What broke last time and how was it resolved?</li>
+            <li>Who is currently on-call for this service?</li>
+            <li>What is the SLA — latency, uptime, error rate?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Golden signals, dependency mapping, basic alerting, on-call runbook</li>
+            <li>In scope — Dashboard with latency, error rate, traffic, and saturation metrics</li>
+            <li>Out of scope — Rewriting the service or refactoring its architecture</li>
+            <li>Defer — Distributed tracing instrumentation, SLO/SLI framework</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Health check</strong>
+              <p>Verify or create a /health endpoint that checks dependencies</p>
+            </div>
+            <div>
+              <strong>Error alerting</strong>
+              <p>Alert on 5xx rate &gt; 1% sustained for 5 minutes</p>
+            </div>
+            <div>
+              <strong>Latency tracking</strong>
+              <p>p50, p95, p99 from ALB or APM; alert on p99 &gt; 2× baseline</p>
+            </div>
+            <div>
+              <strong>Dependency map</strong>
+              <p>Document what this service calls (DBs, APIs, caches) and what calls it</p>
+            </div>
+            <div>
+              <strong>Saturation metrics</strong>
+              <p>CPU, memory, disk, connection pool, queue depth</p>
+            </div>
+            <div>
+              <strong>Dashboard</strong>
+              <p>Single Grafana/CloudWatch dashboard with all golden signals</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Time to diagnose</strong>
+              <p>Reduce MTTR from &#x27;call the old team&#x27; to &lt; 15 minutes with dashboard + runbook</p>
+            </div>
+            <div>
+              <strong>Alert quality</strong>
+              <p>&lt; 2 false-positive pages per week</p>
+            </div>
+            <div>
+              <strong>Setup time</strong>
+              <p>Week 1: basic alerting. Week 2: dashboard + runbook. Week 3: dependency map</p>
+            </div>
+            <div>
+              <strong>Coverage</strong>
+              <p>All four golden signals instrumented within 2 weeks</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Setup effort</strong>
+              <p>Week 1: 4-6 hours for basic alerting and health check</p>
+            </div>
+            <div>
+              <strong>Dashboard</strong>
+              <p>Week 2: 3-4 hours to build Grafana dashboard with 8-10 panels</p>
+            </div>
+            <div>
+              <strong>Runbook</strong>
+              <p>Week 2: 2-3 hours to document dependency map and common failure modes</p>
+            </div>
+            <div>
+              <strong>Ongoing cost</strong>
+              <p>CloudWatch metrics: ~$15/month. APM (Datadog): ~$30/host/month. Logs: varies</p>
+            </div>
+            <div>
+              <strong>Alert volume</strong>
+              <p>Target: 1-3 actionable alerts per week; &lt; 2 false positives</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Dashboard layout (Grafana / CloudWatch)
+# ─────────────────────────────────────────
+
+Row 1: Traffic Overview
+  - Panel: Requests per second (ALB RequestCount)
+  - Panel: HTTP status code distribution (2xx, 4xx, 5xx)
+
+Row 2: Latency
+  - Panel: Response time percentiles (p50, p95, p99) from ALB
+  - Panel: Latency heatmap (distribution over time)
+
+Row 3: Errors
+  - Panel: 5xx rate (%) with threshold line at 1%
+  - Panel: Error log count by error type (from CloudWatch Logs Insights)
+
+Row 4: Saturation
+  - Panel: CPU utilization (%) per ECS task
+  - Panel: Memory utilization (%) per ECS task
+  - Panel: RDS connections active vs max
+  - Panel: Redis memory usage vs max
+
+Row 5: Dependencies
+  - Panel: RDS query latency (p95)
+  - Panel: Redis hit rate (%)
+  - Panel: External API call success rate
+
+Annotations: deployment events (git SHA, deployer, timestamp)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The observability ramp has three phases, executed over 3 weeks.</p>
+          <p>Phase 1 (Week 1) — Stop the bleeding: before I understand the service, I need to know when it is broken. I check the ALB target group for existing metrics — TargetResponseTime (latency), HTTPCode_Target_5XX_Count (errors), RequestCount (traffic). These are free and already collected. I set up three CloudWatch alarms: 5xx rate &gt; 1% for 5 minutes (P1, pages on-call), p99 latency &gt; 2 seconds for 5 minutes (P2, Slack), and health check failures (P1). If there is no /health endpoint, I create one that returns 200 and checks database connectivity.</p>
+          <p>Phase 2 (Week 2) — Understand the service: I read the code to identify dependencies and build a dependency map. I create a Grafana dashboard with: traffic (RPS over time), latency (percentile panels), errors (5xx rate with threshold), and saturation (CPU, memory, DB connections, cache usage). I add deployment event annotations so I can correlate changes with metric shifts. I write a runbook: &#x27;When 5xx alert fires → check dashboard → if DB connection saturation is high → check RDS events for failover → if no DB issue → check recent deployments → rollback if deploy within last 30 min.&#x27;</p>
+          <p>Phase 3 (Week 3) — Deepen instrumentation: add custom application metrics (queue depth, cache hit rate, business metrics like orders/minute). If the service makes downstream API calls, add OpenTelemetry or X-Ray traces to understand cross-service latency. Set up log-based metrics: a CloudWatch Logs Insights query that counts specific error patterns (e.g., TimeoutError, ConnectionRefusedError) and alerts on rate changes.</p>
+          <p>The key insight: you do not need to understand the service to start monitoring it. ALB metrics, container metrics, and database metrics give you the golden signals without touching application code. Code instrumentation (custom metrics, traces) comes later.</p>
+<figure class="diagram dark">
+  <figcaption>Observability Layers</figcaption>
+  <div class="flow-row">
+    <div class="node">ALB Metrics<br><small>latency, errors, traffic</small></div>
+    <div class="node accent">Container Metrics<br><small>CPU, memory</small></div>
+    <div class="node">App Logs<br><small>structured, searchable</small></div>
+    <div class="node accent">Custom Metrics<br><small>business + dependency</small></div>
+    <div class="node">Traces<br><small>cross-service</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Golden Signals</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">Latency</span><p>p50, p95, p99 from ALB</p></div>
+    <div class="node"><span class="label">Traffic</span><p>RPS, request distribution</p></div>
+    <div class="node"><span class="label">Errors</span><p>5xx rate, error log patterns</p></div>
+    <div class="node accent"><span class="label">Saturation</span><p>CPU, memory, connections</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Dependency Map (discovered)</figcaption>
+  <div class="flow-row">
+    <div class="node">User Service<br><small>calls us</small></div>
+    <div class="node accent">This Service<br><small>orders-api</small></div>
+    <div class="node">RDS<br><small>Postgres</small></div>
+    <div class="node">Redis<br><small>cache</small></div>
+    <div class="node">Payment API<br><small>external</small></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Health check depth: a shallow health check (/health returns 200 if the process is alive) is almost useless — it stays green while the service cannot reach its database. A deep health check verifies: (1) database connection (SELECT 1), (2) Redis PING, (3) downstream API reachability. But a deep check has risks: if the database is slow (not down), the health check times out, the load balancer marks all targets unhealthy, and the service goes dark. Mitigation: set health check timeout shorter than the check&#x27;s actual timeout (e.g., ALB health check timeout 5s, /health endpoint timeout on DB query 2s with fallback to degraded status, not failure).</p>
+          <p>Structured logging: if the service logs unstructured text (print statements), the first instrumentation win is switching to structured JSON logs. Each log line includes: timestamp, level, message, request_id, user_id, duration_ms, and error details. This enables CloudWatch Logs Insights queries like: &#x27;fields @timestamp, request_id, duration_ms | filter level = &quot;ERROR&quot; | sort @timestamp desc | limit 100&#x27;. Structured logs are searchable; unstructured logs are not.</p>
+          <p>Deployment correlation: most production incidents correlate with deployments. Adding deployment event markers to the Grafana dashboard (annotations with git SHA, deployer, and timestamp) makes correlation visual: &#x27;p99 latency spiked at 14:30 — deployment at 14:28.&#x27; This is the single most useful dashboard feature for incident response. Implementation: a webhook from the CI/CD pipeline that posts an annotation to Grafana&#x27;s annotation API.</p>
+          <p>Runbook structure: a good runbook is a decision tree, not a knowledge dump. Start with: &#x27;Which alert fired?&#x27; → branch to specific symptoms. For &#x27;5xx rate high&#x27;: check ALB error codes (502 = target crash, 503 = no healthy targets, 504 = timeout). For 502: check container logs for OOM or unhandled exceptions. For 503: check ECS desired count vs running count. For 504: check RDS connections and query latency. Each branch leads to a specific action (restart, rollback, scale up) or an escalation path.</p>
+          <p>Cost-effective APM: full APM tools (Datadog, New Relic) cost $30+/host/month. For a single inherited service, I start with free tooling: ALB metrics (free), CloudWatch Container Insights ($3/task/month), CloudWatch Logs Insights (pay per query). If the service has complex cross-service interactions, I add X-Ray traces ($5/million traces). Full APM is justified when managing 10+ services, not for one inherited service.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Deep health check with dependency verification</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import time
+import json
+import psycopg2
+import redis
+
+def health_check():
+    checks = {}
+    overall = &#x27;ok&#x27;
+
+    # Database check
+    try:
+        start = time.time()
+        conn = psycopg2.connect(DB_URL, connect_timeout=2)
+        cur = conn.cursor()
+        cur.execute(&#x27;SELECT 1&#x27;)
+        cur.close()
+        conn.close()
+        checks[&#x27;database&#x27;] = {&#x27;status&#x27;: &#x27;ok&#x27;, &#x27;latency_ms&#x27;: int((time.time()-start)*1000)}
+    except Exception as e:
+        checks[&#x27;database&#x27;] = {&#x27;status&#x27;: &#x27;error&#x27;, &#x27;error&#x27;: str(e)}
+        overall = &#x27;degraded&#x27;
+
+    # Redis check
+    try:
+        start = time.time()
+        r = redis.Redis.from_url(REDIS_URL, socket_timeout=2)
+        r.ping()
+        checks[&#x27;redis&#x27;] = {&#x27;status&#x27;: &#x27;ok&#x27;, &#x27;latency_ms&#x27;: int((time.time()-start)*1000)}
+    except Exception as e:
+        checks[&#x27;redis&#x27;] = {&#x27;status&#x27;: &#x27;error&#x27;, &#x27;error&#x27;: str(e)}
+        overall = &#x27;degraded&#x27;
+
+    return {
+        &#x27;status&#x27;: overall,
+        &#x27;checks&#x27;: checks,
+        &#x27;timestamp&#x27;: time.strftime(&#x27;%Y-%m-%dT%H:%M:%SZ&#x27;, time.gmtime())
+    }</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use redis::Commands;
+use serde::Serialize;
+use std::time::Instant;
+use chrono::Utc;
+
+#[derive(Serialize)]
+pub struct HealthResult {
+    status: String,
+    checks: std::collections::HashMap&lt;String, CheckDetail&gt;,
+    timestamp: String,
+}
+
+#[derive(Serialize)]
+struct CheckDetail {
+    status: String,
+    #[serde(skip_serializing_if = &quot;Option::is_none&quot;)]
+    latency_ms: Option&lt;u64&gt;,
+    #[serde(skip_serializing_if = &quot;Option::is_none&quot;)]
+    error: Option&lt;String&gt;,
+}
+
+pub fn health_check(db_url: &amp;str, redis_url: &amp;str) -&gt; HealthResult {
+    let mut checks = std::collections::HashMap::new();
+    let mut overall = &quot;ok&quot;.to_string();
+
+    // Database check
+    let start = Instant::now();
+    match postgres::Client::connect(db_url, postgres::NoTls) {
+        Ok(mut client) =&gt; {
+            let _ = client.simple_query(&quot;SELECT 1&quot;);
+            checks.insert(&quot;database&quot;.into(), CheckDetail {
+                status: &quot;ok&quot;.into(),
+                latency_ms: Some(start.elapsed().as_millis() as u64),
+                error: None,
+            });
+        }
+        Err(e) =&gt; {
+            checks.insert(&quot;database&quot;.into(), CheckDetail {
+                status: &quot;error&quot;.into(), latency_ms: None,
+                error: Some(e.to_string()),
+            });
+            overall = &quot;degraded&quot;.into();
+        }
+    }
+
+    // Redis check
+    let start = Instant::now();
+    match redis::Client::open(redis_url)
+        .and_then(|c| c.get_connection())
+        .and_then(|mut c| redis::cmd(&quot;PING&quot;).query::&lt;String&gt;(&amp;mut c))
+    {
+        Ok(_) =&gt; {
+            checks.insert(&quot;redis&quot;.into(), CheckDetail {
+                status: &quot;ok&quot;.into(),
+                latency_ms: Some(start.elapsed().as_millis() as u64),
+                error: None,
+            });
+        }
+        Err(e) =&gt; {
+            checks.insert(&quot;redis&quot;.into(), CheckDetail {
+                status: &quot;error&quot;.into(), latency_ms: None,
+                error: Some(e.to_string()),
+            });
+            overall = &quot;degraded&quot;.into();
+        }
+    }
+
+    HealthResult {
+        status: overall,
+        checks,
+        timestamp: Utc::now().format(&quot;%Y-%m-%dT%H:%M:%SZ&quot;).to_string(),
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;chrono&gt;
+#include &lt;string&gt;
+
+// Protocols for the two external dependencies being probed.
+@protocol DBClient &lt;NSObject&gt;
+- (BOOL)ping:(NSError **)error;
+@end
+
+@protocol RedisClient &lt;NSObject&gt;
+- (BOOL)ping:(NSError **)error;
+@end
+
+@interface HealthChecker : NSObject
+@property (nonatomic, strong) id&lt;DBClient&gt;    db;
+@property (nonatomic, strong) id&lt;RedisClient&gt; redis;
+- (NSDictionary *)check;
+@end
+
+@implementation HealthChecker
+
+- (NSDictionary *)check {
+    NSMutableDictionary *checks = [NSMutableDictionary dictionary];
+    NSString *overall = @&quot;ok&quot;;
+
+    // ── Database check ───────────────────────────────────────────────
+    {
+        auto start = std::chrono::steady_clock::now();
+        NSError *err = nil;
+        BOOL ok = [_db ping:&amp;err];
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        int64_t ms = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(elapsed).count();
+
+        if (ok) {
+            checks[@&quot;database&quot;] = @{@&quot;status&quot;: @&quot;ok&quot;, @&quot;latency_ms&quot;: @(ms)};
+        } else {
+            checks[@&quot;database&quot;] = @{@&quot;status&quot;: @&quot;error&quot;,
+                                    @&quot;error&quot;: err.localizedDescription ?: @&quot;unknown&quot;};
+            overall = @&quot;degraded&quot;;
+        }
+    }
+
+    // ── Redis check ──────────────────────────────────────────────────
+    {
+        auto start = std::chrono::steady_clock::now();
+        NSError *err = nil;
+        BOOL ok = [_redis ping:&amp;err];
+        auto elapsed = std::chrono::steady_clock::now() - start;
+        int64_t ms = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(elapsed).count();
+
+        if (ok) {
+            checks[@&quot;redis&quot;] = @{@&quot;status&quot;: @&quot;ok&quot;, @&quot;latency_ms&quot;: @(ms)};
+        } else {
+            checks[@&quot;redis&quot;] = @{@&quot;status&quot;: @&quot;error&quot;,
+                                 @&quot;error&quot;: err.localizedDescription ?: @&quot;unknown&quot;};
+            overall = @&quot;degraded&quot;;
+        }
+    }
+
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @&quot;yyyy-MM-dd&#x27;T&#x27;HH:mm:ss&#x27;Z&#x27;&quot;;
+    fmt.timeZone  = [NSTimeZone timeZoneWithAbbreviation:@&quot;UTC&quot;];
+
+    return @{
+        @&quot;status&quot;:    overall,
+        @&quot;checks&quot;:    checks,
+        @&quot;timestamp&quot;: [fmt stringFromDate:[NSDate date]],
+    };
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Day 1</span><p>Check ALB metrics: p99 latency 800ms, 5xx rate 0.2%, RPS 150 — baseline established</p></div>
+    <div class="seq-row"><span class="actor">Day 1</span><p>Set up alarms: 5xx > 1% → PagerDuty, p99 > 2s → Slack, health check fail → PagerDuty</p></div>
+    <div class="seq-row"><span class="actor">Day 3</span><p>Read code: service calls RDS (Postgres), Redis (cache), and payment-api (external)</p></div>
+    <div class="seq-row"><span class="actor">Day 5</span><p>Create /health endpoint: checks DB (SELECT 1), Redis (PING), returns {status: "ok", dependencies: {...}}</p></div>
+    <div class="seq-row"><span class="actor">Week 2</span><p>Build Grafana dashboard: 4 rows (traffic, latency, errors, saturation) + deployment annotations</p></div>
+    <div class="seq-row"><span class="actor">Week 2</span><p>Write runbook: decision tree for 5xx, latency spike, OOM, and dependency failure</p></div>
+    <div class="seq-row"><span class="actor">Week 3</span><p>Add custom metrics: cache hit rate (92%), DB query p95 (45ms), payment API success rate (99.7%)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Shallow vs deep health checks</strong>
+              <p>Shallow (process alive) never fires false alarms but misses dependency failures. Deep (check DB, cache) catches real issues but can cascade failures if dependencies are slow</p>
+            </div>
+            <div>
+              <strong>CloudWatch vs Datadog/New Relic</strong>
+              <p>CloudWatch is built-in and cheap. Datadog gives richer dashboards and APM but costs $30+/host/month. Start with CloudWatch, upgrade when managing 10+ services</p>
+            </div>
+            <div>
+              <strong>Alert on symptoms vs causes</strong>
+              <p>Symptom-based (5xx rate) catches all failure types but does not tell you why. Cause-based (DB connection errors) is specific but misses novel failures. Use both: symptom for paging, cause for diagnosis</p>
+            </div>
+            <div>
+              <strong>Dashboard depth</strong>
+              <p>Minimal dashboard (4 golden signals) is quick to build and easy to read. Comprehensive dashboard (20+ panels) gives more detail but takes longer and causes information overload</p>
+            </div>
+            <div>
+              <strong>Instrumentation effort</strong>
+              <p>Infrastructure metrics (ALB, container) are free and immediate. Application metrics require code changes but give business-relevant signals. Start with infra, add app metrics weekly</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Deep health check takes 10 seconds (DB is slow) → ALB marks target unhealthy → all traffic stops → cascade failure; set health check timeout shorter than dependency timeout</li>
+            <li>Alert threshold too sensitive (5xx &gt; 0.1%) → pages for a single 500 error from a bot → alert fatigue; start at 1% and tighten after establishing baseline</li>
+            <li>Logs are unstructured → Logs Insights queries return garbage → cannot diagnose errors; first fix is structured JSON logging</li>
+            <li>Deployment annotations not set up → latency spike at 2 AM, no idea if someone deployed → add CI/CD webhook to Grafana annotations</li>
+            <li>Runbook says &#x27;check X&#x27; but does not say what to do if X is bad → runbook must have actions, not just observations</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you set up SLOs and error budgets for this service?</li>
+            <li>How do you handle observability for a service with no source code access (third-party)?</li>
+            <li>How would you add distributed tracing across 10 interdependent services?</li>
+            <li>How do you balance observability cost with insight value as you add more instrumentation?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: the four golden signals as the framework, a phased approach (week 1: alerts from existing metrics, week 2: dashboard + runbook, week 3: custom metrics), dependency mapping, and a health check that verifies downstream dependencies. The key insight: you can monitor a service without understanding its code by using infrastructure metrics.</p>
+          <p>You do not need to design the full APM platform or SLO framework. The interviewer wants to see: a pragmatic, time-boxed approach to making an unknown service operable, understanding of what &#x27;observable&#x27; means in practice (not just &#x27;add logging&#x27;), and a runbook mindset — observability is only useful if it reduces time to diagnosis.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../multi_account/">← Multi-account strategy for prod/stage/dev</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

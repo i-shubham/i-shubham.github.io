@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cost-control an overgrown EMR / Databricks bill | Big Data | Engineering Notes</title>
+  <meta name="description" content="The bill usually isn&#x27;t &#x27;Spark is expensive&#x27; — it&#x27;s idle clusters, oversized executors, and jobs that shuffle like it&#x27;s free.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Cost-control an overgrown EMR / Databricks bill</p>
+      <p class="eyebrow">Big Data · Easy · ~60 min</p>
+      <h1>Cost-control an overgrown EMR / Databricks bill</h1>
+      <p class="problem-deck">The bill usually isn&#x27;t &#x27;Spark is expensive&#x27; — it&#x27;s idle clusters, oversized executors, and jobs that shuffle like it&#x27;s free.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Current bill breakdown, cluster types, team ownership, existing policies</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Idle clusters</strong><p>Auto-termination policy, scale-to-zero, interactive vs job cluster split</p></div></div>
+            <div class="stack-step"><strong>12-20m</strong><div><strong>Right-sizing</strong><p>Executor memory profiling, instance type tiers, pool configuration</p></div></div>
+            <div class="stack-step"><strong>20-28m</strong><div><strong>Spot instances</strong><p>Batch jobs on Spot with on-demand fallback; interactive clusters stay on-demand</p></div></div>
+            <div class="stack-step"><strong>28-35m</strong><div><strong>Job optimization</strong><p>Top 10 expensive jobs: shuffle reduction, broadcast joins, caching</p></div></div>
+            <div class="stack-step"><strong>35-42m</strong><div><strong>Governance</strong><p>Tagging policy, cost alerts per team, weekly review cadence</p></div></div>
+            <div class="stack-step"><strong>42-50m</strong><div><strong>Monitoring</strong><p>Grafana/CloudWatch dashboard: cost by team, idle hours, Spot savings</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>The monthly EMR/Databricks bill went from $15K to $45K in three months. The CTO wants it halved. When I dig into the cost breakdown, it is never one thing — it is a combination of idle clusters (30% of the bill), oversized executors (20%), jobs with excessive shuffle (15%), and the remaining 35% is legitimate compute that could still be optimized with Spot instances and right-sizing.</p>
+          <p>Idle clusters are the low-hanging fruit. Teams create interactive clusters for development and forget to shut them down. A 10-node m5.2xlarge cluster costs $2.50/node/hr × 10 × 24 × 30 = $18,000/month — even if nobody runs a query on it. The fix is autoscaling with aggressive scale-to-zero (terminate after 15 minutes of inactivity) and tagging policies that require owner and cost-center tags.</p>
+          <p>After idle clusters, the next target is right-sizing. Engineers default to m5.4xlarge (64GB) because one job OOM&#x27;d on m5.2xlarge (32GB). But 80% of their jobs use less than 8GB per executor. The fix is profiling jobs (Spark UI executor memory utilization) and creating right-sized instance pools per workload tier.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the current monthly bill and target budget?</li>
+            <li>How many clusters and what percentage are interactive vs job clusters?</li>
+            <li>Are clusters tagged with owner and cost center?</li>
+            <li>Spot instance usage — what percentage?</li>
+            <li>Are autoscaling and auto-termination configured?</li>
+            <li>Top 10 most expensive jobs — what do they do?</li>
+            <li>Is there a chargeback model (teams pay for their usage)?</li>
+            <li>Databricks Unity Catalog or raw EMR?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Identify and eliminate idle clusters, right-size instances, Spot adoption, job optimization</li>
+            <li>In scope — Tagging policy, autoscaling config, cost monitoring dashboard</li>
+            <li>Out of scope — Migrating to a different compute platform</li>
+            <li>Defer — Chargeback model implementation, FinOps team creation</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Idle detection</strong>
+              <p>Identify clusters running &gt; 30 min with no active jobs</p>
+            </div>
+            <div>
+              <strong>Auto-termination</strong>
+              <p>Clusters auto-terminate after 15 min of inactivity</p>
+            </div>
+            <div>
+              <strong>Right-sizing</strong>
+              <p>Profile executor memory usage; recommend instance type per job</p>
+            </div>
+            <div>
+              <strong>Spot adoption</strong>
+              <p>Move fault-tolerant batch jobs to Spot instances with fallback</p>
+            </div>
+            <div>
+              <strong>Cost tagging</strong>
+              <p>Enforce owner + cost-center tags on all clusters</p>
+            </div>
+            <div>
+              <strong>Top-N jobs</strong>
+              <p>Identify the 10 most expensive jobs for targeted optimization</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cost target</strong>
+              <p>Reduce from $45K/month to $22K/month within 8 weeks</p>
+            </div>
+            <div>
+              <strong>SLA preservation</strong>
+              <p>Production jobs must not miss SLA due to Spot interruption</p>
+            </div>
+            <div>
+              <strong>Visibility</strong>
+              <p>Weekly cost report by team/owner with trend analysis</p>
+            </div>
+            <div>
+              <strong>Adoption</strong>
+              <p>90% of batch jobs on Spot within 4 weeks</p>
+            </div>
+            <div>
+              <strong>Governance</strong>
+              <p>No untagged clusters allowed; enforce via policy</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Current bill</strong>
+              <p>$45K/month — EMR/Databricks compute + EBS + data transfer</p>
+            </div>
+            <div>
+              <strong>Idle waste</strong>
+              <p>~$13.5K/month (30%) from clusters running with no active jobs</p>
+            </div>
+            <div>
+              <strong>Oversized waste</strong>
+              <p>~$9K/month (20%) from using 64GB instances for 8GB-peak jobs</p>
+            </div>
+            <div>
+              <strong>Spot savings potential</strong>
+              <p>50-70% on batch compute → ~$5K saved on $15K of batch spend</p>
+            </div>
+            <div>
+              <strong>Shuffle waste</strong>
+              <p>~$6.7K (15%) from excessive shuffle: could reduce 40% with broadcast + filter pushdown</p>
+            </div>
+            <div>
+              <strong>Target savings</strong>
+              <p>Idle: $13.5K + Oversizing: $6K + Spot: $5K + Shuffle: $2.5K = ~$27K → bill to $18K</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Cost tracking table (populated from AWS CUR or Databricks usage logs)
+CREATE TABLE meta.cluster_costs (
+  cluster_id     STRING,
+  cluster_name   STRING,
+  owner          STRING,
+  cost_center    STRING,
+  date           DATE,
+  instance_type  STRING,
+  instance_hours DOUBLE,
+  idle_hours     DOUBLE,
+  spot_savings   DOUBLE,
+  total_cost     DOUBLE
+);
+
+-- Weekly cost summary query
+SELECT
+  owner,
+  SUM(total_cost) AS weekly_cost,
+  SUM(idle_hours) / SUM(instance_hours) AS idle_pct,
+  SUM(spot_savings) AS spot_saved,
+  LAG(SUM(total_cost)) OVER (PARTITION BY owner ORDER BY MIN(date)) AS prev_week
+FROM meta.cluster_costs
+WHERE date &gt;= CURRENT_DATE - 7
+GROUP BY owner
+ORDER BY weekly_cost DESC;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The cost reduction program has four phases, executed over 8 weeks.</p>
+          <p>Phase 1 (Week 1-2) — Eliminate idle waste: enable auto-termination on all clusters with a 15-minute timeout. For interactive clusters, add a warning notification at 10 minutes. For job clusters, they already terminate after the job completes — verify this is configured. Audit existing clusters: any cluster running &gt; 2 hours with no active tasks gets flagged for review. Expected savings: $13.5K/month.</p>
+          <p>Phase 2 (Week 2-3) — Right-size instances: analyze the last 30 days of Spark UI metrics (executor memory peak, GC overhead, task CPU utilization) across all jobs. Categorize into three tiers: small (&lt; 16GB peak → m5.xlarge at $0.19/hr), medium (16-32GB → m5.2xlarge at $0.38/hr), large (&gt; 32GB → m5.4xlarge at $0.77/hr). Currently, 80% of jobs run on medium or large when small would suffice. Create instance pools per tier and update job configs. Expected savings: $6K/month.</p>
+          <p>Phase 3 (Week 3-4) — Spot adoption: move all batch/ETL jobs to SPOT_WITH_FALLBACK. The driver node stays on-demand (first_on_demand=1) to avoid losing job state. Workers use Spot with automatic fallback to on-demand if Spot capacity is unavailable. For Spot interruption, Spark&#x27;s dynamic allocation handles graceful decommissioning — tasks on interrupted executors are retried on remaining nodes. Expected savings: $5K/month.</p>
+          <p>Phase 4 (Week 4-8) — Job optimization: target the top 10 most expensive jobs. Common wins: (1) add broadcast hints for small dimension joins, (2) filter before join to reduce shuffle, (3) cache intermediate results used multiple times, (4) increase partition count for large shuffles (avoid spill), (5) enable AQE for automatic coalesce. Expected savings: $2.5K/month.</p>
+<figure class="diagram dark">
+  <figcaption>Cost Breakdown</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">Idle (30%)</span><p>$13.5K — clusters running with no jobs</p></div>
+    <div class="node"><span class="label">Oversized (20%)</span><p>$9K — 64GB instances for 8GB-peak jobs</p></div>
+    <div class="node"><span class="label">Shuffle (15%)</span><p>$6.7K — excessive data movement</p></div>
+    <div class="node accent"><span class="label">Legitimate (35%)</span><p>$15.8K — optimize with Spot</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Savings Timeline</figcaption>
+  <div class="flow-row">
+    <div class="node accent">Week 1-2<br><small>Idle: -$13.5K</small></div>
+    <div class="node">Week 2-3<br><small>Right-size: -$6K</small></div>
+    <div class="node accent">Week 3-4<br><small>Spot: -$5K</small></div>
+    <div class="node">Week 4-8<br><small>Jobs: -$2.5K</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Spot Instance Strategy</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Driver</span><p>On-demand — no interruption risk</p></div>
+    <div class="node accent"><span class="label">Workers</span><p>Spot with fallback — 60-70% savings</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Spot instance failure modes: the primary risk is Spot interruption during a long-running job. A 4-hour Spark job losing 3 executors at hour 3 must retry affected tasks, not the whole job. Spark&#x27;s dynamic allocation with decommission support (spark.decommission.enabled=true) handles this: when AWS sends the 2-minute interruption notice, the executor migrates its shuffle files to another node and completes in-flight tasks. The job continues with reduced parallelism until a new Spot instance is allocated.</p>
+          <p>Right-sizing methodology: I pull executor metrics from Spark&#x27;s event log or Ganglia: peak heap usage, GC overhead percentage, and CPU utilization per task. If a job&#x27;s executor peak heap is 6GB and we allocated 32GB, we are at 19% utilization — switch to m5.xlarge (16GB) and leave headroom for growth. I create a script that analyzes the last 30 days of event logs and produces a recommendation per job: current instance → recommended instance → estimated savings.</p>
+          <p>Shuffle reduction: the worst offender in our cost profile is a job that shuffles 800GB because it joins a 500M-row fact table with a 10K-row dimension table using a sort-merge join. Adding a broadcast hint (/*+ BROADCAST(dim) */) eliminates the shuffle entirely — the 10K-row table is broadcast to all executors, reducing runtime from 45 minutes to 8 minutes and cluster cost from $35/run to $6/run. At daily frequency, that is $870/month saved from one hint.</p>
+          <p>Governance enforcement: Databricks cluster policies are the enforcement mechanism. I create a policy that requires tags, sets max cluster size, enforces auto-termination, and defaults to Spot. Clusters created without the policy are blocked. For emergency overrides (a job that genuinely needs 64GB instances), the engineer requests an exception through a Jira ticket — the exception is time-bound (2 weeks) and reviewed.</p>
+          <p>Monitoring: I build a Grafana dashboard showing: daily cost by team, idle percentage trend, Spot vs on-demand ratio, and the top 10 most expensive jobs. Weekly email goes to engineering managers with their team&#x27;s cost and comparison to target. Teams that exceed budget get a Slack notification. This visibility alone drives a 10-15% reduction as teams self-optimize.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Idle cluster detector for EMR</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+from datetime import datetime, timedelta
+
+
+def find_idle_clusters(region=&#x27;us-east-1&#x27;, idle_threshold_min=30):
+    &quot;&quot;&quot;
+    Detect idle EMR clusters that are wasting money.
+    - Checks clusters in WAITING/RUNNING state with no active steps.
+    - Calculates idle duration from the ReadyDateTime.
+    - Estimates hourly cost for prioritization.
+    - Returns sorted by cost (highest waste first).
+    &quot;&quot;&quot;
+    emr = boto3.client(&#x27;emr&#x27;, region_name=region)
+    clusters = emr.list_clusters(
+        CreatedAfter=datetime.now() - timedelta(days=30),
+        ClusterStates=[&#x27;WAITING&#x27;, &#x27;RUNNING&#x27;]
+    )[&#x27;Clusters&#x27;]
+
+    idle = []
+    for c in clusters:
+        cluster_id = c[&#x27;Id&#x27;]
+        # Check if any steps are currently running
+        steps = emr.list_steps(ClusterId=cluster_id, StepStates=[&#x27;RUNNING&#x27;])[&#x27;Steps&#x27;]
+        if not steps:
+            ready_since = c.get(&#x27;Status&#x27;, {}).get(&#x27;Timeline&#x27;, {}).get(&#x27;ReadyDateTime&#x27;)
+            if ready_since:
+                idle_min = (datetime.now(ready_since.tzinfo) - ready_since).total_seconds() / 60
+                if idle_min &gt; idle_threshold_min:
+                    tags = {
+                        t[&#x27;Key&#x27;]: t[&#x27;Value&#x27;]
+                        for t in emr.describe_cluster(ClusterId=cluster_id)
+                                    [&#x27;Cluster&#x27;].get(&#x27;Tags&#x27;, [])
+                    }
+                    idle.append({
+                        &#x27;cluster_id&#x27;: cluster_id,
+                        &#x27;name&#x27;: c[&#x27;Name&#x27;],
+                        &#x27;idle_minutes&#x27;: int(idle_min),
+                        &#x27;owner&#x27;: tags.get(&#x27;owner&#x27;, &#x27;UNTAGGED&#x27;),
+                        &#x27;est_hourly_cost&#x27;: estimate_cost(cluster_id),
+                    })
+
+    return sorted(idle, key=lambda x: x[&#x27;est_hourly_cost&#x27;], reverse=True)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Idle EMR cluster detector using the AWS SDK for Rust.
+// Identifies clusters wasting money by sitting idle.
+
+use aws_sdk_emr::{Client as EmrClient, types::ClusterState};
+use chrono::{Utc, Duration as ChronoDuration};
+use std::collections::HashMap;
+
+#[derive(Debug)]
+pub struct IdleCluster {
+    pub cluster_id: String,
+    pub name: String,
+    pub idle_minutes: i64,
+    pub owner: String,
+    pub est_hourly_cost: f64,
+}
+
+/// Find EMR clusters that have been idle beyond the threshold.
+/// Returns clusters sorted by estimated hourly cost (highest waste first).
+pub async fn find_idle_clusters(
+    client: &amp;EmrClient,
+    idle_threshold_min: i64,
+) -&gt; Result&lt;Vec&lt;IdleCluster&gt;, aws_sdk_emr::Error&gt; {
+    let cutoff = Utc::now() - ChronoDuration::days(30);
+
+    // List clusters in WAITING or RUNNING state
+    let clusters = client.list_clusters()
+        .set_created_after(Some(cutoff.into()))
+        .set_cluster_states(Some(vec![
+            ClusterState::Waiting,
+            ClusterState::Running,
+        ]))
+        .send()
+        .await?;
+
+    let mut idle = Vec::new();
+
+    for cluster_summary in clusters.clusters().unwrap_or_default() {
+        let cluster_id = cluster_summary.id().unwrap_or_default();
+
+        // Check if any steps are currently running
+        let steps = client.list_steps()
+            .cluster_id(cluster_id)
+            .set_step_states(Some(vec![aws_sdk_emr::types::StepState::Running]))
+            .send()
+            .await?;
+
+        if steps.steps().unwrap_or_default().is_empty() {
+            // No running steps — check how long it&#x27;s been idle
+            let detail = client.describe_cluster()
+                .cluster_id(cluster_id)
+                .send()
+                .await?;
+
+            let cluster = detail.cluster().unwrap();
+            let ready_dt = cluster.status()
+                .and_then(|s| s.timeline())
+                .and_then(|t| t.ready_date_time());
+
+            if let Some(ready_since) = ready_dt {
+                let idle_secs = (Utc::now() - *ready_since).num_seconds();
+                let idle_min = idle_secs / 60;
+
+                if idle_min &gt; idle_threshold_min {
+                    // Extract owner tag
+                    let tags: HashMap&lt;String, String&gt; = cluster.tags()
+                        .unwrap_or_default()
+                        .iter()
+                        .filter_map(|t| {
+                            Some((t.key()?.to_string(), t.value()?.to_string()))
+                        })
+                        .collect();
+
+                    idle.push(IdleCluster {
+                        cluster_id: cluster_id.to_string(),
+                        name: cluster_summary.name().unwrap_or(&quot;unnamed&quot;).to_string(),
+                        idle_minutes: idle_min,
+                        owner: tags.get(&quot;owner&quot;).cloned().unwrap_or(&quot;UNTAGGED&quot;.into()),
+                        est_hourly_cost: estimate_cost(cluster_id),
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort by cost descending (highest waste first)
+    idle.sort_by(|a, b| b.est_hourly_cost.partial_cmp(&amp;a.est_hourly_cost).unwrap());
+    Ok(idle)
+}
+
+fn estimate_cost(cluster_id: &amp;str) -&gt; f64 {
+    // In production: look up instance types and on-demand pricing
+    5.0  // placeholder
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+// Idle EMR cluster detector for cost control.
+// Uses AWS SDK (or REST API) to find clusters burning money while idle.
+
+struct IdleCluster {
+    std::string cluster_id;
+    std::string name;
+    int idle_minutes;
+    std::string owner;
+    double est_hourly_cost;
+};
+
+@interface CloudBillController : NSObject
+@property (nonatomic, strong) NSString *region;
+@property (nonatomic) int idleThresholdMin;
+
+- (instancetype)initWithRegion:(NSString *)region threshold:(int)thresholdMin;
+- (NSArray&lt;NSDictionary *&gt; *)findIdleClusters;
+@end
+
+@implementation CloudBillController
+
+- (instancetype)initWithRegion:(NSString *)region threshold:(int)thresholdMin {
+    self = [super init];
+    if (self) {
+        _region = region;
+        _idleThresholdMin = thresholdMin;
+    }
+    return self;
+}
+
+/// Find idle EMR clusters via AWS API.
+/// Returns clusters sorted by estimated hourly cost (highest waste first).
+- (NSArray&lt;NSDictionary *&gt; *)findIdleClusters {
+    NSMutableArray *results = [NSMutableArray array];
+
+    // Call AWS EMR ListClusters API for WAITING/RUNNING clusters
+    NSArray *clusters = [self listClustersWithStates:@[@&quot;WAITING&quot;, @&quot;RUNNING&quot;]];
+
+    for (NSDictionary *cluster in clusters) {
+        NSString *clusterId = cluster[@&quot;Id&quot;];
+
+        // Check if any steps are currently running
+        NSArray *runningSteps = [self listRunningSteps:clusterId];
+        if (runningSteps.count &gt; 0) continue;
+
+        // Get ReadyDateTime to calculate idle duration
+        NSDictionary *detail = [self describeCluster:clusterId];
+        NSDate *readySince = detail[@&quot;ReadyDateTime&quot;];
+        if (!readySince) continue;
+
+        NSTimeInterval idleSec = -[readySince timeIntervalSinceNow];
+        int idleMin = (int)(idleSec / 60.0);
+
+        if (idleMin &gt; _idleThresholdMin) {
+            // Extract owner from tags
+            NSDictionary *tags = detail[@&quot;Tags&quot;] ?: @{};
+            NSString *owner = tags[@&quot;owner&quot;] ?: @&quot;UNTAGGED&quot;;
+
+            [results addObject:@{
+                @&quot;cluster_id&quot;: clusterId,
+                @&quot;name&quot;: cluster[@&quot;Name&quot;] ?: @&quot;unnamed&quot;,
+                @&quot;idle_minutes&quot;: @(idleMin),
+                @&quot;owner&quot;: owner,
+                @&quot;est_hourly_cost&quot;: @([self estimateCost:clusterId])
+            }];
+        }
+    }
+
+    // Sort by cost descending (highest waste first)
+    return [results sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        return [b[@&quot;est_hourly_cost&quot;] compare:a[@&quot;est_hourly_cost&quot;]];
+    }];
+}
+
+// AWS API wrapper methods (use AWSSDK or signed HTTP requests in production)
+- (NSArray *)listClustersWithStates:(NSArray *)states {
+    // POST to EMR.ListClusters with ClusterStates filter
+    // Uses NSURLSession with AWS Signature V4 authentication
+    return @[];
+}
+
+- (NSArray *)listRunningSteps:(NSString *)clusterId {
+    // POST to EMR.ListSteps with StepStates=RUNNING
+    return @[];
+}
+
+- (NSDictionary *)describeCluster:(NSString *)clusterId {
+    // POST to EMR.DescribeCluster
+    return @{};
+}
+
+- (double)estimateCost:(NSString *)clusterId {
+    // Look up instance types and on-demand pricing from AWS pricing API
+    return 5.0;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Audit</span><p>Pull 30-day cost data: $45K total. Idle clusters: $13.5K. Top idle: dev-cluster-analytics (42 days, $4,200)</p></div>
+    <div class="seq-row"><span class="actor">Phase 1</span><p>Enable auto-termination (15 min) on all 47 clusters. 12 perpetually idle clusters terminated immediately</p></div>
+    <div class="seq-row"><span class="actor">Phase 2</span><p>Analyze executor metrics: 80% of jobs peak at < 8GB. Move 35 jobs from m5.4xlarge to m5.xlarge</p></div>
+    <div class="seq-row"><span class="actor">Phase 3</span><p>Switch 28 batch jobs to SPOT_WITH_FALLBACK. 2 interruptions in first week — auto-recovered, no SLA miss</p></div>
+    <div class="seq-row"><span class="actor">Phase 4</span><p>Add broadcast hint to top 3 expensive jobs. Runtime: 45→8, 38→12, 52→15 min. Savings: $2.1K/month</p></div>
+    <div class="seq-row"><span class="actor">Result</span><p>Month 2 bill: $19.2K (57% reduction from $45K). Target was $22K — exceeded</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Auto-termination timeout</strong>
+              <p>15 min is aggressive for interactive work; 30 min is safer but wastes more money. I default to 15 and let teams request exceptions</p>
+            </div>
+            <div>
+              <strong>Spot vs on-demand for production</strong>
+              <p>Spot saves 60-70% but risks interruption. Mitigation: driver on-demand, workers Spot with decommission. Never Spot for latency-sensitive serving</p>
+            </div>
+            <div>
+              <strong>Right-sizing precision</strong>
+              <p>Tight right-sizing saves money but leaves no headroom for data growth. I recommend 50% headroom above peak usage</p>
+            </div>
+            <div>
+              <strong>Central governance vs team autonomy</strong>
+              <p>Central policies prevent waste but slow teams. Balance: default policies with exception process for justified overrides</p>
+            </div>
+            <div>
+              <strong>Instance pools vs individual sizing</strong>
+              <p>Pools amortize startup time but restrict to a few instance types. Individual sizing is more precise but creates cold-start delays</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Auto-termination kills an interactive cluster while a data scientist is thinking — add warning notification at 10 min; extend timeout for notebook clusters</li>
+            <li>Spot interruption hits during the only remaining executor — job fails completely; first_on_demand=1 ensures driver survives but tasks need at least 1 worker</li>
+            <li>Right-sizing recommendation based on stale metrics — a job&#x27;s data volume doubled since profiling; add 50% headroom to recommendations</li>
+            <li>Tagging enforcement blocks a critical cluster creation — add a &#x27;bypass for emergencies&#x27; escape hatch with automatic Jira ticket creation</li>
+            <li>Cost dashboard shows team A&#x27;s bill dropped to $0 — they moved workloads to a shared cluster under team B&#x27;s tag; chargeback model needed</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement a chargeback model so teams pay for their own usage?</li>
+            <li>How do you handle a team that refuses to right-size because &#x27;it might break&#x27;?</li>
+            <li>How would you extend this to cover S3 storage costs alongside compute?</li>
+            <li>How do you prevent cost regression — savings eroding over time as teams create new clusters?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: identifying the four cost buckets (idle, oversized, Spot opportunity, job optimization), the phased execution plan with estimated savings per phase, auto-termination and Spot configuration specifics, and a governance model with tagging enforcement. Show concrete numbers — &#x27;$13.5K in idle waste&#x27; is more convincing than &#x27;some clusters are idle.&#x27;</p>
+          <p>You do not need to design the full FinOps organization or chargeback billing system. The interviewer wants to see: systematic cost analysis, prioritized action plan (biggest savings first), awareness of the operational risks of each optimization (Spot interruption, auto-termination annoyance), and a monitoring plan to sustain the savings.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../scd2_scale/">← Model slowly changing dimensions at scale</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

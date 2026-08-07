@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build a retry policy that does not amplify outages | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Retries without jitter turn a blip into a self-DDoS — the outage amplifier pattern.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Build a retry policy that does not amplify outages</p>
+      <p class="eyebrow">Distributed Systems · Medium · ~60 min</p>
+      <h1>Build a retry policy that does not amplify outages</h1>
+      <p class="problem-deck">Retries without jitter turn a blip into a self-DDoS — the outage amplifier pattern.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify failure modes</strong><p>Transient vs permanent errors, idempotency requirement.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Naive retry → thundering herd</strong><p>Fixed interval, synchronized retries, exponential blow-up.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Exponential backoff + jitter</strong><p>Full jitter, equal jitter, decorrelated jitter — math and trade-offs.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Retry budgets</strong><p>Per-client or per-service budget — stop retrying when budget exhausted.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Circuit breaker integration</strong><p>Closed → open → half-open; trip on failure rate, not count.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code walkthrough</strong><p>Python retry decorator with jitter + budget + circuit breaker.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Observability and wrap-up</strong><p>Metrics: retry rate, budget exhaustion, circuit state transitions.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>The first thing I&#x27;d establish is that retries are a double-edged sword. A single client retrying a transient 503 is fine. But when 10 000 clients all retry at the same time — with the same backoff interval — you get a synchronized thundering herd that&#x27;s worse than the original failure. I&#x27;ve seen a 2-second blip turn into a 20-minute outage because every retry wave arrived in a synchronized spike.</p>
+          <p>The fix has three layers. First, exponential backoff with full jitter: instead of retrying at exactly 1 s, 2 s, 4 s, each client picks uniformly at random from [0, 2^attempt × base]. This spreads the retry load across time. Second, a retry budget: each client gets, say, 10% of its request volume as retries per 10-second window. Once exhausted, it stops retrying and fails fast. Third, a circuit breaker: if the error rate exceeds a threshold (e.g., 50% over 20 requests), the circuit opens and all requests fail immediately for a cooldown period.</p>
+          <p>These three together mean: individual transient failures get retried with spread-out timing, widespread failures get capped by the budget, and sustained failures trigger a fast-fail circuit that lets the downstream service recover.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What transport — HTTP, gRPC, message queue?</li>
+            <li>Which errors are retryable — 5xx only, or also timeouts and connection resets?</li>
+            <li>Is the operation idempotent? Can we safely retry a POST?</li>
+            <li>What is the acceptable end-to-end latency budget?</li>
+            <li>How many concurrent clients call this service?</li>
+            <li>Is there a service mesh (Envoy, Istio) that handles retries at the infra level?</li>
+            <li>Do we need per-endpoint or global retry budgets?</li>
+            <li>What is the downstream service&#x27;s recovery time after overload?</li>
+            <li>Are there dependent services that also retry — amplification chains?</li>
+            <li>Do we have metrics on current retry rates and error rates?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: exponential backoff + jitter, retry budgets, circuit breaker, observability.</li>
+            <li>Out: service mesh configuration, load shedding on the server side.</li>
+            <li>Stretch: compare retry amplification across a 3-tier call chain.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>retry(fn, max_attempts, backoff)</strong>
+              <p>Executes fn with up to max_attempts retries on retryable errors.</p>
+            </div>
+            <div>
+              <strong>jittered_delay(attempt, base_ms)</strong>
+              <p>Returns a randomized delay for the given attempt number.</p>
+            </div>
+            <div>
+              <strong>check_budget(client_id)</strong>
+              <p>Returns True if the client&#x27;s retry budget for the current window has remaining capacity.</p>
+            </div>
+            <div>
+              <strong>circuit_state(service)</strong>
+              <p>Returns closed, open, or half-open based on recent error rate.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Retry spread</strong>
+              <p>Full jitter ensures p99 retry delay is ≤ 2× median — no synchronized spikes.</p>
+            </div>
+            <div>
+              <strong>Budget cap</strong>
+              <p>Retry volume ≤ 10% of baseline request volume per 10-second window.</p>
+            </div>
+            <div>
+              <strong>Circuit trip</strong>
+              <p>Open circuit within 1 second of error rate exceeding 50% over 20 requests.</p>
+            </div>
+            <div>
+              <strong>Observability</strong>
+              <p>Emit retry_count, budget_exhausted, circuit_state_change metrics per request.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Baseline RPS</strong>
+              <p>10 000 requests/s across 50 client instances → 200 RPS per client.</p>
+            </div>
+            <div>
+              <strong>Retry budget per client</strong>
+              <p>20 retries per 10 s window (10% of 200 RPS).</p>
+            </div>
+            <div>
+              <strong>Max retries per request</strong>
+              <p>3 attempts total (1 original + 2 retries).</p>
+            </div>
+            <div>
+              <strong>Circuit breaker window</strong>
+              <p>20 requests sliding window, 50% error threshold, 30 s open duration.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Retry decorator usage
+@retry(
+    max_attempts=3,
+    base_delay_ms=100,
+    max_delay_ms=10000,
+    retryable_errors=(HTTPError, TimeoutError),
+    jitter=&#x27;full&#x27;,
+)
+def call_payment_service(order_id: str) -&gt; dict:
+    return http.post(f&#x27;/payments/{order_id}/charge&#x27;)
+
+# Circuit breaker usage
+breaker = CircuitBreaker(
+    failure_threshold=0.5,
+    window_size=20,
+    open_duration_s=30,
+)
+
+with breaker.guard(&#x27;payment-service&#x27;):
+    response = call_payment_service(order_id)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Retry state (per request)
+attempt: int               # current attempt number (0-based)
+next_delay_ms: float       # jittered delay before next retry
+error_history: List[str]   # error types from previous attempts
+
+# Budget state (per client, sliding window)
+window_start: float        # monotonic timestamp
+retries_used: int          # retries consumed in current window
+retries_allowed: int       # budget cap for the window
+
+# Circuit breaker state
+state: enum(closed, open, half_open)
+failure_count: int         # in current window
+success_count: int         # in current window
+last_failure_time: float   # for open → half-open transition</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Start with the failure taxonomy: transient errors (503, timeout, connection reset) are retryable. Permanent errors (400, 404, 422) are not. This distinction is critical — retrying a 400 is pointless and wastes budget.</p>
+          <p>Exponential backoff: delay = base × 2^attempt. Without jitter, 1000 clients that failed at t=0 all retry at t=100ms, then t=200ms, then t=400ms — synchronized waves. Full jitter: delay = random(0, base × 2^attempt). This spreads the retries uniformly across the backoff window. The AWS architecture blog showed that full jitter produces the fewest total calls and fastest completion time compared to equal jitter or decorrelated jitter.</p>
+          <p>Retry budget: each client tracks retries in a sliding window (e.g., 10 seconds). The budget is 10% of normal request volume. At 200 RPS baseline, the client gets 20 retries per window. Once exhausted, all requests fail fast with a clear error: &#x27;retry budget exhausted.&#x27; This prevents a broken downstream from consuming unbounded retry traffic.</p>
+          <p>Circuit breaker: tracks success/failure ratio over the last N requests. When failures exceed the threshold (e.g., 50%), the circuit opens — all requests fail immediately without hitting the downstream. After a cooldown (30 s), the circuit moves to half-open: one probe request is allowed through. If it succeeds, the circuit closes. If it fails, back to open.</p>
+          <p>The three mechanisms compose: jitter prevents synchronization, budgets cap volume, and the circuit breaker stops all traffic during sustained failures. Together, they turn retries from an outage amplifier into a controlled recovery mechanism.</p>
+<figure class="diagram dark" aria-label="Retry policy decision flow">
+  <div class="flow-row">
+    <div class="node">Request fails</div>
+    <div class="node">Retryable error?</div>
+    <div class="node">No → fail immediately</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Yes → Check budget</div>
+    <div class="node">Budget exhausted? → fail fast</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Budget OK → Check circuit</div>
+    <div class="node">Circuit open? → fail fast</div>
+    <div class="node accent">Closed → sleep(jitter) → retry</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Circuit breaker state machine">
+  <div class="flow-row">
+    <div class="node accent">CLOSED</div>
+    <div class="node">failure rate &gt; 50%</div>
+    <div class="node accent">OPEN</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">OPEN</div>
+    <div class="node">30 s cooldown expires</div>
+    <div class="node accent">HALF-OPEN</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">HALF-OPEN</div>
+    <div class="node">probe succeeds → CLOSED / probe fails → OPEN</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Jitter math: with full jitter, delay = uniform(0, min(cap, base × 2^attempt)). For base=100 ms and cap=10 s: attempt 0 → [0, 100 ms], attempt 1 → [0, 200 ms], attempt 2 → [0, 400 ms], attempt 6 → [0, 6400 ms], attempt 7+ → [0, 10 000 ms]. The expected delay is half the upper bound. Over 1000 clients, retries at attempt 2 spread uniformly over a 400 ms window instead of all hitting at exactly 400 ms.</p>
+          <p>Retry budget implementation: use a token bucket. Initialize with 20 tokens. Refill at 2 tokens/second (= 20 per 10 s window). Each retry consumes 1 token. If tokens = 0, reject the retry. This is simpler than tracking a sliding window and gives smooth behavior across window boundaries. The refill rate = budget_cap / window_seconds.</p>
+          <p>Circuit breaker edge cases: the half-open state is the trickiest. If you allow only one probe and it times out (30 s), the circuit stays open for another 30 s — total 60 s of downtime for a service that recovered at t=31 s. Better: allow 3 probes in half-open, require 2/3 success to close. This reduces false-open duration. But too many probes can overload a recovering service. Tune probe count to ~1% of normal traffic.</p>
+          <p>Amplification chains: service A retries 3× to B, B retries 3× to C. A single failure at C generates 3 calls from B, which generates 9 calls from A. With 3 tiers, that&#x27;s 27× amplification. The fix: retry budgets at each layer, and ideally only retry at the layer closest to the failure. Mark errors as retryable-by-caller or already-retried in the response so upstream callers don&#x27;t double-retry.</p>
+          <p>Observability: emit these metrics per service call: retry_attempt (counter, tagged by attempt number), retry_budget_remaining (gauge), circuit_state (gauge — 0=closed, 1=half-open, 2=open), retry_delay_ms (histogram). Alert on budget_remaining = 0 sustained for &gt; 1 minute — that means a downstream is consistently failing and retries are exhausted.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Retry decorator with jitter, budget, and circuit breaker</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import time, random, functools
+from collections import deque
+
+class CircuitBreaker:
+    def __init__(self, threshold=0.5, window=20, cooldown_s=30):
+        self.threshold = threshold
+        self.window = window
+        self.cooldown_s = cooldown_s
+        self.results = deque(maxlen=window)
+        self.state = &#x27;closed&#x27;
+        self.opened_at = 0.0
+
+    def allow(self) -&gt; bool:
+        if self.state == &#x27;closed&#x27;:
+            return True
+        if self.state == &#x27;open&#x27;:
+            if time.monotonic() - self.opened_at &gt;= self.cooldown_s:
+                self.state = &#x27;half_open&#x27;
+                return True
+            return False
+        return True  # half_open: allow probe
+
+    def record(self, success: bool):
+        self.results.append(success)
+        if self.state == &#x27;half_open&#x27;:
+            self.state = &#x27;closed&#x27; if success else &#x27;open&#x27;
+            if not success:
+                self.opened_at = time.monotonic()
+            return
+        if len(self.results) &gt;= self.window:
+            fail_rate = 1 - sum(self.results) / len(self.results)
+            if fail_rate &gt;= self.threshold:
+                self.state = &#x27;open&#x27;
+                self.opened_at = time.monotonic()
+
+
+class RetryBudget:
+    def __init__(self, cap=20, window_s=10):
+        self.tokens = float(cap)
+        self.refill_rate = cap / window_s
+        self.last_refill = time.monotonic()
+        self.cap = cap
+
+    def acquire(self) -&gt; bool:
+        now = time.monotonic()
+        self.tokens = min(self.cap, self.tokens + (now - self.last_refill) * self.refill_rate)
+        self.last_refill = now
+        if self.tokens &gt;= 1:
+            self.tokens -= 1
+            return True
+        return False
+
+
+def retry(max_attempts=3, base_ms=100, cap_ms=10000,
+          retryable=(Exception,), breaker=None, budget=None):
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*a, **kw):
+            for attempt in range(max_attempts):
+                if breaker and not breaker.allow():
+                    raise RuntimeError(&#x27;circuit open&#x27;)
+                try:
+                    result = fn(*a, **kw)
+                    if breaker:
+                        breaker.record(True)
+                    return result
+                except retryable as exc:
+                    if breaker:
+                        breaker.record(False)
+                    if attempt == max_attempts - 1:
+                        raise
+                    if budget and not budget.acquire():
+                        raise RuntimeError(&#x27;retry budget exhausted&#x27;) from exc
+                    delay = random.uniform(0, min(cap_ms, base_ms * 2 ** attempt)) / 1000
+                    time.sleep(delay)
+        return wrapper
+    return decorator</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+use rand::Rng;
+
+// ── Circuit breaker ──────────────────────────────────────────────────
+
+#[derive(Debug, PartialEq)]
+enum CBState { Closed, Open, HalfOpen }
+
+pub struct CircuitBreaker {
+    threshold: f64,
+    window: usize,
+    cooldown: Duration,
+    results: VecDeque&lt;bool&gt;,
+    state: CBState,
+    opened_at: Instant,
+}
+
+impl CircuitBreaker {
+    pub fn new(threshold: f64, window: usize, cooldown_s: u64) -&gt; Self {
+        Self {
+            threshold, window,
+            cooldown: Duration::from_secs(cooldown_s),
+            results: VecDeque::with_capacity(window),
+            state: CBState::Closed,
+            opened_at: Instant::now(),
+        }
+    }
+
+    pub fn allow(&amp;mut self) -&gt; bool {
+        match self.state {
+            CBState::Closed =&gt; true,
+            CBState::Open =&gt; {
+                if self.opened_at.elapsed() &gt;= self.cooldown {
+                    self.state = CBState::HalfOpen;
+                    true
+                } else { false }
+            }
+            CBState::HalfOpen =&gt; true, // allow probe
+        }
+    }
+
+    pub fn record(&amp;mut self, success: bool) {
+        if self.results.len() &gt;= self.window { self.results.pop_front(); }
+        self.results.push_back(success);
+
+        if self.state == CBState::HalfOpen {
+            self.state = if success { CBState::Closed } else { CBState::Open };
+            if !success { self.opened_at = Instant::now(); }
+            return;
+        }
+        if self.results.len() &gt;= self.window {
+            let ok: usize = self.results.iter().filter(|&amp;&amp;s| s).count();
+            let fail_rate = 1.0 - (ok as f64 / self.results.len() as f64);
+            if fail_rate &gt;= self.threshold {
+                self.state = CBState::Open;
+                self.opened_at = Instant::now();
+            }
+        }
+    }
+}
+
+// ── Token-bucket retry budget ────────────────────────────────────────
+
+pub struct RetryBudget {
+    tokens: f64,
+    cap: f64,
+    refill_rate: f64,
+    last_refill: Instant,
+}
+
+impl RetryBudget {
+    pub fn new(cap: f64, window_s: f64) -&gt; Self {
+        Self { tokens: cap, cap, refill_rate: cap / window_s, last_refill: Instant::now() }
+    }
+
+    pub fn acquire(&amp;mut self) -&gt; bool {
+        let now = Instant::now();
+        self.tokens = (self.tokens + now.duration_since(self.last_refill).as_secs_f64()
+                       * self.refill_rate).min(self.cap);
+        self.last_refill = now;
+        if self.tokens &gt;= 1.0 { self.tokens -= 1.0; true } else { false }
+    }
+}
+
+// ── Generic retry with jitter ────────────────────────────────────────
+
+pub fn retry&lt;F, T, E&gt;(
+    max_attempts: usize,
+    base_ms: u64,
+    cap_ms: u64,
+    breaker: Option&lt;&amp;mut CircuitBreaker&gt;,
+    budget: Option&lt;&amp;mut RetryBudget&gt;,
+    mut f: F,
+) -&gt; Result&lt;T, E&gt;
+where
+    F: FnMut() -&gt; Result&lt;T, E&gt;,
+    E: std::fmt::Debug,
+{
+    let mut rng = rand::thread_rng();
+    for attempt in 0..max_attempts {
+        if let Some(cb) = breaker.as_deref_mut() {
+            if !cb.allow() { panic!(&quot;circuit open&quot;); }
+        }
+        match f() {
+            Ok(v) =&gt; {
+                if let Some(cb) = breaker.as_deref_mut() { cb.record(true); }
+                return Ok(v);
+            }
+            Err(e) =&gt; {
+                if let Some(cb) = breaker.as_deref_mut() { cb.record(false); }
+                if attempt == max_attempts - 1 { return Err(e); }
+                if let Some(rb) = budget.as_deref_mut() {
+                    if !rb.acquire() { panic!(&quot;retry budget exhausted&quot;); }
+                }
+                let delay = rng.gen_range(0..=cap_ms.min(base_ms * 2u64.pow(attempt as u32)));
+                std::thread::sleep(Duration::from_millis(delay));
+            }
+        }
+    }
+    unreachable!()
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;deque&gt;
+#include &lt;cmath&gt;
+#include &lt;chrono&gt;
+#include &lt;thread&gt;
+
+// ── Circuit breaker ──────────────────────────────────────────────────
+
+typedef NS_ENUM(NSInteger, CBState) {
+    CBStateClosed, CBStateOpen, CBStateHalfOpen
+};
+
+@interface CircuitBreaker : NSObject {
+    double _threshold;
+    NSUInteger _window;
+    double _cooldownS;
+    std::deque&lt;bool&gt; _results;
+    CBState _state;
+    std::chrono::steady_clock::time_point _openedAt;
+}
+- (instancetype)initWithThreshold:(double)thr window:(NSUInteger)w cooldown:(double)s;
+- (BOOL)allow;
+- (void)record:(BOOL)success;
+@end
+
+@implementation CircuitBreaker
+- (instancetype)initWithThreshold:(double)thr window:(NSUInteger)w cooldown:(double)s {
+    if ((self = [super init])) {
+        _threshold = thr; _window = w; _cooldownS = s;
+        _state = CBStateClosed;
+        _openedAt = std::chrono::steady_clock::now();
+    }
+    return self;
+}
+
+- (BOOL)allow {
+    if (_state == CBStateClosed) return YES;
+    if (_state == CBStateOpen) {
+        auto elapsed = std::chrono::steady_clock::now() - _openedAt;
+        if (std::chrono::duration&lt;double&gt;(elapsed).count() &gt;= _cooldownS) {
+            _state = CBStateHalfOpen;
+            return YES;
+        }
+        return NO;
+    }
+    return YES; // half-open probe
+}
+
+- (void)record:(BOOL)success {
+    if (_results.size() &gt;= _window) _results.pop_front();
+    _results.push_back(success);
+
+    if (_state == CBStateHalfOpen) {
+        _state = success ? CBStateClosed : CBStateOpen;
+        if (!success) _openedAt = std::chrono::steady_clock::now();
+        return;
+    }
+    if (_results.size() &gt;= _window) {
+        int ok = 0;
+        for (bool s : _results) ok += s;
+        double failRate = 1.0 - (double)ok / _results.size();
+        if (failRate &gt;= _threshold) {
+            _state = CBStateOpen;
+            _openedAt = std::chrono::steady_clock::now();
+        }
+    }
+}
+@end
+
+// ── Token-bucket retry budget ────────────────────────────────────────
+
+@interface RetryBudget : NSObject {
+    double _tokens, _cap, _refillRate;
+    std::chrono::steady_clock::time_point _lastRefill;
+}
+- (instancetype)initWithCap:(double)cap windowS:(double)ws;
+- (BOOL)acquire;
+@end
+
+@implementation RetryBudget
+- (instancetype)initWithCap:(double)cap windowS:(double)ws {
+    if ((self = [super init])) {
+        _tokens = cap; _cap = cap; _refillRate = cap / ws;
+        _lastRefill = std::chrono::steady_clock::now();
+    }
+    return self;
+}
+
+- (BOOL)acquire {
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration&lt;double&gt;(now - _lastRefill).count();
+    _tokens = std::fmin(_cap, _tokens + elapsed * _refillRate);
+    _lastRefill = now;
+    if (_tokens &gt;= 1.0) { _tokens -= 1.0; return YES; }
+    return NO;
+}
+@end
+
+// ── Block-based retry with jitter ────────────────────────────────────
+
+typedef id (^RetryBlock)(void);
+
+static id retryWithBlock(RetryBlock block, int maxAttempts,
+                         double baseMs, double capMs,
+                         CircuitBreaker *breaker, RetryBudget *budget) {
+    for (int attempt = 0; attempt &lt; maxAttempts; ++attempt) {
+        if (breaker &amp;&amp; ![breaker allow])
+            @throw [NSException exceptionWithName:@&quot;CircuitOpen&quot;
+                                           reason:@&quot;circuit open&quot; userInfo:nil];
+        @try {
+            id result = block();
+            if (breaker) [breaker record:YES];
+            return result;
+        } @catch (NSException *exc) {
+            if (breaker) [breaker record:NO];
+            if (attempt == maxAttempts - 1) @throw;
+            if (budget &amp;&amp; ![budget acquire])
+                @throw [NSException exceptionWithName:@&quot;BudgetExhausted&quot;
+                                               reason:@&quot;retry budget exhausted&quot;
+                                             userInfo:nil];
+            double delay = ((double)arc4random() / UINT32_MAX)
+                         * std::fmin(capMs, baseMs * std::pow(2, attempt));
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds((int64_t)delay));
+        }
+    }
+    return nil;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Retry with jitter + budget + circuit breaker">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Client</span><p>POST /payments/charge → 503</p></div>
+    <div class="seq-row"><span class="actor">Retry policy</span><p>Retryable? Yes. Budget remaining? 18/20. Circuit? Closed.</p></div>
+    <div class="seq-row"><span class="actor">Retry policy</span><p>sleep(jitter(0, 100ms)) → 73 ms</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>POST /payments/charge → 503 (attempt 2)</p></div>
+    <div class="seq-row"><span class="actor">Retry policy</span><p>Budget remaining? 17/20. sleep(jitter(0, 200ms)) → 142 ms</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>POST /payments/charge → 200 OK (attempt 3)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Full jitter vs equal jitter</strong>
+              <p>Full jitter has lower total load but higher variance in individual delays; equal jitter has a guaranteed minimum delay.</p>
+            </div>
+            <div>
+              <strong>Retry budget scope</strong>
+              <p>Per-client budgets prevent local amplification; global budgets require coordination but give better system-wide protection.</p>
+            </div>
+            <div>
+              <strong>Circuit breaker window size</strong>
+              <p>Small window (10 requests) is responsive but noisy; large window (100) is stable but slow to trip.</p>
+            </div>
+            <div>
+              <strong>Retrying at source vs closest layer</strong>
+              <p>Source retries are simplest but amplify through layers; closest-layer retries minimize total calls.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Fixed-interval retries without jitter — synchronized thundering herd after a blip.</li>
+            <li>No retry budget — a broken dependency consumes unbounded retry traffic.</li>
+            <li>Retrying non-idempotent operations — double-charging, duplicate writes.</li>
+            <li>Circuit breaker window too small — noisy state flapping between open and closed.</li>
+            <li>Not distinguishing transient from permanent errors — wasting retries on 400s.</li>
+            <li>Amplification chains: 3 layers × 3 retries = 27× load on the bottom service.</li>
+            <li>Retry delay longer than client timeout — retry completes but client already gave up.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Add retry hedging: send a second request after p95 latency, use whichever returns first.</li>
+            <li>Implement adaptive retry budgets that shrink under sustained errors.</li>
+            <li>Design a retry-aware load balancer that routes retries to different backend instances.</li>
+            <li>Build a dashboard showing retry amplification factor across the service graph.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Demonstrate the thundering herd problem with a concrete example (1000 clients, fixed interval). Implement exponential backoff with full jitter and explain the math. Layer on retry budgets and circuit breakers with clear state-machine descriptions. Mention amplification chains across service tiers. The candidate who distinguishes transient from permanent errors upfront is already ahead.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../split_brain/">← Handle split-brain in a leader election</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../clock_skew/">Reconcile clocks across regions →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

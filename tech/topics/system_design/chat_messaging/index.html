@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a chat messaging system | System Design | Engineering Notes</title>
+  <meta name="description" content="Chat is websockets plus ordering plus unread math — and group chats with 5,000 members will expose every shortcut.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a chat messaging system</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a chat messaging system</h1>
+      <p class="problem-deck">Chat is websockets plus ordering plus unread math — and group chats with 5,000 members will expose every shortcut.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>1:1 vs group, max group size, media support, delivery receipts.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Core messaging, presence, unread counts. Defer voice/video, E2E encryption.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>100M DAU, 50 msgs/user/day, 1KB avg message size.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Gateway (WebSocket), chat service, message store, presence service.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Message ordering</strong><p>Snowflake IDs, per-conversation sequence numbers, conflict resolution.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Group chat</strong><p>Fan-out to members, large groups, membership changes mid-stream.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Presence &amp; unread</strong><p>Heartbeat-based presence, per-conversation unread counters.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Offline delivery, push notifications, E2E encryption mention.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d first clarify whether we are building 1:1 chat, group chat, or both. Group chats change the architecture significantly — a 5,000-member group means every message fans out to 5,000 WebSocket connections. I&#x27;d also ask about delivery guarantees: do we need sent/delivered/read receipts, and is at-least-once delivery acceptable or do we need exactly-once?</p>
+          <p>The core architecture is a WebSocket gateway that maintains persistent connections to clients. When user A sends a message to user B, it hits the gateway, the chat service persists it, and then routes it to B&#x27;s gateway connection. If B is offline, it is stored and delivered when B reconnects. The tricky parts are message ordering (what happens when two messages cross in transit), presence (knowing who is online without drowning in heartbeats), and unread counts (which need to be accurate across multiple devices).</p>
+          <p>I&#x27;d sketch the gateway layer, message persistence, and then deep-dive into ordering, which is the part most candidates underestimate.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>1:1 only, or groups too? What is the max group size?</li>
+            <li>Do we need delivery receipts (sent, delivered, read)?</li>
+            <li>Is message ordering strictly causal or wall-clock?</li>
+            <li>Do we support media messages (images, files)?</li>
+            <li>Multi-device — can a user be online on phone and desktop simultaneously?</li>
+            <li>Do we need message editing and deletion after send?</li>
+            <li>What is the message retention policy?</li>
+            <li>Is end-to-end encryption in scope?</li>
+            <li>Do we need typing indicators?</li>
+            <li>What is the target delivery latency for 1:1 messages?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: 1:1 and group messaging, message ordering, presence, unread counts.</li>
+            <li>In: offline delivery via push notification, multi-device sync.</li>
+            <li>Out: voice/video calls, E2E encryption implementation, message search.</li>
+            <li>Defer: message reactions, threads/replies, file sharing pipeline.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Send message</strong>
+              <p>Client sends message via WebSocket; server persists and routes to recipient(s).</p>
+            </div>
+            <div>
+              <strong>Receive message</strong>
+              <p>Server pushes message to recipient via WebSocket; offline users get push notification.</p>
+            </div>
+            <div>
+              <strong>Get history</strong>
+              <p>GET /conversations/{id}/messages?before=&amp;limit=50 for paginated history.</p>
+            </div>
+            <div>
+              <strong>Presence</strong>
+              <p>Server tracks online/offline status via heartbeats; clients subscribe to friend presence.</p>
+            </div>
+            <div>
+              <strong>Unread count</strong>
+              <p>Per-conversation unread counter, reset on read receipt or conversation open.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Delivery latency</strong>
+              <p>p99 &lt; 200 ms for 1:1 messages between online users.</p>
+            </div>
+            <div>
+              <strong>Ordering</strong>
+              <p>Messages within a conversation appear in causal order on all clients.</p>
+            </div>
+            <div>
+              <strong>Durability</strong>
+              <p>Zero message loss — persisted before ack.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.99% — chat downtime is immediately noticed by users.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>100M DAU × 50 msgs/day = 5B msgs/day ≈ 58K msgs/sec avg.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Messages/day</strong>
+              <p>100M DAU × 50 msgs/day = 5B messages/day.</p>
+            </div>
+            <div>
+              <strong>Message size</strong>
+              <p>Avg 1 KB (text + metadata) → 5 TB/day raw storage.</p>
+            </div>
+            <div>
+              <strong>WebSocket connections</strong>
+              <p>100M DAU, peak 60M concurrent → 60M persistent connections.</p>
+            </div>
+            <div>
+              <strong>Gateway servers</strong>
+              <p>60M connections / 100K per server = 600 gateway servers.</p>
+            </div>
+            <div>
+              <strong>Presence heartbeats</strong>
+              <p>60M online users × 1 heartbeat/30s = 2M heartbeats/sec.</p>
+            </div>
+            <div>
+              <strong>Storage/year</strong>
+              <p>5 TB/day × 365 = 1.8 PB/year (tiered: hot 90 days, warm archive).</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- WebSocket events (bidirectional):
+→ { type: &#x27;send&#x27;, conv_id, content, client_msg_id }
+← { type: &#x27;ack&#x27;, client_msg_id, server_msg_id, timestamp }
+← { type: &#x27;message&#x27;, conv_id, sender_id, content, server_msg_id, timestamp }
+← { type: &#x27;presence&#x27;, user_id, status: &#x27;online&#x27;|&#x27;offline&#x27;, last_seen }
+→ { type: &#x27;read&#x27;, conv_id, up_to_msg_id }
+
+-- REST fallback for history:
+GET /api/v1/conversations/{conv_id}/messages?before={msg_id}&amp;limit=50
+  Response 200: { messages[], has_more }
+
+GET /api/v1/conversations
+  Response 200: { conversations[{ conv_id, last_message, unread_count }] }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Messages table (sharded by conversation_id)
+CREATE TABLE messages (
+  message_id    BIGINT PRIMARY KEY,   -- Snowflake ID (embeds timestamp)
+  conv_id       BIGINT NOT NULL,
+  sender_id     BIGINT NOT NULL,
+  content       TEXT,
+  content_type  VARCHAR(16) DEFAULT &#x27;text&#x27;,
+  created_at    TIMESTAMP,
+  seq_no        INT NOT NULL           -- per-conversation sequence number
+);
+CREATE INDEX idx_msg_conv ON messages(conv_id, seq_no);
+
+-- Conversations
+CREATE TABLE conversations (
+  conv_id       BIGINT PRIMARY KEY,
+  type          VARCHAR(8),            -- &#x27;1:1&#x27; or &#x27;group&#x27;
+  created_at    TIMESTAMP
+);
+
+-- Membership + unread tracking
+CREATE TABLE conv_members (
+  conv_id       BIGINT,
+  user_id       BIGINT,
+  last_read_seq INT DEFAULT 0,
+  PRIMARY KEY (conv_id, user_id)
+);
+-- unread_count = max(seq_no) - last_read_seq</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The system has four main components: WebSocket gateways, a chat service, a message store, and a presence service.</p>
+          <p>WebSocket gateways maintain persistent connections with clients. Each gateway server handles ~100K concurrent connections. When a client connects, the gateway registers the (user_id, gateway_id) mapping in a connection registry (Redis hash). When a message needs to be delivered, the chat service looks up the recipient&#x27;s gateway in the registry and forwards the message. If the user has multiple devices, they appear as multiple entries in the registry and all receive the message.</p>
+          <p>The chat service receives a message from the sender&#x27;s gateway, assigns a Snowflake message_id (which embeds a timestamp for natural ordering), increments the per-conversation sequence number atomically, persists the message to the store, and then routes it to each recipient&#x27;s gateway. The sender receives an ack with the server_msg_id only after the message is durably stored — this guarantees persistence before acknowledgment.</p>
+          <p>Message ordering uses per-conversation sequence numbers. Each conversation maintains an atomic counter (in Redis or the database). Every message gets the next sequence number. Clients render messages by seq_no, so even if messages arrive out of order over WebSocket, they display correctly. Gaps in seq_no indicate missing messages, prompting the client to fetch via the REST history API.</p>
+          <p>For group chats, the chat service fans out the message to all group members. For small groups (&lt; 100), it pushes to each member&#x27;s gateway connection in parallel. For large groups (&gt; 100 members), it writes the message once to the conversation and each member&#x27;s client pulls it when they next open the conversation — a hybrid push/pull model similar to the news feed celebrity problem.</p>
+          <p>Presence is a heartbeat system. Each connected client sends a heartbeat every 30 seconds. The gateway updates a Redis key with a TTL of 60 seconds: if two heartbeats are missed, the user is considered offline. Friends subscribe to presence channels — when a user goes online or offline, a presence event is published to the channel. To avoid thundering herds, presence updates are batched and slightly delayed (2-3 seconds).</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client A</span><b>&rarr;</b><span class="node">WS Gateway</span><b>&rarr;</b><span class="node accent">Chat Service</span><b>&rarr;</b><span class="node">WS Gateway</span><b>&rarr;</b><span class="node">Client B</span></div><figcaption>1:1 message flow through WebSocket gateways</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Client sends heartbeat every 30s</span><span class="node accent">Gateway sets Redis key presence:{user_id} with TTL=60s</span><span class="node">If 2 heartbeats missed → key expires → offline event published</span><span class="node accent">Friends subscribed to presence channel receive update</span></div><figcaption>Heartbeat-based presence detection</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Message (seq=42)</span><b>&rarr;</b><span class="node accent">Cassandra (sharded by conv_id)</span><b>&rarr;</b><span class="node">Client renders by seq_no order</span></div><figcaption>Per-conversation sequence numbers guarantee display order</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Message ordering is the hardest part of chat. Wall-clock timestamps are unreliable because client clocks differ and even server clocks can drift. I&#x27;d use a per-conversation atomic counter to assign sequence numbers. The counter lives in Redis (INCR is atomic and fast). If Redis is unavailable, we fall back to the Snowflake message_id, which embeds a millisecond timestamp — not perfect for causal ordering but good enough as a fallback.</p>
+          <p>Multi-device sync is where sequence numbers really pay off. When user A opens the desktop app after being on the phone, the desktop client knows its last-seen seq_no for each conversation. It requests messages with seq_no &gt; last_seen. If there are gaps (e.g., the client has seq 40 and 42 but not 41), it explicitly fetches the missing sequence numbers. This makes the protocol resilient to dropped WebSocket frames.</p>
+          <p>Unread counts are derived, not stored as a separate counter. Each conversation member has a last_read_seq in the membership table. The unread count is max_seq - last_read_seq. When the user opens a conversation, the client sends a &#x27;read&#x27; event with the latest seq_no they have seen, and the server updates last_read_seq. This approach avoids the race condition of incrementing/decrementing a shared counter from multiple devices.</p>
+          <p>Large group chats (1,000+ members) need special handling. Fanning out a message to 5,000 WebSocket connections per message creates a thundering-herd problem. I&#x27;d batch the fan-out: the chat service publishes the message to a group channel in Redis Pub/Sub, and only gateway servers with connected group members subscribe to that channel. A gateway with 50 group members on its server sends 50 WebSocket pushes — the fan-out is distributed across gateways rather than centralized in the chat service.</p>
+          <p>Offline delivery requires integration with push notification services (APNs, FCM). When the chat service cannot find a user in the connection registry, it enqueues a push notification with a 2-second debounce — so rapid-fire messages in a group produce one push with a count rather than 20 individual notifications. The debounce window is configurable per user in notification preferences.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Chat service with delivery routing and unread tracking</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import asyncio
+from dataclasses import dataclass
+from collections import defaultdict
+
+
+@dataclass
+class Message:
+    message_id: int
+    conv_id: int
+    sender_id: int
+    content: str
+    seq_no: int  # per-conversation monotonic sequence number
+
+
+class ChatService:
+    def __init__(self, msg_store, conn_registry, seq_counter, push_svc):
+        self.msg_store = msg_store
+        self.conn_registry = conn_registry  # maps user → gateway connections
+        self.seq_counter = seq_counter      # atomic per-conversation counter
+        self.push_svc = push_svc            # mobile push notification service
+
+    async def send_message(
+        self, sender_id: int, conv_id: int, content: str
+    ) -&gt; Message:
+        # Monotonic sequence guarantees ordering even under clock skew
+        seq = await self.seq_counter.incr(f&quot;conv_seq:{conv_id}&quot;)
+        msg = Message(
+            message_id=self._snowflake(),
+            conv_id=conv_id,
+            sender_id=sender_id,
+            content=content,
+            seq_no=seq,
+        )
+        await self.msg_store.insert(msg)
+        members = await self.msg_store.get_members(conv_id)
+        # Fan-out delivery to all members concurrently
+        await asyncio.gather(*[
+            self._deliver(msg, uid)
+            for uid in members if uid != sender_id
+        ])
+        return msg
+
+    async def _deliver(self, msg: Message, user_id: int):
+        &quot;&quot;&quot;Route to WebSocket gateways if online, else send push notification.&quot;&quot;&quot;
+        gateways = await self.conn_registry.get_gateways(user_id)
+        if gateways:
+            for gw in gateways:
+                await gw.push(user_id, msg)
+        else:
+            await self.push_svc.send_notification(
+                user_id=user_id,
+                title=&quot;New message in conversation&quot;,
+                body=msg.content[:100],
+                debounce_ms=2000,
+            )
+
+    async def mark_read(self, user_id: int, conv_id: int, up_to_seq: int):
+        await self.msg_store.update_last_read(conv_id, user_id, up_to_seq)
+
+    async def get_unread_count(self, user_id: int, conv_id: int) -&gt; int:
+        max_seq = await self.seq_counter.get(f&quot;conv_seq:{conv_id}&quot;)
+        last_read = await self.msg_store.get_last_read(conv_id, user_id)
+        return max(0, max_seq - last_read)
+
+    def _snowflake(self) -&gt; int:
+        import time
+        return int(time.time() * 1000) &lt;&lt; 22  # simplified Snowflake ID</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Clone, Debug)]
+struct Message {
+    message_id: u64,
+    conv_id: u64,
+    sender_id: u64,
+    content: String,
+    seq_no: u64,  // per-conversation monotonic sequence
+}
+
+/// In-memory chat service demonstrating delivery routing and unread tracking.
+/// Production version would use async I/O (tokio) and external stores.
+struct ChatService {
+    messages: Mutex&lt;Vec&lt;Message&gt;&gt;,
+    members: Mutex&lt;HashMap&lt;u64, Vec&lt;u64&gt;&gt;&gt;,   // conv_id → user_ids
+    sequences: Mutex&lt;HashMap&lt;u64, u64&gt;&gt;,       // conv_id → seq counter
+    last_read: Mutex&lt;HashMap&lt;(u64, u64), u64&gt;&gt;, // (conv, user) → seq
+}
+
+impl ChatService {
+    fn new() -&gt; Self {
+        Self {
+            messages: Mutex::new(Vec::new()),
+            members: Mutex::new(HashMap::new()),
+            sequences: Mutex::new(HashMap::new()),
+            last_read: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn snowflake_id() -&gt; u64 {
+        let ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        (ms as u64) &lt;&lt; 22 // simplified Snowflake
+    }
+
+    fn send_message(&amp;self, sender: u64, conv: u64, content: &amp;str) -&gt; Message {
+        let seq = {
+            let mut seqs = self.sequences.lock().unwrap();
+            let s = seqs.entry(conv).or_insert(0);
+            *s += 1;
+            *s
+        };
+        let msg = Message {
+            message_id: Self::snowflake_id(),
+            conv_id: conv, sender_id: sender,
+            content: content.to_string(), seq_no: seq,
+        };
+        self.messages.lock().unwrap().push(msg.clone());
+        // In production: fan-out to WebSocket gateways or push service
+        msg
+    }
+
+    fn mark_read(&amp;self, user: u64, conv: u64, up_to_seq: u64) {
+        self.last_read.lock().unwrap().insert((conv, user), up_to_seq);
+    }
+
+    fn unread_count(&amp;self, user: u64, conv: u64) -&gt; u64 {
+        let max_seq = *self.sequences.lock().unwrap().get(&amp;conv).unwrap_or(&amp;0);
+        let read = *self.last_read.lock().unwrap().get(&amp;(conv, user)).unwrap_or(&amp;0);
+        max_seq.saturating_sub(read)
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;unordered_map&gt;
+#include &lt;vector&gt;
+#include &lt;mutex&gt;
+#include &lt;ctime&gt;
+
+// Message value type — plain C++ struct for efficiency
+struct ChatMessage {
+    uint64_t messageID, convID, senderID, seqNo;
+    std::string content;
+};
+
+// Chat service with delivery routing and unread tracking
+@interface ChatService : NSObject
+- (ChatMessage)sendFrom:(uint64_t)sender conv:(uint64_t)conv content:(NSString *)text;
+- (void)markReadUser:(uint64_t)user conv:(uint64_t)conv upTo:(uint64_t)seq;
+- (uint64_t)unreadCountUser:(uint64_t)user conv:(uint64_t)conv;
+@end
+
+@implementation ChatService {
+    std::vector&lt;ChatMessage&gt; _messages;
+    std::unordered_map&lt;uint64_t, uint64_t&gt; _sequences;              // conv → seq
+    std::unordered_map&lt;uint64_t, std::unordered_map&lt;uint64_t, uint64_t&gt;&gt; _lastRead; // conv → {user → seq}
+    std::mutex _mu;
+}
+
+- (uint64_t)_snowflake {
+    // Simplified Snowflake: ms-precision timestamp shifted left
+    return (uint64_t)(time(NULL) * 1000) &lt;&lt; 22;
+}
+
+- (ChatMessage)sendFrom:(uint64_t)sender conv:(uint64_t)conv content:(NSString *)text {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    uint64_t seq = ++_sequences[conv]; // monotonic per-conversation counter
+    ChatMessage msg{[self _snowflake], conv, sender, seq, text.UTF8String};
+    _messages.push_back(msg);
+    // Production: fan-out via WebSocket gateways or APNs push
+    return msg;
+}
+
+- (void)markReadUser:(uint64_t)user conv:(uint64_t)conv upTo:(uint64_t)seq {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    _lastRead[conv][user] = seq;
+}
+
+- (uint64_t)unreadCountUser:(uint64_t)user conv:(uint64_t)conv {
+    std::lock_guard&lt;std::mutex&gt; lock(_mu);
+    uint64_t maxSeq = _sequences.count(conv) ? _sequences[conv] : 0;
+    uint64_t read = 0;
+    if (_lastRead.count(conv) &amp;&amp; _lastRead[conv].count(user))
+        read = _lastRead[conv][user];
+    return maxSeq &gt; read ? maxSeq - read : 0;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client A</span><p>WS: {type: "send", conv_id: 99, content: "Hey!", client_msg_id: "abc"}</p></div><div class="seq-row"><span class="actor">Chat Service</span><p>INCR conv_seq:99 → seq=42, persist message, lookup recipient gateway</p></div><div class="seq-row"><span class="actor">Chat Service</span><p>WS to Client A: {type: "ack", client_msg_id: "abc", server_msg_id: 7001, seq: 42}</p></div><div class="seq-row"><span class="actor">WS Gateway B</span><p>Pushes message to Client B: {type: "message", conv_id: 99, seq: 42, content: "Hey!"}</p></div><div class="seq-row"><span class="actor">Client B</span><p>WS: {type: "read", conv_id: 99, up_to_msg_id: 7001} — unread count reset</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>WebSocket vs long polling</strong>
+              <p>WS gives real-time push but requires persistent connections; long poll is simpler but higher latency.</p>
+            </div>
+            <div>
+              <strong>Per-conversation seq vs global timestamp</strong>
+              <p>Seq numbers guarantee order within a conversation but need coordination; timestamps are decentralized but imprecise.</p>
+            </div>
+            <div>
+              <strong>Push all vs pull for large groups</strong>
+              <p>Push is real-time but O(members) per message; pull reduces server load but adds latency.</p>
+            </div>
+            <div>
+              <strong>Derived unread vs counter</strong>
+              <p>Derived (max_seq - last_read) is always consistent; a counter can drift under concurrent updates.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>WebSocket gateway crashes — 100K users lose connections and must reconnect, causing a thundering herd.</li>
+            <li>Sequence counter Redis goes down — messages cannot be ordered, delivery stalls.</li>
+            <li>Large group fan-out overwhelms gateway — 5K WebSocket pushes per message lag the server.</li>
+            <li>Offline user returns with 10K unread messages — initial sync floods the connection.</li>
+            <li>Push notification debounce too aggressive — user misses time-sensitive messages.</li>
+            <li>Multi-device read receipt race — two devices send different last_read_seq, causing inconsistent unread counts.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add end-to-end encryption while preserving server-side search?</li>
+            <li>Design message reactions with real-time count updates.</li>
+            <li>How would you implement typing indicators without overwhelming the server?</li>
+            <li>Add message threading (reply-to) with thread-level unread counts.</li>
+            <li>How would you handle multi-region deployment with conversation locality?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Cover the WebSocket gateway architecture, explain per-conversation sequence numbers for ordering, and derive unread counts from max_seq minus last_read_seq. Show awareness of the large-group fan-out problem and the offline delivery path via push notifications. E2E encryption and voice calls can be mentioned as future work.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../rate_limiter/">← Design a rate limiter</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../file_storage/">Design a file storage service →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

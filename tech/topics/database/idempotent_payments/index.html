@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Implement idempotent payment writes | Database | Engineering Notes</title>
+  <meta name="description" content="Networks retry. Clients retry. Your payment insert must not become two captures at the processor.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Implement idempotent payment writes</p>
+      <p class="eyebrow">Database · Hard · ~60 min</p>
+      <h1>Implement idempotent payment writes</h1>
+      <p class="problem-deck">Networks retry. Clients retry. Your payment insert must not become two captures at the processor.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Frame the problem</strong><p>Why retries cause duplicate payments.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Idempotency key design</strong><p>Client-generated UUID, server-side dedup.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Database-level guarantees</strong><p>UNIQUE constraint, INSERT ON CONFLICT, transaction scope.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Processor interaction</strong><p>Capture vs authorize, processor idempotency keys.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Edge cases</strong><p>Partial failures, timeout between DB and processor.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Recovery and reconciliation</strong><p>Stuck payments, reconciliation jobs, alerting.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Wrap-up</strong><p>End-to-end flow summary and monitoring.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;ve dealt with duplicate charges in production, and it&#x27;s the kind of bug that costs real money and real trust. The root cause is always the same: the client didn&#x27;t get an ACK, so it retried, and the server treated the retry as a new request. Two captures at the payment processor, two charges on the customer&#x27;s card.</p>
+          <p>The fix has two layers. First, the client sends an idempotency key — a UUID generated before the first attempt. The server stores this key with a UNIQUE constraint and uses INSERT ON CONFLICT to detect retries. Second, we pass the same key to the payment processor, so even if our code calls capture twice, Stripe or Adyen returns the original result.</p>
+          <p>The hard part is the gap between &#x27;we wrote the row&#x27; and &#x27;the processor confirmed&#x27;. If the server crashes in that window, we have a database record but no capture — or a capture but no record. That&#x27;s where reconciliation comes in.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What payment processor — Stripe, Adyen, Braintree?</li>
+            <li>Does the client or the server generate the idempotency key?</li>
+            <li>What is the retry window — how long can a client retry with the same key?</li>
+            <li>Do we separate authorize and capture, or single-step charge?</li>
+            <li>What happens if the same key arrives with different amounts?</li>
+            <li>How do we handle partial failures (DB writes, processor fails)?</li>
+            <li>Is there a reconciliation job that runs periodically?</li>
+            <li>What is the SLA for charge correctness — zero duplicates or within-SLA dedup?</li>
+            <li>Do we support refund idempotency as well?</li>
+            <li>What database engine are we using?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: idempotency key storage, upsert mechanics, processor interaction, recovery.</li>
+            <li>Out: full payment gateway design, PCI compliance, multi-currency.</li>
+            <li>Out: refund flow (mention but don&#x27;t implement).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Create payment</strong>
+              <p>Accept idempotency key + amount; return payment status.</p>
+            </div>
+            <div>
+              <strong>Retry safety</strong>
+              <p>Same key + same params returns original result, no side effects.</p>
+            </div>
+            <div>
+              <strong>Conflict detection</strong>
+              <p>Same key + different params returns 409 Conflict.</p>
+            </div>
+            <div>
+              <strong>Status query</strong>
+              <p>Client can poll payment status by idempotency key.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Correctness</strong>
+              <p>Zero duplicate charges under any failure mode.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>p99 &lt; 500 ms for the full create-payment flow.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>If the processor is down, queue the request; don&#x27;t lose it.</p>
+            </div>
+            <div>
+              <strong>Auditability</strong>
+              <p>Every state transition is logged with timestamp and actor.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Payments/day</strong>
+              <p>500,000 payments/day = ~6 TPS sustained, 30 TPS peak.</p>
+            </div>
+            <div>
+              <strong>Row size</strong>
+              <p>~300 bytes per payment row + 100 bytes idempotency key row.</p>
+            </div>
+            <div>
+              <strong>Storage</strong>
+              <p>500K × 400 bytes × 365 days ≈ 73 GB/year.</p>
+            </div>
+            <div>
+              <strong>Key TTL</strong>
+              <p>Idempotency keys expire after 24 hours; ~500K active keys in lookup table.</p>
+            </div>
+            <div>
+              <strong>Index size</strong>
+              <p>UNIQUE index on idempotency_key ≈ 50 MB.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /v1/payments
+Headers: Idempotency-Key: &lt;client-uuid&gt;
+Body: {&quot;amount_cents&quot;: 4999, &quot;currency&quot;: &quot;USD&quot;, &quot;customer_id&quot;: &quot;cust_123&quot;}
+
+Response (first call):  201 Created  {&quot;id&quot;: &quot;pay_abc&quot;, &quot;status&quot;: &quot;captured&quot;}
+Response (retry):      200 OK       {&quot;id&quot;: &quot;pay_abc&quot;, &quot;status&quot;: &quot;captured&quot;}
+Response (conflict):   409 Conflict {&quot;error&quot;: &quot;idempotency key reused with different params&quot;}
+
+GET /v1/payments/:idempotency_key
+Response: {&quot;id&quot;: &quot;pay_abc&quot;, &quot;status&quot;: &quot;captured&quot;, &quot;amount_cents&quot;: 4999}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE payments (
+    id              BIGSERIAL PRIMARY KEY,
+    idempotency_key UUID NOT NULL,
+    customer_id     TEXT NOT NULL,
+    amount_cents    BIGINT NOT NULL,
+    currency        TEXT NOT NULL DEFAULT &#x27;USD&#x27;,
+    status          TEXT NOT NULL DEFAULT &#x27;pending&#x27;,
+    processor_ref   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_idempotency_key UNIQUE (idempotency_key)
+);
+
+CREATE TABLE payment_events (
+    id          BIGSERIAL PRIMARY KEY,
+    payment_id  BIGINT NOT NULL REFERENCES payments(id),
+    event_type  TEXT NOT NULL,
+    detail      JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_payments_status ON payments (status)
+    WHERE status IN (&#x27;pending&#x27;, &#x27;processing&#x27;);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The core mechanism is INSERT ON CONFLICT. When a payment request arrives, we try to INSERT a row with the idempotency_key. If the key already exists (UNIQUE violation), we check whether the parameters match: same amount, same currency, same customer. If they match, we return the existing payment — the client is retrying. If they differ, we return 409 Conflict — the client reused a key, which is a bug.</p>
+          <p>The payment lifecycle is a state machine: pending → processing → captured | failed. We INSERT with status=&#x27;pending&#x27;, then call the processor. If the processor succeeds, we UPDATE to &#x27;captured&#x27; and store the processor reference. If it fails, we UPDATE to &#x27;failed&#x27;. Every transition is recorded in payment_events for auditability.</p>
+          <p>The dangerous window is between our INSERT and the processor response. If the server crashes here, the row is stuck in &#x27;pending&#x27; or &#x27;processing&#x27;. A reconciliation job runs every 60 seconds, finds payments older than 5 minutes in &#x27;processing&#x27; state, and checks the processor API for their status. If the processor has no record, we retry the capture. If the processor says &#x27;captured&#x27;, we update our row.</p>
+          <p>We also pass the idempotency key to the processor itself. Stripe accepts an Idempotency-Key header and deduplicates on their end. This means even if our reconciliation job retries a capture that actually succeeded, Stripe returns the original result. Belt and suspenders.</p>
+          <p>Key expiration: we don&#x27;t keep idempotency keys forever. A background job deletes keys older than 24 hours. The client contract states that retries after 24 hours are treated as new payments.</p>
+<figure class="diagram dark" aria-label="Idempotent payment flow">
+  <div class="flow-row">
+    <div class="node">Client sends<br>Idempotency-Key</div>
+    <div class="node">INSERT ON CONFLICT<br>dedup in DB</div>
+    <div class="node accent">Call processor<br>with same key</div>
+    <div class="node">UPDATE status<br>captured | failed</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Payment state machine">
+  <div class="flow-row">
+    <div class="node">pending</div>
+    <div class="node">processing</div>
+    <div class="node accent">captured</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">pending</div>
+    <div class="node">processing</div>
+    <div class="node">failed</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s trace the happy path first. Client generates UUID &#x27;aaaa-bbbb-cccc-dddd&#x27; and sends POST /v1/payments with amount=4999. Server runs INSERT INTO payments (idempotency_key, customer_id, amount_cents, status) VALUES (&#x27;aaaa-...&#x27;, &#x27;cust_123&#x27;, 4999, &#x27;pending&#x27;). Row inserted, id=42. Server calls Stripe with Idempotency-Key: &#x27;aaaa-bbbb-cccc-dddd&#x27;. Stripe returns charge_id=&#x27;ch_xyz&#x27;. Server runs UPDATE payments SET status=&#x27;captured&#x27;, processor_ref=&#x27;ch_xyz&#x27; WHERE id=42. Returns 201 to client.</p>
+          <p>Retry path: client didn&#x27;t get the 201 (network timeout) and retries with the same key and same amount. Server runs INSERT ON CONFLICT (idempotency_key) DO NOTHING. Zero rows affected. Server SELECTs the existing row: status=&#x27;captured&#x27;, amount=4999, matches the request. Returns 200 with the existing payment. No second charge.</p>
+          <p>Crash path: server crashes after INSERT but before calling Stripe. Row is stuck as &#x27;pending&#x27;. The reconciliation job picks it up after 5 minutes: queries Stripe for this idempotency key — Stripe has no record. Job calls Stripe capture with the same key. Stripe processes it and returns charge_id. Job updates the row to &#x27;captured&#x27;. When the client retries (maybe minutes later), it finds the completed payment and gets a 200.</p>
+          <p>Conflict path: client reuses the key &#x27;aaaa-bbbb-cccc-dddd&#x27; but with amount=9999 instead of 4999. Server finds the existing row, compares parameters: amount mismatch. Returns 409 Conflict with an error message. This prevents the client from accidentally overwriting a payment.</p>
+          <p>Processor-double-charge prevention: even if our code somehow calls Stripe twice with the same Idempotency-Key, Stripe&#x27;s server returns the cached result from the first call for 24 hours. This is the second layer of defense — our UNIQUE constraint is the first.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Idempotent payment sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Client</span><p>POST /v1/payments with Idempotency-Key: uuid-1</p></div>
+    <div class="seq-row"><span class="actor">Server</span><p>INSERT INTO payments ON CONFLICT DO NOTHING</p></div>
+    <div class="seq-row"><span class="actor">Server</span><p>Call Stripe with Idempotency-Key: uuid-1</p></div>
+    <div class="seq-row"><span class="actor">Stripe</span><p>Return charge_id=ch_xyz (first call) or cached result (retry)</p></div>
+    <div class="seq-row"><span class="actor">Server</span><p>UPDATE payments SET status=captured, processor_ref=ch_xyz</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>Receive 201 Created (or 200 OK on retry)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Client vs server idempotency key</strong>
+              <p>Client key covers network retries; server key only covers app-level retries.</p>
+            </div>
+            <div>
+              <strong>ON CONFLICT DO NOTHING vs DO UPDATE</strong>
+              <p>DO NOTHING is safer — no accidental overwrites; DO UPDATE risks masking parameter changes.</p>
+            </div>
+            <div>
+              <strong>Inline processor call vs async queue</strong>
+              <p>Inline is simpler but blocks the HTTP request; async decouples but adds eventual consistency.</p>
+            </div>
+            <div>
+              <strong>24h key TTL vs forever</strong>
+              <p>Short TTL keeps the lookup table small; long TTL prevents late retries from creating duplicates.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Not passing idempotency key to the processor — our DB is safe but Stripe gets two charges.</li>
+            <li>Checking parameters after ON CONFLICT DO UPDATE — the update already overwrote them.</li>
+            <li>Transaction wrapping the processor call — if Stripe times out, the DB row is rolled back but the charge exists.</li>
+            <li>No reconciliation job — &#x27;processing&#x27; rows stay stuck forever after a crash.</li>
+            <li>Key collision with UUIDv4 — astronomically unlikely but worth asserting in tests.</li>
+            <li>Client generating a new key on retry — defeats the entire mechanism.</li>
+            <li>Race condition if two threads INSERT the same key simultaneously — ON CONFLICT handles it.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement idempotent refunds on top of this?</li>
+            <li>What if the processor doesn&#x27;t support idempotency keys natively?</li>
+            <li>How do you handle partial captures (authorize $100, capture $80)?</li>
+            <li>What monitoring and alerting would you add around stuck payments?</li>
+            <li>How does this change with an event-sourced payment model?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Show the two-layer defense: UNIQUE constraint in the database and idempotency key forwarded to the processor. Walk through happy path, retry path, and crash-recovery path. Mention the reconciliation job and the parameter-mismatch check. That covers the senior-level thinking — most candidates forget the processor-side key or the crash recovery.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../slow_order_limit/">← Fix a slow ORDER BY + LIMIT query</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../isolation_booking/">Choose isolation level for a booking system →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choose isolation level for a booking system | Database | Engineering Notes</title>
+  <meta name="description" content="Two users booking the last seat is an isolation problem — SERIALIZABLE is not the only hammer, and often not the best.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Choose isolation level for a booking system</p>
+      <p class="eyebrow">Database · Medium · ~60 min</p>
+      <h1>Choose isolation level for a booking system</h1>
+      <p class="problem-deck">Two users booking the last seat is an isolation problem — SERIALIZABLE is not the only hammer, and often not the best.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Frame the problem</strong><p>Double-booking: two users see 1 seat, both book it.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Isolation levels</strong><p>READ COMMITTED, REPEATABLE READ, SERIALIZABLE.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Pessimistic locking</strong><p>SELECT FOR UPDATE, row-level locks, deadlock risk.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Optimistic concurrency</strong><p>Version column, CAS update, retry loop.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Compare approaches</strong><p>Throughput, contention, complexity.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Edge cases</strong><p>Phantom reads, gap locks, hot rows.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Recommendation</strong><p>Which approach for which booking domain.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;ve seen double-booking bugs in production — they always come from the same pattern: two transactions read available_seats = 1, both decrement to 0, both commit. READ COMMITTED allows this because each transaction sees the committed state at statement time, not transaction time.</p>
+          <p>There are three fixes. First, bump to SERIALIZABLE — the database will abort one transaction on conflict. Clean, but the abort rate under contention can be high, and you need retry logic anyway. Second, use SELECT FOR UPDATE to lock the seat row before reading — pessimistic but predictable. Third, add a version column and do an optimistic compare-and-swap: UPDATE seats SET booked = true WHERE id = :id AND version = :v.</p>
+          <p>I&#x27;d pick based on contention level. Low contention (conference rooms): optimistic is great. High contention (concert tickets): pessimistic lock on the row or even a separate booking_locks table to avoid hot-row contention on the seat itself.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the contention level — how many users compete for the same seat?</li>
+            <li>Is this a reserved-seat system (specific seat) or general admission (any seat)?</li>
+            <li>What database engine — Postgres, MySQL InnoDB, Aurora?</li>
+            <li>Do we need to hold the seat temporarily (cart reservation) before confirming?</li>
+            <li>What is the acceptable failure mode — retry or waitlist?</li>
+            <li>How many seats per event and how many events concurrently?</li>
+            <li>Is there a payment step between reservation and confirmation?</li>
+            <li>Do we need to support bulk booking (10 seats at once)?</li>
+            <li>What is the SLA for booking latency?</li>
+            <li>Are there VIP or priority queues that change the fairness model?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: isolation levels, locking strategies, optimistic concurrency, double-booking prevention.</li>
+            <li>Out: payment processing, seat map UI, waitlist management.</li>
+            <li>Out: distributed transactions across services.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Reserve seat</strong>
+              <p>Atomically claim a specific seat for a user.</p>
+            </div>
+            <div>
+              <strong>Release seat</strong>
+              <p>Timeout releases held seats back to available pool.</p>
+            </div>
+            <div>
+              <strong>Confirm booking</strong>
+              <p>After payment, finalize the reservation.</p>
+            </div>
+            <div>
+              <strong>Prevent double-book</strong>
+              <p>Two concurrent requests for the same seat: exactly one succeeds.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Correctness</strong>
+              <p>Zero double-bookings under any concurrency level.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>Handle 5,000 concurrent booking attempts per event.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>p99 booking &lt; 200 ms.</p>
+            </div>
+            <div>
+              <strong>Fairness</strong>
+              <p>First-come-first-served ordering under contention.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Events</strong>
+              <p>1,000 active events, 50,000 seats per large event.</p>
+            </div>
+            <div>
+              <strong>Peak concurrency</strong>
+              <p>5,000 users clicking &#x27;book&#x27; at the same time for a hot event.</p>
+            </div>
+            <div>
+              <strong>Row locks</strong>
+              <p>SELECT FOR UPDATE on 1 row holds lock ~10 ms; at 5,000 TPS, queue depth = 50.</p>
+            </div>
+            <div>
+              <strong>Optimistic retries</strong>
+              <p>With 5,000 concurrent, ~4,999 fail CAS on the same row; retry storm.</p>
+            </div>
+            <div>
+              <strong>Connection pool</strong>
+              <p>100 connections × 10 ms lock hold = 1,000 TPS max per pool.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Pessimistic: SELECT FOR UPDATE
+BEGIN;
+SELECT * FROM seats WHERE event_id = 42 AND seat_id = &#x27;A1&#x27; FOR UPDATE;
+-- check if available
+UPDATE seats SET status = &#x27;reserved&#x27;, user_id = 123 WHERE seat_id = &#x27;A1&#x27; AND event_id = 42;
+COMMIT;
+
+-- Optimistic: CAS with version
+UPDATE seats
+SET status = &#x27;reserved&#x27;, user_id = 123, version = version + 1
+WHERE event_id = 42 AND seat_id = &#x27;A1&#x27; AND status = &#x27;available&#x27; AND version = 7;
+-- rows_affected == 0 means conflict, retry</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE events (
+    id          BIGSERIAL PRIMARY KEY,
+    name        TEXT NOT NULL,
+    venue       TEXT NOT NULL,
+    event_date  TIMESTAMPTZ NOT NULL,
+    total_seats INT NOT NULL
+);
+
+CREATE TABLE seats (
+    event_id    BIGINT NOT NULL REFERENCES events(id),
+    seat_id     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT &#x27;available&#x27;,
+    user_id     BIGINT,
+    version     INT NOT NULL DEFAULT 0,
+    reserved_at TIMESTAMPTZ,
+    PRIMARY KEY (event_id, seat_id)
+);
+
+CREATE INDEX idx_seats_available ON seats (event_id, status)
+    WHERE status = &#x27;available&#x27;;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Let&#x27;s compare the three approaches for the hot-ticket scenario where 5,000 users click &#x27;book seat A1&#x27; simultaneously.</p>
+          <p>SERIALIZABLE isolation: each transaction reads the seat row, checks availability, and updates. Postgres SSI (Serializable Snapshot Isolation) detects the rw-conflict and aborts all but one transaction. Clean semantics, but under high contention the abort rate approaches 100% and you need client-side retry with backoff. For a concert, this means 4,999 retries hitting the same row — a thundering herd.</p>
+          <p>SELECT FOR UPDATE: the first transaction locks the row. All others block on the lock. When the first commits, the next transaction wakes up, sees the seat is now &#x27;reserved&#x27;, and returns &#x27;seat taken&#x27;. No retries, no aborts — just serialized access. The trade-off is that lock hold time determines throughput: if the transaction takes 10 ms, peak throughput for that single seat is 100 TPS. But that&#x27;s fine — you only need one winner.</p>
+          <p>Optimistic concurrency (CAS): UPDATE seats SET status=&#x27;reserved&#x27; WHERE seat_id = &#x27;A1&#x27; AND version = :v. Only one UPDATE wins; all others get rows_affected = 0. No explicit locks, so the database isn&#x27;t serializing access — but 4,999 wasted round trips is expensive if the client retries.</p>
+          <p>My recommendation: for reserved-seat (specific seat), use SELECT FOR UPDATE. The contention is per-seat, and you want exactly-once semantics. For general admission (any seat), use an optimistic approach with a pool: UPDATE seats SET status=&#x27;reserved&#x27; WHERE event_id = 42 AND status = &#x27;available&#x27; LIMIT 1. Each user grabs a different row, so contention is low and optimistic works well.</p>
+<figure class="diagram dark" aria-label="Pessimistic vs optimistic booking">
+  <div class="flow-row">
+    <div class="node">User A: SELECT FOR UPDATE<br>acquires lock</div>
+    <div class="node">User B: SELECT FOR UPDATE<br>blocks on lock</div>
+    <div class="node accent">User A commits<br>User B sees reserved</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Optimistic CAS flow">
+  <div class="flow-row">
+    <div class="node">User A reads version=7</div>
+    <div class="node">User B reads version=7</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">User A: UPDATE WHERE version=7 → 1 row</div>
+    <div class="node">User B: UPDATE WHERE version=7 → 0 rows (retry)</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s walk through the double-booking bug step by step under READ COMMITTED. T1 begins, reads seat A1: status=&#x27;available&#x27;, version=0. T2 begins, reads seat A1: status=&#x27;available&#x27;, version=0. T1 runs UPDATE seats SET status=&#x27;reserved&#x27; WHERE seat_id=&#x27;A1&#x27;: succeeds, 1 row. T2 runs the same UPDATE: also succeeds, 1 row, because READ COMMITTED re-reads the latest committed value at statement time — but T1 hasn&#x27;t committed yet when T2 starts its UPDATE. Actually, in Postgres with READ COMMITTED, T2&#x27;s UPDATE will block until T1 commits or rolls back, then re-evaluate the WHERE clause. So Postgres doesn&#x27;t have the naive double-update bug for single-row updates — but it does for more complex predicates.</p>
+          <p>Where READ COMMITTED fails is the check-then-act pattern: T1 does SELECT available_count FROM events WHERE id=42 (returns 1). T2 does the same (returns 1). T1 does UPDATE events SET available_count = 0. T2 does the same — available_count is now -1. This is a lost update on a counter, not a single-row lock scenario.</p>
+          <p>SELECT FOR UPDATE prevents this: T1 locks the event row, T2 blocks. When T1 commits (available_count = 0), T2 wakes up, re-reads (sees 0), and returns &#x27;sold out&#x27;. No race, no negative count. The lock hold time is the critical metric — keep the transaction as short as possible. Do not make an HTTP call to a payment processor while holding the lock.</p>
+          <p>In MySQL InnoDB, the behavior is different. InnoDB uses gap locks under REPEATABLE READ to prevent phantom reads. If you SELECT FOR UPDATE with a range predicate, InnoDB locks the gap between index entries, which can cause surprising deadlocks when two transactions lock adjacent gaps. Postgres doesn&#x27;t use gap locks; it relies on SSI for phantom prevention at SERIALIZABLE level.</p>
+          <p>Practical pattern for high-contention events: use a &#x27;reservation queue&#x27; table. Instead of locking the seat directly, INSERT INTO reservation_queue (event_id, seat_id, user_id, requested_at). A background worker processes the queue in order and assigns seats. This converts lock contention into queue contention, which is much easier to scale.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="SELECT FOR UPDATE booking sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">User A</span><p>BEGIN; SELECT * FROM seats WHERE seat_id='A1' FOR UPDATE</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>Row locked; returns status=available</p></div>
+    <div class="seq-row"><span class="actor">User B</span><p>BEGIN; SELECT * FROM seats WHERE seat_id='A1' FOR UPDATE — blocks</p></div>
+    <div class="seq-row"><span class="actor">User A</span><p>UPDATE seats SET status=reserved; COMMIT</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>Unblock User B; re-read shows status=reserved</p></div>
+    <div class="seq-row"><span class="actor">User B</span><p>Seat taken — ROLLBACK and return error</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>SELECT FOR UPDATE vs optimistic CAS</strong>
+              <p>Pessimistic serializes access (lower throughput, no retries); optimistic allows parallel attempts (higher throughput, needs retries).</p>
+            </div>
+            <div>
+              <strong>SERIALIZABLE vs explicit locks</strong>
+              <p>SERIALIZABLE is cleaner but abort rate is high under contention; explicit locks give more control.</p>
+            </div>
+            <div>
+              <strong>Reservation timeout</strong>
+              <p>Short timeout (2 min) frees seats faster but may frustrate slow payers; long timeout (15 min) holds inventory.</p>
+            </div>
+            <div>
+              <strong>Queue-based booking</strong>
+              <p>Converts lock contention to queue processing; adds latency but eliminates deadlocks.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Using READ COMMITTED without explicit locks — lost updates on counters.</li>
+            <li>Holding the lock while calling an external payment API — lock timeout, deadlock risk.</li>
+            <li>Optimistic retry storm when 5,000 users compete for 1 seat.</li>
+            <li>Not setting a lock_timeout — one stuck transaction blocks all bookings.</li>
+            <li>MySQL gap locks causing deadlocks on range queries under REPEATABLE READ.</li>
+            <li>Forgetting to release reserved seats on payment timeout.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement a 5-minute reservation hold with automatic release?</li>
+            <li>What changes for bulk booking (10 seats in one transaction)?</li>
+            <li>How do you prevent seat-map stale reads in the UI?</li>
+            <li>What monitoring detects lock contention before users complain?</li>
+            <li>How would you handle cross-datacenter booking for the same event?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the double-booking bug clearly. Compare pessimistic and optimistic approaches with concrete trade-offs under different contention levels. Demonstrate SELECT FOR UPDATE with proper transaction scope. Mention that you should never hold the lock during external API calls. Bonus for discussing the queue pattern under extreme contention.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../idempotent_payments/">← Implement idempotent payment writes</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../shard_users/">Shard a growing user table →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

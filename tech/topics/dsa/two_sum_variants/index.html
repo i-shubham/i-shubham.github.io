@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two Sum variants under memory pressure | DSA | Engineering Notes</title>
+  <meta name="description" content="Classic Two Sum, but the interviewer keeps shrinking memory until the hash map answer stops working.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Two Sum variants under memory pressure</p>
+      <p class="eyebrow">DSA · Easy · ~60 min</p>
+      <h1>Two Sum variants under memory pressure</h1>
+      <p class="problem-deck">Classic Two Sum, but the interviewer keeps shrinking memory until the hash map answer stops working.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Indices vs values vs count; sorted vs unsorted; memory budget.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Enumerate approaches</strong><p>Hash map, two-pointer, bitset, external sort.</p></div></div>
+            <div class="stack-step"><strong>10–20 min</strong><div><strong>Code hash map solution</strong><p>Walk through [2,7,11,15] target=9 line by line.</p></div></div>
+            <div class="stack-step"><strong>20–30 min</strong><div><strong>Code two-pointer variant</strong><p>Sort copy with original indices; handle duplicates.</p></div></div>
+            <div class="stack-step"><strong>30–40 min</strong><div><strong>Edge cases + walkthrough</strong><p>Empty array, single element, all same values, overflow.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Memory pressure deep dive</strong><p>Bitset for bounded range; external sort for streaming.</p></div></div>
+            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>3Sum reduction, BST variant, streaming with fixed memory.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by confirming the variant: return indices, return values, count pairs, or just existence. Then I&#x27;d ask whether the array is sorted. The textbook answer is a hash map — O(n) time, O(n) space — and most candidates stop there.</p>
+          <p>The interesting conversation starts when the interviewer says &#x27;what if you can&#x27;t afford that map?&#x27; If the array is sorted or we&#x27;re allowed to sort, two pointers give O(n log n) time with O(1) extra space. If values live in a small range, a bitset beats the hash map. And if n is truly enormous — streaming input that won&#x27;t fit in RAM — we&#x27;re into external sort or Bloom-filter territory. I&#x27;d sketch all three before writing code, so the interviewer sees I&#x27;m not stuck on one tool.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Return indices or just boolean existence?</li>
+            <li>Are duplicates allowed — e.g. [3,3] with target 6?</li>
+            <li>Is the input sorted? Can we sort it?</li>
+            <li>Can we mutate the input array?</li>
+            <li>Integer range — small enough for a bitset?</li>
+            <li>Streaming input that doesn&#x27;t fit in RAM?</li>
+            <li>Do we need all pairs or any one pair?</li>
+            <li>32-bit vs 64-bit — overflow on sum?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: classic Two Sum (indices) + sorted variant + memory-constrained discussion.</li>
+            <li>Out: 3Sum / 4Sum full solutions unless follow-up asks.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <ul class="ask-list">
+            <li>Given nums and target, find i, j where nums[i] + nums[j] == target.</li>
+            <li>0-based indices, i != j enforced.</li>
+            <li>Define behavior when no solution exists (return [] or raise).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Time</strong>
+              <p>O(n) with hash map; O(n log n) with sort + two pointers.</p>
+            </div>
+            <div>
+              <strong>Space</strong>
+              <p>O(n) hash map path; O(1) extra for two-pointer path.</p>
+            </div>
+            <div>
+              <strong>Stability</strong>
+              <p>If returning indices, sorting destroys them unless you carry (value, original_index) pairs.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>n limit</strong>
+              <p>up to 10^5 elements in the standard LeetCode variant</p>
+            </div>
+            <div>
+              <strong>Hash map</strong>
+              <p>O(n) entries — fine up to ~10^7 before GC pressure matters</p>
+            </div>
+            <div>
+              <strong>Sort path</strong>
+              <p>O(n log n) ≈ 1.7×10^6 comparisons at n=10^5 — well within 1 s</p>
+            </div>
+            <div>
+              <strong>Bitset path</strong>
+              <p>If value range ≤ 10^6, bitset costs ~125 KB vs ~4 MB for a dict</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>def twoSum(nums: List[int], target: int) -&gt; List[int]:</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>hash_map: {value -&gt; index}
+sorted copy if two-pointer variant: List[Tuple[value, original_index]]</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Hash map path: iterate i from 0 to n-1. Compute complement = target - nums[i]. If complement is in the map, return [map[complement], i]. Otherwise store nums[i] → i. The classic bug is using the same element twice when 2*x == target — checking &#x27;complement in map&#x27; before inserting nums[i] prevents it.</p>
+          <p>Two-pointer path: create pairs [(val, original_index)] and sort by val. Set lo=0, hi=n-1. If sum &lt; target, lo++. If sum &gt; target, hi--. If equal, return original indices (sorted). This preserves index information that raw sorting destroys.</p>
+          <p>Memory-constrained path: if values are in [0, 10^6], a boolean array costs ~125 KB instead of a hash map&#x27;s overhead per entry. For truly huge n, external sort the file, then scan with two file pointers from each end. I&#x27;d mention Bloom filters for probabilistic existence checks on streams.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">nums[i]</span><b>→</b><span class="node accent">complement = target − nums[i]</span><b>→</b><span class="node">lookup in hash map</span></div><figcaption>Hash map: O(n) time, O(n) space — check complement before inserting current value</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">lo →</span><b>sum &lt; target? lo++</b><span class="node accent">sum == target? return</span><b>sum &gt; target? hi--</b><span class="node">← hi</span></div><figcaption>Two-pointer on sorted copy: O(n log n) time, O(1) extra space</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Walk through nums = [3, 3] with target = 6.</p>
+          <p>Hash map approach — i=0: complement = 6-3 = 3, map is empty so 3 is not found. Insert {3: 0}. i=1: complement = 6-3 = 3, map has 3 → 0. Return [0, 1]. This works because we check before inserting.</p>
+          <p>Now consider nums = [1, 5, 3, 7, 4, 2] with target = 7. Walk through:
+i=0: comp=6, map={1:0}. i=1: comp=2, map={1:0,5:1}. i=2: comp=4, map={1:0,5:1,3:2}. i=3: comp=0, map adds 7:3. i=4: comp=3, map has 3→2 — return [2, 4] (nums[2]+nums[4] = 3+4 = 7).</p>
+          <p>Two-pointer on same array: sort with indices → [(1,0),(2,5),(3,2),(4,4),(5,1),(7,3)]. lo=0 hi=5: 1+7=8 &gt; 7 → hi--. lo=0 hi=4: 1+5=6 &lt; 7 → lo++. lo=1 hi=4: 2+5=7 → return sorted([5,1]) = [1,5]. But wait — we wanted the original problem&#x27;s indices, which are (5) and (1) → return [1, 5]. This is why carrying original indices matters.</p>
+          <p>Edge case: nums = [0, 0, 0] target = 0. Hash map returns [0, 1] on second iteration. If the problem asks for all pairs, we need to continue scanning and collect [0,1], [0,2], [1,2]. This is where the variant question at the start saves you from writing the wrong code.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Hash map, two-pointer, and bitset implementations</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from typing import List, Tuple
+
+
+def two_sum_hashmap(nums: List[int], target: int) -&gt; List[int]:
+    &quot;&quot;&quot;O(n) time, O(n) space — single pass with complement lookup.&quot;&quot;&quot;
+    seen = {}
+    for i, v in enumerate(nums):
+        comp = target - v
+        if comp in seen:
+            return [seen[comp], i]
+        seen[v] = i
+    return []
+
+
+def two_sum_two_ptr(nums: List[int], target: int) -&gt; List[int]:
+    &quot;&quot;&quot;O(n log n) time, O(1) extra space — requires sorted input.
+    We sort with original indices to recover positions.&quot;&quot;&quot;
+    indexed = sorted((v, i) for i, v in enumerate(nums))
+    lo, hi = 0, len(indexed) - 1
+    while lo &lt; hi:
+        s = indexed[lo][0] + indexed[hi][0]
+        if s == target:
+            return sorted([indexed[lo][1], indexed[hi][1]])
+        elif s &lt; target:
+            lo += 1
+        else:
+            hi -= 1
+    return []
+
+
+def two_sum_bitset(nums: List[int], target: int, max_val: int = 10**6) -&gt; bool:
+    &quot;&quot;&quot;Existence-only variant for bounded non-negative values.
+    O(n) time, O(max_val) space — trades index info for memory efficiency.&quot;&quot;&quot;
+    bits = bytearray(max_val + 1)
+    for v in nums:
+        comp = target - v
+        if 0 &lt;= comp &lt;= max_val and bits[comp]:
+            return True
+        if 0 &lt;= v &lt;= max_val:
+            bits[v] = 1
+    return False</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+/// O(n) hash-map approach: store each value&#x27;s index, look up complement.
+fn two_sum_hashmap(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
+    let mut seen: HashMap&lt;i32, usize&gt; = HashMap::new();
+    for (i, &amp;v) in nums.iter().enumerate() {
+        let comp = target - v;
+        if let Some(&amp;j) = seen.get(&amp;comp) {
+            return Some((j, i));
+        }
+        seen.insert(v, i);
+    }
+    None
+}
+
+/// O(n log n) two-pointer on sorted (value, original_index) pairs.
+fn two_sum_two_ptr(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
+    let mut indexed: Vec&lt;(i32, usize)&gt; = nums.iter()
+        .copied().enumerate().map(|(i, v)| (v, i)).collect();
+    indexed.sort_unstable();
+    let (mut lo, mut hi) = (0, indexed.len().saturating_sub(1));
+    while lo &lt; hi {
+        let s = indexed[lo].0 + indexed[hi].0;
+        if s == target {
+            let (a, b) = (indexed[lo].1, indexed[hi].1);
+            return Some((a.min(b), a.max(b)));
+        } else if s &lt; target { lo += 1; }
+        else { hi -= 1; }
+    }
+    None
+}
+
+/// Bitset variant (existence-only): O(n) time, O(max_val) space.
+fn two_sum_bitset(nums: &amp;[i32], target: i32, max_val: usize) -&gt; bool {
+    let mut bits = vec![false; max_val + 1];
+    for &amp;v in nums {
+        let comp = target - v;
+        if comp &gt;= 0 &amp;&amp; (comp as usize) &lt;= max_val &amp;&amp; bits[comp as usize] {
+            return true;
+        }
+        if v &gt;= 0 &amp;&amp; (v as usize) &lt;= max_val {
+            bits[v as usize] = true;
+        }
+    }
+    false
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;algorithm&gt;
+
+// O(n) hash-map approach: store each value&#x27;s index, look up complement
+static std::vector&lt;int&gt; twoSumHashMap(const std::vector&lt;int&gt; &amp;nums, int target) {
+    std::unordered_map&lt;int, int&gt; seen;
+    for (int i = 0; i &lt; (int)nums.size(); i++) {
+        int comp = target - nums[i];
+        auto it = seen.find(comp);
+        if (it != seen.end())
+            return {it-&gt;second, i};
+        seen[nums[i]] = i;
+    }
+    return {};
+}
+
+// O(n log n) two-pointer on sorted (value, original_index) pairs
+static std::vector&lt;int&gt; twoSumTwoPtr(const std::vector&lt;int&gt; &amp;nums, int target) {
+    std::vector&lt;std::pair&lt;int,int&gt;&gt; indexed;
+    for (int i = 0; i &lt; (int)nums.size(); i++)
+        indexed.push_back({nums[i], i});
+    std::sort(indexed.begin(), indexed.end());
+    int lo = 0, hi = (int)indexed.size() - 1;
+    while (lo &lt; hi) {
+        int s = indexed[lo].first + indexed[hi].first;
+        if (s == target) {
+            int a = indexed[lo].second, b = indexed[hi].second;
+            return {std::min(a,b), std::max(a,b)};
+        }
+        s &lt; target ? lo++ : hi--;
+    }
+    return {};
+}
+
+// Bitset variant (existence-only): bounded non-negative values
+static bool twoSumBitset(const std::vector&lt;int&gt; &amp;nums, int target, int maxVal) {
+    std::vector&lt;bool&gt; bits(maxVal + 1, false);
+    for (int v : nums) {
+        int comp = target - v;
+        if (comp &gt;= 0 &amp;&amp; comp &lt;= maxVal &amp;&amp; bits[comp]) return true;
+        if (v &gt;= 0 &amp;&amp; v &lt;= maxVal) bits[v] = true;
+    }
+    return false;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">i=0</span><p>nums[0]=2, comp=7, map empty → store {2:0}</p></div><div class="seq-row"><span class="actor">i=1</span><p>nums[1]=7, comp=2, found 2→0 in map → return [0,1]</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Hash map vs sort</strong>
+              <p>O(n)/O(n) vs O(n log n)/O(1) — choose based on memory budget.</p>
+            </div>
+            <div>
+              <strong>Indices vs values</strong>
+              <p>Returning indices prevents in-place sort; forces copy + original index tracking.</p>
+            </div>
+            <div>
+              <strong>Single vs all pairs</strong>
+              <p>Single pair exits early; all pairs requires full scan or sorted dedup.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Using the same element twice when 2*x == target (insert-after-check fixes it).</li>
+            <li>Integer overflow if the language uses fixed-width ints and target is near max.</li>
+            <li>Sorting in place and losing original indices.</li>
+            <li>Assuming uniqueness when duplicates exist (e.g. [3, 3] target 6).</li>
+            <li>Returning unsorted index pair when the spec says &#x27;i &lt; j&#x27;.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Extend to 3Sum — sort + fix one, two-pointer the rest, skip duplicates.</li>
+            <li>Two Sum in a BST — in-order iterator + reverse in-order iterator as two pointers.</li>
+            <li>Streaming Two Sum with 64 MB memory budget — Bloom filter for probabilistic check.</li>
+            <li>Count pairs modulo 1e9+7 — frequency map, watch double-counting same-value pairs.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>State both hash map and two-pointer approaches, explain when each wins, handle the duplicate and index edge cases cleanly. Bonus for mentioning bitset under bounded range and external sort for streaming — that shows you think past the leetcode sandbox.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All DSA problems</a>
+          <a class="problem-nav-link next" href="../longest_substring/">Longest substring without repeating characters →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

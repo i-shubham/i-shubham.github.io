@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reconcile clocks across regions | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Absolute wall clocks lie across regions — ordering and TTLs need a better story than Date.now().">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Reconcile clocks across regions</p>
+      <p class="eyebrow">Distributed Systems · Medium · ~60 min</p>
+      <h1>Reconcile clocks across regions</h1>
+      <p class="problem-deck">Absolute wall clocks lie across regions — ordering and TTLs need a better story than Date.now().</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify the problem</strong><p>What breaks when clocks disagree — ordering, TTLs, conflict resolution.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Wall clocks vs logical clocks</strong><p>NTP accuracy limits, Lamport timestamps, vector clocks.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Hybrid logical clocks (HLC)</strong><p>Physical time + logical counter — best of both worlds.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Event-time vs processing-time</strong><p>Watermarks, late data, windowing in stream processing.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Practical mitigations</strong><p>TrueTime (Spanner), confidence intervals, commit-wait.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code walkthrough</strong><p>Python HLC implementation with message passing.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Trade-offs and wrap-up</strong><p>Latency cost of commit-wait, operational NTP monitoring.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>The core issue is that wall clocks across machines — even NTP-synchronized ones — can disagree by milliseconds to hundreds of milliseconds. That sounds small until you realize that &#x27;which write happened last&#x27; determines who wins in a last-writer-wins conflict resolution scheme. A 50 ms skew can flip the winner. And TTLs based on wall time can expire early on one machine and late on another.</p>
+          <p>There are three response levels. First, for ordering: use logical clocks (Lamport or vector) that track causality rather than physical time. If A caused B, the logical clock guarantees A &lt; B regardless of wall-clock skew. Second, for systems that need both ordering and human-readable timestamps: hybrid logical clocks (HLC) combine physical time with a logical counter. The physical component stays close to wall time; the logical component breaks ties.</p>
+          <p>Third, for the strongest guarantee: Google&#x27;s TrueTime exposes a confidence interval [earliest, latest] instead of a single timestamp. Spanner&#x27;s commit-wait ensures that if transaction T1 commits before T2 starts, T1&#x27;s timestamp &lt; T2&#x27;s timestamp — but you pay a latency cost equal to the uncertainty interval (typically 7 ms with atomic clocks and GPS receivers).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What do we use timestamps for — ordering events, TTLs, conflict resolution, auditing?</li>
+            <li>How many regions are involved and what are the RTTs between them?</li>
+            <li>Are we using NTP, PTP, or GPS/atomic clock synchronization?</li>
+            <li>What is our tolerance for ordering violations — zero, seconds, minutes?</li>
+            <li>Do we need causal ordering or total ordering?</li>
+            <li>Is this a database system, event stream, or application-level concern?</li>
+            <li>Are we using last-writer-wins or another conflict resolution strategy?</li>
+            <li>What is the observed NTP skew in our environment?</li>
+            <li>Can we afford the latency cost of commit-wait?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: clock skew impact, Lamport clocks, HLC, event-time vs processing-time, TrueTime overview.</li>
+            <li>Out: full vector clock implementation, Spanner internals.</li>
+            <li>Stretch: compare HLC with TrueTime on the latency-consistency spectrum.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>hlc_now()</strong>
+              <p>Returns a hybrid logical clock timestamp: (physical_ms, logical_counter, node_id).</p>
+            </div>
+            <div>
+              <strong>hlc_send(local_hlc)</strong>
+              <p>Advances the clock and returns the timestamp to attach to the outgoing message.</p>
+            </div>
+            <div>
+              <strong>hlc_receive(local_hlc, msg_hlc)</strong>
+              <p>Merges the received timestamp with local clock, advances counter.</p>
+            </div>
+            <div>
+              <strong>compare(ts1, ts2)</strong>
+              <p>Returns -1, 0, or 1 — total order over HLC timestamps.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Clock drift</strong>
+              <p>HLC physical component stays within max_drift (e.g., 500 ms) of wall time.</p>
+            </div>
+            <div>
+              <strong>Causal consistency</strong>
+              <p>If event A causally precedes B, hlc(A) &lt; hlc(B) guaranteed.</p>
+            </div>
+            <div>
+              <strong>Ordering accuracy</strong>
+              <p>Concurrent events from different nodes ordered deterministically by node_id tiebreaker.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>HLC operations complete in &lt; 1 μs — no network calls.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>NTP accuracy</strong>
+              <p>~1–10 ms within a data center, ~50–200 ms across regions.</p>
+            </div>
+            <div>
+              <strong>TrueTime uncertainty</strong>
+              <p>~7 ms with GPS + atomic clocks (Google infrastructure).</p>
+            </div>
+            <div>
+              <strong>Commit-wait latency</strong>
+              <p>Equal to uncertainty interval — 7 ms for TrueTime, ~100 ms for NTP.</p>
+            </div>
+            <div>
+              <strong>HLC counter range</strong>
+              <p>16-bit logical counter — supports 65 536 events per millisecond per node.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># HLC timestamp format
+(physical_ms: int, logical: int, node_id: str)
+
+# Operations
+hlc.now()                    → (pt, lc, nid)  # local event
+hlc.send()                   → (pt, lc, nid)  # attach to outgoing message
+hlc.receive(msg_ts)          → (pt, lc, nid)  # merge with incoming message
+hlc.compare(ts1, ts2)        → -1 | 0 | 1
+
+# TrueTime-style API (Google Spanner)
+TrueTime.now()  → TT { earliest: Timestamp, latest: Timestamp }
+TrueTime.after(t: Timestamp) → bool   # true if t is definitely in the past
+TrueTime.before(t: Timestamp) → bool  # true if t is definitely in the future</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql"># HLC state per node
+node_id: str                 # unique node identifier
+physical_ms: int             # last known physical time (ms since epoch)
+logical: int                 # logical counter for sub-ms ordering
+max_drift_ms: int = 500      # max allowed drift from wall clock
+
+# Event log with HLC timestamps
+CREATE TABLE events (
+  event_id     UUID PRIMARY KEY,
+  hlc_physical BIGINT NOT NULL,
+  hlc_logical  INT NOT NULL,
+  node_id      VARCHAR(32) NOT NULL,
+  payload      JSONB
+);
+CREATE INDEX idx_events_hlc ON events(hlc_physical, hlc_logical, node_id);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Wall clocks are unreliable across machines. NTP keeps clocks within a few milliseconds in a data center, but cross-region skew can be 50–200 ms. A system that uses timestamps for ordering (like last-writer-wins in Cassandra) can silently lose writes when the &#x27;earlier&#x27; write has a higher timestamp due to clock skew on its node.</p>
+          <p>Lamport clocks solve causal ordering: each node maintains a counter. On local event, increment. On send, increment and attach. On receive, set counter = max(local, received) + 1. If A→B (A causally precedes B), then L(A) &lt; L(B). But Lamport clocks don&#x27;t track physical time — they can drift far from wall time, making them useless for TTLs or human-readable logs.</p>
+          <p>Hybrid Logical Clocks (HLC) fix this. The timestamp is (physical_ms, logical_counter). On a local event: if wall_time &gt; physical_ms, set physical_ms = wall_time and reset logical to 0. Otherwise increment logical. On receive: set physical_ms = max(local_physical, msg_physical, wall_time). If physical_ms advanced, reset logical. Otherwise logical = max(local_logical, msg_logical) + 1. The physical component stays close to wall time (bounded by max_drift), and the logical component provides sub-millisecond causal ordering.</p>
+          <p>For the strongest guarantees, Google&#x27;s TrueTime uses GPS receivers and atomic clocks to provide a time interval [earliest, latest] with uncertainty ~7 ms. Spanner&#x27;s commit-wait: after assigning a commit timestamp, the transaction waits until TrueTime.after(commit_ts) returns true. This guarantees that any transaction that starts after the commit sees the committed data — external consistency. The cost is ~7 ms of added latency per commit.</p>
+          <p>In stream processing, the distinction is event-time (when the event happened at the source) vs processing-time (when the system processes it). Watermarks track progress in event-time: &#x27;we believe all events with timestamp &lt; W have arrived.&#x27; Late data arrives after the watermark passes — you handle it with allowed-lateness windows or side outputs.</p>
+<figure class="diagram dark" aria-label="Clock skew causing ordering violation">
+  <div class="flow-row">
+    <div class="node">Node A (clock +50 ms ahead)</div>
+    <div class="node">Writes key X at t=1000.050</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Node B (clock accurate)</div>
+    <div class="node">Writes key X at t=1000.010 (actually later)</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">LWW picks A's write (1000.050 &gt; 1000.010) — wrong winner!</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="HLC merge on receive">
+  <div class="flow-row">
+    <div class="node">Local HLC: (1000, 3, A)</div>
+    <div class="node">Received: (1002, 1, B)</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">wall_time = 1001</div>
+    <div class="node">max(1000, 1002, 1001) = 1002</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">New HLC: (1002, 2, A) — physical from msg, logical incremented</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Concrete HLC walkthrough with three nodes (A, B, C), all starting at physical=1000, logical=0.</p>
+          <p>Step 1: Node A has a local event at wall_time=1001. Since 1001 &gt; physical(1000), update physical=1001, logical=0. A&#x27;s HLC = (1001, 0, A).</p>
+          <p>Step 2: Node A sends a message to Node B with timestamp (1001, 0, A). Node B receives it at wall_time=1000 (B&#x27;s clock is behind). Node B computes: max(local_physical=1000, msg_physical=1001, wall_time=1000) = 1001. Since 1001 &gt; local_physical, update physical=1001, logical=0. But wait — msg_physical is also 1001, so we need logical = max(local_logical=0, msg_logical=0) + 1 = 1. B&#x27;s HLC = (1001, 1, B). Ordering: (1001,0,A) &lt; (1001,1,B) — correct, A&#x27;s send happened before B&#x27;s receive.</p>
+          <p>Step 3: Node C has a local event at wall_time=1003 (C&#x27;s clock jumped). Since 1003 &gt; physical(1000), update physical=1003, logical=0. C&#x27;s HLC = (1003, 0, C). This event is concurrent with B&#x27;s — no causal relationship. The HLC ordering (1001,1,B) &lt; (1003,0,C) happens to match wall time, which is a nice property of HLC: for concurrent events, the ordering approximates real time.</p>
+          <p>Drift guard: if wall_time is dramatically behind (e.g., NTP adjustment), physical_ms could advance far beyond wall time via received messages. HLC implementations cap this: if physical_ms − wall_time &gt; max_drift (say 500 ms), the node refuses to advance and raises an alert. This prevents logical clocks from drifting into the future indefinitely.</p>
+          <p>TrueTime commit-wait trace: Spanner assigns commit timestamp T = TT.now().latest. Then it waits until TT.after(T) returns true — meaning T is definitely in the past. With 7 ms uncertainty, the wait is at most 14 ms (worst case: sampled at the start of an interval). After the wait, any future TT.now().earliest on any machine is &gt; T, so any subsequent transaction sees the commit.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Hybrid Logical Clock with drift guard</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import time
+
+class HybridLogicalClock:
+    def __init__(self, node_id: str, max_drift_ms: int = 500):
+        self.node_id = node_id
+        self.physical_ms = 0
+        self.logical = 0
+        self.max_drift_ms = max_drift_ms
+
+    def _wall_ms(self) -&gt; int:
+        return int(time.time() * 1000)
+
+    def now(self) -&gt; tuple:
+        wall = self._wall_ms()
+        if wall &gt; self.physical_ms:
+            self.physical_ms = wall
+            self.logical = 0
+        else:
+            self.logical += 1
+        return (self.physical_ms, self.logical, self.node_id)
+
+    def send(self) -&gt; tuple:
+        return self.now()
+
+    def receive(self, msg_physical: int, msg_logical: int) -&gt; tuple:
+        wall = self._wall_ms()
+        old_physical = self.physical_ms
+        self.physical_ms = max(old_physical, msg_physical, wall)
+
+        if self.physical_ms - wall &gt; self.max_drift_ms:
+            raise RuntimeError(
+                f&#x27;HLC drift {self.physical_ms - wall} ms exceeds max {self.max_drift_ms} ms&#x27;
+            )
+
+        if self.physical_ms == old_physical == msg_physical:
+            self.logical = max(self.logical, msg_logical) + 1
+        elif self.physical_ms == old_physical:
+            self.logical += 1
+        elif self.physical_ms == msg_physical:
+            self.logical = msg_logical + 1
+        else:
+            self.logical = 0
+
+        return (self.physical_ms, self.logical, self.node_id)
+
+    @staticmethod
+    def compare(ts1: tuple, ts2: tuple) -&gt; int:
+        for a, b in zip(ts1, ts2):
+            if a &lt; b:
+                return -1
+            if a &gt; b:
+                return 1
+        return 0</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct HLCTimestamp {
+    pub physical_ms: u64,
+    pub logical: u64,
+    pub node_id: String,
+}
+
+pub struct HybridLogicalClock {
+    node_id: String,
+    physical_ms: u64,
+    logical: u64,
+    max_drift_ms: u64,
+}
+
+impl HybridLogicalClock {
+    pub fn new(node_id: &amp;str, max_drift_ms: u64) -&gt; Self {
+        Self { node_id: node_id.into(), physical_ms: 0, logical: 0, max_drift_ms }
+    }
+
+    fn wall_ms() -&gt; u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    }
+
+    pub fn now(&amp;mut self) -&gt; HLCTimestamp {
+        let wall = Self::wall_ms();
+        if wall &gt; self.physical_ms {
+            self.physical_ms = wall;
+            self.logical = 0;
+        } else {
+            self.logical += 1;
+        }
+        HLCTimestamp {
+            physical_ms: self.physical_ms,
+            logical: self.logical,
+            node_id: self.node_id.clone(),
+        }
+    }
+
+    pub fn send(&amp;mut self) -&gt; HLCTimestamp { self.now() }
+
+    pub fn receive(&amp;mut self, msg_phys: u64, msg_log: u64) -&gt; HLCTimestamp {
+        let wall = Self::wall_ms();
+        let old_phys = self.physical_ms;
+        self.physical_ms = old_phys.max(msg_phys).max(wall);
+
+        if self.physical_ms.saturating_sub(wall) &gt; self.max_drift_ms {
+            panic!(
+                &quot;HLC drift {} ms exceeds max {} ms&quot;,
+                self.physical_ms - wall, self.max_drift_ms
+            );
+        }
+
+        if self.physical_ms == old_phys &amp;&amp; old_phys == msg_phys {
+            self.logical = self.logical.max(msg_log) + 1;
+        } else if self.physical_ms == old_phys {
+            self.logical += 1;
+        } else if self.physical_ms == msg_phys {
+            self.logical = msg_log + 1;
+        } else {
+            self.logical = 0;
+        }
+
+        HLCTimestamp {
+            physical_ms: self.physical_ms,
+            logical: self.logical,
+            node_id: self.node_id.clone(),
+        }
+    }
+
+    pub fn compare(a: &amp;HLCTimestamp, b: &amp;HLCTimestamp) -&gt; Ordering {
+        a.cmp(b) // derives lexicographic (physical, logical, node_id) order
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;tuple&gt;
+#include &lt;algorithm&gt;
+#include &lt;stdexcept&gt;
+#include &lt;sys/time.h&gt;
+
+struct HLCTimestamp {
+    uint64_t physicalMs;
+    uint64_t logical;
+    std::string nodeId;
+
+    bool operator&gt;(const HLCTimestamp &amp;o) const {
+        return std::tie(physicalMs, logical, nodeId)
+             &gt; std::tie(o.physicalMs, o.logical, o.nodeId);
+    }
+};
+
+@interface HybridLogicalClock : NSObject {
+    std::string _nodeId;
+    uint64_t    _physicalMs;
+    uint64_t    _logical;
+    uint64_t    _maxDriftMs;
+}
+- (instancetype)initWithNodeId:(NSString *)nodeId maxDriftMs:(uint64_t)drift;
+- (HLCTimestamp)now;
+- (HLCTimestamp)send;
+- (HLCTimestamp)receivePhysical:(uint64_t)msgPhys logical:(uint64_t)msgLog;
+@end
+
+@implementation HybridLogicalClock
+
+- (instancetype)initWithNodeId:(NSString *)nodeId maxDriftMs:(uint64_t)drift {
+    if ((self = [super init])) {
+        _nodeId     = nodeId.UTF8String;
+        _physicalMs = 0;
+        _logical    = 0;
+        _maxDriftMs = drift;
+    }
+    return self;
+}
+
+static uint64_t wallMs() {
+    struct timeval tv;
+    gettimeofday(&amp;tv, nullptr);
+    return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+- (HLCTimestamp)now {
+    uint64_t wall = wallMs();
+    if (wall &gt; _physicalMs) {
+        _physicalMs = wall;
+        _logical    = 0;
+    } else {
+        _logical += 1;
+    }
+    return {_physicalMs, _logical, _nodeId};
+}
+
+- (HLCTimestamp)send { return [self now]; }
+
+- (HLCTimestamp)receivePhysical:(uint64_t)msgPhys logical:(uint64_t)msgLog {
+    uint64_t wall = wallMs();
+    uint64_t oldPhys = _physicalMs;
+    _physicalMs = std::max({oldPhys, msgPhys, wall});
+
+    if (_physicalMs - wall &gt; _maxDriftMs)
+        throw std::runtime_error(&quot;HLC drift exceeds max&quot;);
+
+    if (_physicalMs == oldPhys &amp;&amp; oldPhys == msgPhys)
+        _logical = std::max(_logical, msgLog) + 1;
+    else if (_physicalMs == oldPhys)
+        _logical += 1;
+    else if (_physicalMs == msgPhys)
+        _logical = msgLog + 1;
+    else
+        _logical = 0;
+
+    return {_physicalMs, _logical, _nodeId};
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="HLC message passing sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Node A</span><p>Local event → HLC (1001, 0, A)</p></div>
+    <div class="seq-row"><span class="actor">Node A</span><p>Send msg to B with ts (1001, 0, A)</p></div>
+    <div class="seq-row"><span class="actor">Node B</span><p>Receive: wall=1000, max(1000,1001,1000)=1001, lc=max(0,0)+1=1</p></div>
+    <div class="seq-row"><span class="actor">Node B</span><p>New HLC: (1001, 1, B) — causal order preserved</p></div>
+    <div class="seq-row"><span class="actor">Node C</span><p>Local event at wall=1003 → HLC (1003, 0, C)</p></div>
+    <div class="seq-row"><span class="actor">Node C</span><p>Concurrent with B — HLC approximates real-time order</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Lamport clock vs HLC</strong>
+              <p>Lamport is simpler but drifts from wall time; HLC stays close to physical time.</p>
+            </div>
+            <div>
+              <strong>HLC vs TrueTime</strong>
+              <p>HLC is free (software only) but doesn&#x27;t bound uncertainty; TrueTime needs GPS/atomic hardware.</p>
+            </div>
+            <div>
+              <strong>Commit-wait latency vs consistency</strong>
+              <p>Commit-wait adds ~7–14 ms per write but guarantees external consistency.</p>
+            </div>
+            <div>
+              <strong>Event-time vs processing-time</strong>
+              <p>Event-time gives correct semantics but requires watermarks and late-data handling.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Using wall clock for last-writer-wins without accounting for NTP skew — silent data loss.</li>
+            <li>TTL based on wall time expiring early on a fast-clock node — premature cache eviction.</li>
+            <li>HLC not capping drift — logical clock advances into the far future via message chains.</li>
+            <li>Ignoring leap seconds — 1-second ambiguity window every few years.</li>
+            <li>Processing-time windows in stream processing — late data silently dropped.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Implement vector clocks for detecting concurrent writes in a multi-master database.</li>
+            <li>Build an NTP monitoring dashboard that alerts on skew &gt; 10 ms.</li>
+            <li>Design a conflict resolution strategy that uses HLC for ordering and CRDTs for merging.</li>
+            <li>Compare Spanner&#x27;s TrueTime with CockroachDB&#x27;s hybrid logical clock approach.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Clearly explain why wall clocks are insufficient for distributed ordering, with a concrete skew example. Walk through Lamport clocks as the conceptual foundation, then HLC as the practical improvement. Implement the HLC send/receive protocol. Mention TrueTime as the gold standard and its latency cost. Bonus for connecting to event-time vs processing-time in streaming.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../retry_policy/">← Build a retry policy that does not amplify outages</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../multi_region_store/">Design a multi-region active-active store →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

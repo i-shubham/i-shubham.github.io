@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Explain a bad EXPLAIN plan | Database | Engineering Notes</title>
+  <meta name="description" content="Reading EXPLAIN is a skill: estimates vs actuals tell you whether stats, indexes, or the query shape is lying.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Explain a bad EXPLAIN plan</p>
+      <p class="eyebrow">Database · Easy · ~60 min</p>
+      <h1>Explain a bad EXPLAIN plan</h1>
+      <p class="problem-deck">Reading EXPLAIN is a skill: estimates vs actuals tell you whether stats, indexes, or the query shape is lying.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>EXPLAIN basics</strong><p>What the plan tree shows: nodes, costs, rows.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Read a bad plan</strong><p>Identify seq scan, sort, high row estimate.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Estimates vs actuals</strong><p>EXPLAIN ANALYZE and where they diverge.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Common patterns</strong><p>Seq scan, nested loop, hash join, bitmap scan.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Fix the plan</strong><p>Add index, rewrite query, update statistics.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Planner internals</strong><p>Cost model, selectivity, join ordering.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Summary</strong><p>EXPLAIN reading checklist.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I read EXPLAIN plans almost daily, and the single most important skill is comparing estimated rows to actual rows. When the planner estimates 100 rows but the actual is 500,000, something is wrong — usually stale statistics or a correlated predicate the planner can&#x27;t model. That mismatch cascades: the wrong join strategy, the wrong join order, the wrong scan type.</p>
+          <p>I&#x27;d walk through a concrete bad plan, point out the red flags, and then show how to fix it. The fix is usually one of three things: add or fix an index, update statistics with ANALYZE, or rewrite the query to help the planner (e.g., materializing a CTE, or replacing a correlated subquery with a JOIN).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What database engine — Postgres, MySQL, SQL Server?</li>
+            <li>Is this a single-table query or a join?</li>
+            <li>How many rows in each table involved?</li>
+            <li>When was ANALYZE last run on these tables?</li>
+            <li>Is the query parameterized (prepared statement) or literal values?</li>
+            <li>Are there CTEs or subqueries?</li>
+            <li>What is the expected vs actual execution time?</li>
+            <li>Are there any partial indexes or expression indexes?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: reading EXPLAIN output, identifying problems, common fixes.</li>
+            <li>Out: query optimizer internals (cost model math).</li>
+            <li>Out: database tuning parameters beyond basic stats.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Read plan</strong>
+              <p>Interpret an EXPLAIN ANALYZE output and identify bottlenecks.</p>
+            </div>
+            <div>
+              <strong>Diagnose</strong>
+              <p>Determine whether the issue is stats, indexes, or query shape.</p>
+            </div>
+            <div>
+              <strong>Fix</strong>
+              <p>Propose a concrete solution — index, ANALYZE, or query rewrite.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Accuracy</strong>
+              <p>Correctly identify the root cause in the plan.</p>
+            </div>
+            <div>
+              <strong>Speed</strong>
+              <p>Diagnosis should take &lt; 5 minutes for a single-query plan.</p>
+            </div>
+            <div>
+              <strong>Transferability</strong>
+              <p>Approach works across Postgres, MySQL, SQL Server with minor differences.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Plan size</strong>
+              <p>Typical plan: 10-50 nodes for a complex query.</p>
+            </div>
+            <div>
+              <strong>Table sizes</strong>
+              <p>1M to 500M rows; statistics should be fresh.</p>
+            </div>
+            <div>
+              <strong>Estimate accuracy</strong>
+              <p>Good stats: estimates within 10x of actuals. Bad stats: 100x+ off.</p>
+            </div>
+            <div>
+              <strong>Index vs seq scan break-even</strong>
+              <p>~5-15% selectivity; below that, index wins; above, seq scan wins.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Basic EXPLAIN
+EXPLAIN SELECT * FROM orders WHERE customer_id = 42;
+
+-- With actuals and buffer stats
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT o.*, c.name
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.status = &#x27;active&#x27; AND o.created_at &gt; &#x27;2026-01-01&#x27;;
+
+-- Update statistics
+ANALYZE orders;
+ANALYZE customers;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE orders (
+    id          BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    status      TEXT NOT NULL,
+    total_cents BIGINT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE customers (
+    id      BIGINT PRIMARY KEY,
+    name    TEXT NOT NULL,
+    email   TEXT NOT NULL
+);
+
+-- Indexes that should exist
+CREATE INDEX idx_orders_customer ON orders (customer_id);
+CREATE INDEX idx_orders_status_created ON orders (status, created_at);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Start with EXPLAIN (ANALYZE, BUFFERS) to get both estimated and actual row counts plus buffer access stats. Read the plan bottom-up: the deepest nodes execute first. Look for three red flags: (1) Seq Scan where you expected an index scan, (2) estimated rows wildly different from actual rows, (3) &#x27;Rows Removed by Filter&#x27; orders of magnitude larger than &#x27;Rows&#x27; returned.</p>
+          <p>If you see a Seq Scan, check whether an index exists on the filtered column. If it does but the planner ignores it, the selectivity is too low (returning &gt; 10-15% of the table), or statistics are stale. Run ANALYZE and re-check. If the planner still prefers Seq Scan, it&#x27;s probably correct — for low selectivity, sequential I/O beats random index lookups.</p>
+          <p>If estimates are off by 100x+, the planner is making bad decisions downstream. Common causes: stale statistics (run ANALYZE), correlated columns (the planner assumes independence), or parameterized queries where the generic plan has wrong estimates. For correlated columns, Postgres 14+ extended statistics (CREATE STATISTICS) can help.</p>
+          <p>For joins, check the join type: Nested Loop is good for small outer + indexed inner, Hash Join is good for large tables without useful indexes, Merge Join is good when both sides are already sorted. If you see a Nested Loop with a Seq Scan on the inner side, it&#x27;s almost always wrong — add an index on the join column.</p>
+<figure class="diagram dark" aria-label="EXPLAIN plan tree structure">
+  <div class="flow-row">
+    <div class="node">Limit</div>
+    <div class="node">Sort</div>
+    <div class="node">Hash Join</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Seq Scan orders<br>est: 100, actual: 500K</div>
+    <div class="node accent">Hash<br>customers</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Scan type decision tree">
+  <div class="flow-row">
+    <div class="node">Selectivity &lt; 5%?</div>
+    <div class="node accent">Index Scan</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">5–15%?</div>
+    <div class="node">Bitmap Index Scan</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">&gt; 15%?</div>
+    <div class="node">Seq Scan</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s read a real EXPLAIN ANALYZE output. Here&#x27;s a bad plan:</p>
+          <p>Limit (cost=245000..245001 rows=20 actual rows=20 time=2340ms)
+  -&gt; Sort (cost=245000..252500 rows=3000000 actual rows=20 time=2340ms)
+       Sort Key: created_at DESC
+       Sort Method: external merge Disk: 147MB
+       -&gt; Seq Scan on orders (cost=0..200000 rows=3000000 actual rows=3012456 time=890ms)
+             Filter: (status = &#x27;active&#x27;)
+             Rows Removed by Filter: 6987544</p>
+          <p>Red flags: (1) Seq Scan on 10M rows, filtering to 3M — no index on status. (2) Sort spills to disk: 147 MB, because work_mem is only 4 MB. (3) Total time 2.3 seconds for 20 rows.</p>
+          <p>The estimate (rows=3000000) is close to actual (3012456), so stats are fine. The problem is pure index absence. The planner has no choice but to scan the entire table and sort. After adding CREATE INDEX ON orders (status, created_at DESC), the plan becomes:</p>
+          <p>Limit (cost=0.56..12.34 rows=20 actual rows=20 time=0.4ms)
+  -&gt; Index Scan using idx_orders_status_created on orders
+       Index Cond: (status = &#x27;active&#x27;)
+       Buffers: shared hit=23</p>
+          <p>2340 ms → 0.4 ms. No sort node at all — the index provides the order. 23 buffer hits means 23 pages read from shared_buffers, all cached. This is the ideal outcome.</p>
+          <p>Now consider a more subtle case: the plan shows an Index Scan but the estimated rows are 100 while actual rows are 500,000. The planner chose Nested Loop (expecting 100 iterations) when Hash Join would have been correct. Root cause: stale statistics. The table was bulk-loaded yesterday and ANALYZE hasn&#x27;t run. After ANALYZE, the planner sees 500K rows and correctly picks Hash Join. Time drops from 30 seconds to 200 ms.</p>
+          <p>Another pattern: a correlated subquery that forces a Nested Loop. SELECT * FROM orders WHERE total_cents &gt; (SELECT AVG(total_cents) FROM orders WHERE customer_id = orders.customer_id). For each of 10M rows in the outer query, the subquery runs — 10M executions. Rewrite as a JOIN: SELECT o.* FROM orders o JOIN (SELECT customer_id, AVG(total_cents) as avg_total FROM orders GROUP BY customer_id) a ON o.customer_id = a.customer_id WHERE o.total_cents &gt; a.avg_total. One scan + one hash join — 200 ms instead of 10 minutes.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="EXPLAIN analysis workflow">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">DBA</span><p>Run EXPLAIN (ANALYZE, BUFFERS) on the slow query</p></div>
+    <div class="seq-row"><span class="actor">DBA</span><p>Read bottom-up: find deepest node, check est vs actual</p></div>
+    <div class="seq-row"><span class="actor">DBA</span><p>Identify red flag: Seq Scan with 7M rows removed by filter</p></div>
+    <div class="seq-row"><span class="actor">DBA</span><p>Check index existence: missing composite index</p></div>
+    <div class="seq-row"><span class="actor">DBA</span><p>CREATE INDEX CONCURRENTLY; re-run EXPLAIN to verify</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>EXPLAIN vs EXPLAIN ANALYZE</strong>
+              <p>EXPLAIN is planning-only (safe for production); ANALYZE executes the query (shows actuals but takes time).</p>
+            </div>
+            <div>
+              <strong>Index scan vs bitmap scan</strong>
+              <p>Index scan is best for few rows; bitmap scan batches I/O for moderate selectivity, avoiding random reads.</p>
+            </div>
+            <div>
+              <strong>Generic vs custom plan</strong>
+              <p>Prepared statements use generic plans after 5 executions; if parameter distribution varies, generic plans can be wrong.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Reading only estimated rows and ignoring actuals — the estimate may be wildly wrong.</li>
+            <li>Assuming Seq Scan is always bad — for low selectivity queries, it&#x27;s correct.</li>
+            <li>Not running ANALYZE after bulk loads — statistics are stale, planner makes bad choices.</li>
+            <li>Adding an index without checking selectivity — if 90% of rows match, the index won&#x27;t help.</li>
+            <li>Ignoring &#x27;Rows Removed by Filter&#x27; — a high number means the scan is doing wasted work.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How do you handle a query where the planner consistently picks the wrong join type?</li>
+            <li>What is the difference between Postgres SSI and MySQL&#x27;s gap locks for plan behavior?</li>
+            <li>How do extended statistics help with correlated column estimates?</li>
+            <li>When would you use pg_hint_plan to force a specific plan?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Show you can read an EXPLAIN ANALYZE output, identify the bottleneck node, compare estimated vs actual rows, and propose a fix. Cover the three main causes (missing index, stale stats, bad query shape). Knowing when a Seq Scan is actually correct shows real understanding.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../zero_downtime_migrate/">← Migrate a live table with zero downtime</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

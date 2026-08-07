@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Make a Lambda + SQS pipeline production-safe | Cloud | Engineering Notes</title>
+  <meta name="description" content="Lambda+SQS is easy to demo and easy to dual-process when visibility timeout is shorter than the function.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Make a Lambda + SQS pipeline production-safe</p>
+      <p class="eyebrow">Cloud · Medium · ~60 min</p>
+      <h1>Make a Lambda + SQS pipeline production-safe</h1>
+      <p class="problem-deck">Lambda+SQS is easy to demo and easy to dual-process when visibility timeout is shorter than the function.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Processing type, volume, timeout values, DLQ state, downstream dependencies</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Visibility timeout</strong><p>Why 6× Lambda timeout; what happens when it is too short</p></div></div>
+            <div class="stack-step"><strong>12-20m</strong><div><strong>DLQ setup</strong><p>MaxReceiveCount=3, DLQ alarm, DLQ consumer for inspection/replay</p></div></div>
+            <div class="stack-step"><strong>20-28m</strong><div><strong>Idempotency</strong><p>Dedup table in DynamoDB, idempotency key from message attributes</p></div></div>
+            <div class="stack-step"><strong>28-35m</strong><div><strong>Partial batch failure</strong><p>ReportBatchItemFailures flag; only retry failed messages in a batch</p></div></div>
+            <div class="stack-step"><strong>35-42m</strong><div><strong>Concurrency</strong><p>Reserved concurrency on Lambda; SQS scales polling to match</p></div></div>
+            <div class="stack-step"><strong>42-50m</strong><div><strong>Monitoring</strong><p>CloudWatch alarms: DLQ depth, ApproximateAgeOfOldestMessage, Errors, Throttles</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Lambda + SQS is the default serverless event-processing pattern on AWS. It is trivial to demo: message goes into SQS, Lambda polls it, processes it, deletes it. But production reveals every edge case: visibility timeout expires before the Lambda finishes (message reappears and gets processed twice), a poison message that always fails puts the function in an infinite retry loop, batch processing partially fails (some messages succeed, others do not), and concurrency limits cause upstream throttling.</p>
+          <p>The visibility timeout is the most common misconfiguration. It must be at least 6× the Lambda timeout (AWS recommendation). If Lambda timeout is 30 seconds, visibility timeout should be 180 seconds. If you set both to 30 seconds, a Lambda that takes 25 seconds to process will have the message reappear 5 seconds after processing started — another Lambda invocation picks it up, and you have dual processing.</p>
+          <p>The dead-letter queue (DLQ) is the safety net. After N failed attempts (I recommend 3), the message moves to the DLQ instead of retrying forever. Without a DLQ, a poison message that always throws an exception gets retried infinitely, consuming Lambda concurrency, incurring costs, and drowning your error logs.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What does the Lambda process — orders, notifications, ETL?</li>
+            <li>Message volume — per second, per minute?</li>
+            <li>Processing time — average and worst case?</li>
+            <li>Idempotency requirement — is double-processing safe?</li>
+            <li>Current visibility timeout and Lambda timeout?</li>
+            <li>Is there a DLQ configured?</li>
+            <li>Batch size — single message or batches of 10?</li>
+            <li>Downstream side effects — database writes, API calls, emails?</li>
+            <li>Ordering requirement — FIFO or standard queue?</li>
+            <li>Concurrency limits or reserved concurrency set?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Visibility timeout, DLQ config, idempotency, partial batch failure handling, concurrency</li>
+            <li>In scope — Monitoring and alerting for DLQ depth, processing errors, and lag</li>
+            <li>Out of scope — Lambda function business logic redesign</li>
+            <li>Defer — FIFO queue ordering guarantees, cross-region SQS replication</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Visibility timeout</strong>
+              <p>Set to 6× Lambda timeout; prevents dual processing</p>
+            </div>
+            <div>
+              <strong>DLQ</strong>
+              <p>After 3 failed attempts, message moves to DLQ; alert on DLQ depth &gt; 0</p>
+            </div>
+            <div>
+              <strong>Idempotency</strong>
+              <p>Use message dedup ID or idempotency key to prevent double-processing side effects</p>
+            </div>
+            <div>
+              <strong>Partial batch failure</strong>
+              <p>Report individual message failures; only retry failed messages</p>
+            </div>
+            <div>
+              <strong>Concurrency</strong>
+              <p>Reserved concurrency to protect downstream; prevent Lambda from overwhelming the database</p>
+            </div>
+            <div>
+              <strong>Monitoring</strong>
+              <p>Alarms on: DLQ depth, processing errors, age of oldest message, throttles</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>At-least-once</strong>
+              <p>Every message processed at least once; idempotency handles duplicates</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>Message processed within 5 seconds of arrival (p99)</p>
+            </div>
+            <div>
+              <strong>Error rate</strong>
+              <p>&lt; 0.1% messages end up in DLQ under normal operation</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Lambda costs scale linearly with message volume; no idle cost</p>
+            </div>
+            <div>
+              <strong>Observability</strong>
+              <p>Every message traced end-to-end with correlation ID</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Message volume</strong>
+              <p>1,000 messages/minute peak; 500/min average</p>
+            </div>
+            <div>
+              <strong>Processing time</strong>
+              <p>Average 2 seconds, worst case 15 seconds</p>
+            </div>
+            <div>
+              <strong>Lambda timeout</strong>
+              <p>30 seconds</p>
+            </div>
+            <div>
+              <strong>Visibility timeout</strong>
+              <p>180 seconds (6× Lambda timeout)</p>
+            </div>
+            <div>
+              <strong>Batch size</strong>
+              <p>10 messages per invocation</p>
+            </div>
+            <div>
+              <strong>Lambda concurrency</strong>
+              <p>50 reserved (1,000 msgs/min ÷ 10 per batch ÷ 2 sec = 10 concurrent; 50 gives 5× headroom)</p>
+            </div>
+            <div>
+              <strong>DLQ target</strong>
+              <p>&lt; 10 messages/day under normal operation</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>1M messages/day × 2 sec avg × $0.0000002/100ms = $0.40/day Lambda cost</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>-- Idempotency table (DynamoDB)
+Table: idempotency_keys
+  Partition Key: idempotency_key (String)  -- e.g., &quot;order-{order_id}-{operation}&quot;
+  TTL attribute: expires_at (Number)       -- epoch seconds, 24h after creation
+
+Attributes:
+  idempotency_key:  String   -- unique per operation
+  status:           String   -- &#x27;processing&#x27; | &#x27;completed&#x27; | &#x27;failed&#x27;
+  result:           String   -- cached result for completed operations
+  created_at:       Number   -- epoch seconds
+  expires_at:       Number   -- TTL for auto-cleanup
+
+-- Usage pattern:
+-- 1. PutItem with ConditionExpression: attribute_not_exists(idempotency_key)
+--    If succeeds: first time processing, proceed
+--    If fails (ConditionalCheckFailedException): duplicate, skip or return cached result
+-- 2. After processing: UpdateItem status=&#x27;completed&#x27;, result=...
+-- 3. TTL auto-deletes after 24h</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The production-safe pipeline addresses five failure modes.</p>
+          <p>1. Dual processing (visibility timeout): set visibility timeout to 6× Lambda timeout. With Lambda timeout at 30s, visibility is 180s. This gives the Lambda function 30 seconds to complete, and if it fails or times out, the message remains invisible for another 150 seconds before reappearing for retry. If the Lambda succeeds, it deletes the message from the queue.</p>
+          <p>2. Poison messages (DLQ): after 3 receive attempts (maxReceiveCount=3), the message moves to the DLQ. The DLQ has 14-day retention for inspection. A CloudWatch alarm fires when ApproximateNumberOfMessagesVisible &gt; 0 on the DLQ. I build a simple DLQ consumer that logs the message body for debugging and optionally replays it to the main queue after the bug is fixed.</p>
+          <p>3. Duplicate processing (idempotency): SQS guarantees at-least-once delivery. A message can be delivered twice during infrastructure events (SQS internal retry). The Lambda must be idempotent: use a DynamoDB table to track processed message IDs (or a domain-specific idempotency key like order_id + operation). Before processing, PutItem with a condition that the key does not exist. If the key exists, skip processing. TTL on the DynamoDB item auto-cleans after 24 hours.</p>
+          <p>4. Partial batch failure: with batch size 10, if 8 messages succeed and 2 fail, by default the entire batch is retried (including the 8 that already succeeded). Enable ReportBatchItemFailures: the Lambda returns a list of failed message IDs, and SQS only retries those specific messages. This requires the function to catch per-message exceptions and return the partial failure response.</p>
+          <p>5. Downstream protection (concurrency): if the Lambda writes to RDS, unlimited concurrency could open 1,000 connections and overwhelm the database. Set reserved_concurrent_executions to a safe limit (e.g., 50). SQS automatically adjusts polling rate to match Lambda concurrency. Messages queue up during spikes and drain when capacity is available.</p>
+<figure class="diagram dark">
+  <figcaption>Lambda + SQS Production Pipeline</figcaption>
+  <div class="flow-row">
+    <div class="node">Producer</div>
+    <div class="node">SQS Queue<br><small>visibility: 180s</small></div>
+    <div class="node accent">Lambda<br><small>timeout: 30s</small></div>
+    <div class="node">DynamoDB<br><small>idempotency</small></div>
+    <div class="node">DLQ<br><small>max retries: 3</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Visibility Timeout</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Too short (30s)</span><p>Lambda runs 25s → message reappears → dual processing</p></div>
+    <div class="node accent"><span class="label">Correct (180s = 6×)</span><p>Lambda runs 25s → deletes message → no duplicate</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Partial Batch Failure</figcaption>
+  <div class="flow-row">
+    <div class="node">Batch of 10</div>
+    <div class="node accent">8 succeed<br><small>deleted from queue</small></div>
+    <div class="node">2 fail<br><small>returned as failures</small></div>
+    <div class="node accent">SQS retries<br><small>only the 2 failed</small></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>ReportBatchItemFailures implementation: the Lambda handler must return a specific response format. The batchItemFailures key contains a list of objects with itemIdentifier set to the SQS message ID. SQS uses this to determine which messages to make visible again. If the handler throws an unhandled exception (crashes), ALL messages in the batch are retried. The handler must catch per-message exceptions and accumulate failures, never let one bad message crash the entire batch.</p>
+          <p>FIFO vs Standard queues: Standard queues give at-least-once delivery with best-effort ordering. FIFO queues give exactly-once processing (via deduplication) and strict ordering within a message group. FIFO queues have a throughput limit: 300 transactions/sec without batching, 3,000/sec with batching. For our 1,000 messages/min, FIFO works if ordering matters. But FIFO adds complexity: message group IDs, deduplication IDs, and the fact that a stuck message blocks all messages in its group.</p>
+          <p>Concurrency and database connections: with reserved concurrency of 50 and batch size of 10, we process at most 500 messages simultaneously. If each Lambda instance opens a database connection, that is 50 connections. For RDS with 100 max_connections, this leaves 50 for other services. If the connection count is a concern, use RDS Proxy, which multiplexes many Lambda connections into a smaller pool of database connections.</p>
+          <p>Cost optimization: Lambda charges per invocation and per 100ms of duration. With batch size 10, we reduce invocations by 10×. But larger batches increase the risk of timeout (10 messages × 2 sec each = 20 sec per batch, dangerously close to 30 sec timeout). The batching window (maximum_batching_window_in_seconds=5) waits up to 5 seconds to accumulate a full batch before invoking. This reduces invocations during low-traffic periods without adding latency during spikes.</p>
+          <p>DLQ replay strategy: after fixing the bug that caused failures, I replay DLQ messages by reading from the DLQ and sending them back to the main queue. But I must be careful: if the fix is not actually correct, replayed messages will fail again and cycle back to the DLQ. I process DLQ messages in small batches (10 at a time) and monitor the error rate before replaying the remaining batch.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Lambda handler with idempotency and partial batch failure</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import json
+import boto3
+import time
+
+dynamodb = boto3.resource(&#x27;dynamodb&#x27;)
+idemp_table = dynamodb.Table(&#x27;idempotency_keys&#x27;)
+
+def handler(event, context):
+    batch_failures = []
+
+    for record in event[&#x27;Records&#x27;]:
+        message_id = record[&#x27;messageId&#x27;]
+        try:
+            body = json.loads(record[&#x27;body&#x27;])
+            idemp_key = f&quot;{body[&#x27;order_id&#x27;]}-{body[&#x27;action&#x27;]}&quot;
+
+            # Idempotency check
+            try:
+                idemp_table.put_item(
+                    Item={
+                        &#x27;idempotency_key&#x27;: idemp_key,
+                        &#x27;status&#x27;: &#x27;processing&#x27;,
+                        &#x27;created_at&#x27;: int(time.time()),
+                        &#x27;expires_at&#x27;: int(time.time()) + 86400  # 24h TTL
+                    },
+                    ConditionExpression=&#x27;attribute_not_exists(idempotency_key)&#x27;
+                )
+            except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+                continue  # already processed, skip
+
+            process_order(body)
+            idemp_table.update_item(
+                Key={&#x27;idempotency_key&#x27;: idemp_key},
+                UpdateExpression=&#x27;SET #s = :s&#x27;,
+                ExpressionAttributeNames={&#x27;#s&#x27;: &#x27;status&#x27;},
+                ExpressionAttributeValues={&#x27;:s&#x27;: &#x27;completed&#x27;}
+            )
+        except Exception as e:
+            print(f&#x27;Failed message {message_id}: {e}&#x27;)
+            batch_failures.append({&#x27;itemIdentifier&#x27;: message_id})
+
+    return {&#x27;batchItemFailures&#x27;: batch_failures}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_dynamodb as ddb;
+use lambda_runtime::{service_fn, LambdaEvent};
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Deserialize)]
+struct SqsEvent { #[serde(rename = &quot;Records&quot;)] records: Vec&lt;SqsRecord&gt; }
+
+#[derive(Deserialize)]
+struct SqsRecord {
+    #[serde(rename = &quot;messageId&quot;)] message_id: String,
+    body: String,
+}
+
+#[derive(Deserialize)]
+struct OrderBody { order_id: String, action: String }
+
+#[derive(Serialize)]
+struct BatchResponse {
+    #[serde(rename = &quot;batchItemFailures&quot;)]
+    batch_item_failures: Vec&lt;BatchFailure&gt;,
+}
+
+#[derive(Serialize)]
+struct BatchFailure { #[serde(rename = &quot;itemIdentifier&quot;)] item_identifier: String }
+
+async fn handler(
+    event: LambdaEvent&lt;SqsEvent&gt;,
+    ddb_client: &amp;ddb::Client,
+) -&gt; Result&lt;BatchResponse, lambda_runtime::Error&gt; {
+    let mut failures = Vec::new();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+
+    for record in &amp;event.payload.records {
+        let result: Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; = async {
+            let body: OrderBody = serde_json::from_str(&amp;record.body)?;
+            let idemp_key = format!(&quot;{}-{}&quot;, body.order_id, body.action);
+
+            // Idempotency check via conditional put
+            let put_res = ddb_client
+                .put_item()
+                .table_name(&quot;idempotency_keys&quot;)
+                .item(&quot;idempotency_key&quot;, ddb::types::AttributeValue::S(idemp_key.clone()))
+                .item(&quot;status&quot;, ddb::types::AttributeValue::S(&quot;processing&quot;.into()))
+                .item(&quot;created_at&quot;, ddb::types::AttributeValue::N(now.to_string()))
+                .item(&quot;expires_at&quot;, ddb::types::AttributeValue::N((now + 86400).to_string()))
+                .condition_expression(&quot;attribute_not_exists(idempotency_key)&quot;)
+                .send()
+                .await;
+
+            if let Err(e) = &amp;put_res {
+                if e.to_string().contains(&quot;ConditionalCheckFailed&quot;) {
+                    return Ok(()); // already processed
+                }
+                put_res?;
+            }
+
+            process_order(&amp;body).await?;
+
+            ddb_client
+                .update_item()
+                .table_name(&quot;idempotency_keys&quot;)
+                .key(&quot;idempotency_key&quot;, ddb::types::AttributeValue::S(idemp_key))
+                .update_expression(&quot;SET #s = :s&quot;)
+                .expression_attribute_names(&quot;#s&quot;, &quot;status&quot;)
+                .expression_attribute_values(&quot;:s&quot;, ddb::types::AttributeValue::S(&quot;completed&quot;.into()))
+                .send()
+                .await?;
+            Ok(())
+        }.await;
+
+        if result.is_err() {
+            failures.push(BatchFailure { item_identifier: record.message_id.clone() });
+        }
+    }
+    Ok(BatchResponse { batch_item_failures: failures })
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Conceptual DynamoDB client — production uses AWS C++ SDK or REST.
+@protocol AWSDynamoDB &lt;NSObject&gt;
+- (BOOL)putItemIfNotExists:(NSDictionary *)item table:(NSString *)table;
+- (void)updateItemStatus:(NSString *)key to:(NSString *)status table:(NSString *)table;
+@end
+
+struct BatchFailure {
+    std::string itemIdentifier;
+};
+
+@interface LambdaSQSHandler : NSObject
+@property (nonatomic, strong) id&lt;AWSDynamoDB&gt; ddb;
+- (NSDictionary *)handleEvent:(NSDictionary *)event;
+@end
+
+@implementation LambdaSQSHandler
+
+- (NSDictionary *)handleEvent:(NSDictionary *)event {
+    NSArray *records = event[@&quot;Records&quot;];
+    NSMutableArray *failures = [NSMutableArray array];
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+
+    for (NSDictionary *record in records) {
+        NSString *messageId = record[@&quot;messageId&quot;];
+        @try {
+            NSData *bodyData = [record[@&quot;body&quot;] dataUsingEncoding:NSUTF8StringEncoding];
+            NSDictionary *body = [NSJSONSerialization JSONObjectWithData:bodyData
+                                                                options:0 error:nil];
+            NSString *idempKey = [NSString stringWithFormat:@&quot;%@-%@&quot;,
+                                  body[@&quot;order_id&quot;], body[@&quot;action&quot;]];
+
+            // Idempotency: conditional put — skip if key already exists
+            BOOL inserted = [_ddb putItemIfNotExists:@{
+                @&quot;idempotency_key&quot;: idempKey,
+                @&quot;status&quot;:          @&quot;processing&quot;,
+                @&quot;created_at&quot;:      @((int64_t)now),
+                @&quot;expires_at&quot;:      @((int64_t)now + 86400),
+            } table:@&quot;idempotency_keys&quot;];
+
+            if (!inserted) continue; // already processed
+
+            // processOrder(body) — application logic placeholder
+            [_ddb updateItemStatus:idempKey to:@&quot;completed&quot;
+                             table:@&quot;idempotency_keys&quot;];
+
+        } @catch (NSException *ex) {
+            NSLog(@&quot;Failed message %@: %@&quot;, messageId, ex.reason);
+            [failures addObject:@{@&quot;itemIdentifier&quot;: messageId}];
+        }
+    }
+
+    return @{@&quot;batchItemFailures&quot;: failures};
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Producer</span><p>SendMessage to SQS: {order_id: 42, action: "process_payment"}</p></div>
+    <div class="seq-row"><span class="actor">SQS</span><p>Message visible; Lambda polls and receives batch of 10 messages</p></div>
+    <div class="seq-row"><span class="actor">Lambda</span><p>For message order_id=42: DynamoDB PutItem(key="order-42-payment", condition: not_exists) → success (first time)</p></div>
+    <div class="seq-row"><span class="actor">Lambda</span><p>Process payment → write to RDS → mark idempotency key as "completed"</p></div>
+    <div class="seq-row"><span class="actor">Lambda</span><p>Message order_id=99 throws exception → add to batchItemFailures list</p></div>
+    <div class="seq-row"><span class="actor">Lambda</span><p>Return {batchItemFailures: [{itemIdentifier: "msg-id-99"}]} — 9 succeeded, 1 failed</p></div>
+    <div class="seq-row"><span class="actor">SQS</span><p>Delete 9 successful messages; message for order_id=99 becomes visible after 180s</p></div>
+    <div class="seq-row"><span class="actor">SQS</span><p>After 3 failures: move order_id=99 to DLQ → CloudWatch alarm fires</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Visibility timeout</strong>
+              <p>Too short: dual processing. Too long: delayed retries on legitimate failures. 6× Lambda timeout is the safe default</p>
+            </div>
+            <div>
+              <strong>Batch size</strong>
+              <p>Larger batches reduce invocations (cost) but increase timeout risk and partial failure complexity. 10 is the sweet spot for most workloads</p>
+            </div>
+            <div>
+              <strong>DLQ max receive count</strong>
+              <p>Lower count (2) moves messages to DLQ faster but may discard transient failures. Higher count (5) gives more retry chances but delays poison message isolation</p>
+            </div>
+            <div>
+              <strong>Idempotency store</strong>
+              <p>DynamoDB is fast and serverless. Redis is cheaper at scale but needs management. For most Lambda use cases, DynamoDB with TTL is ideal</p>
+            </div>
+            <div>
+              <strong>Standard vs FIFO queue</strong>
+              <p>Standard is simpler and higher throughput. FIFO gives ordering and dedup but has throughput limits and message group blocking</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Visibility timeout shorter than Lambda timeout — message reappears during processing; dual processing of orders</li>
+            <li>No DLQ configured — poison message retries infinitely; consumes all Lambda concurrency; legitimate messages queue up</li>
+            <li>ReportBatchItemFailures not enabled — one bad message in a batch causes all 10 to retry; the 9 good ones are re-processed</li>
+            <li>Idempotency key collision — two different operations generate the same key; second operation silently skipped</li>
+            <li>Lambda concurrency too high — 500 concurrent Lambdas each open a database connection; RDS max_connections exceeded; all invocations fail</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement exactly-once processing with FIFO queues?</li>
+            <li>How do you handle message ordering when it matters (e.g., order status updates)?</li>
+            <li>How would you scale this to 100K messages/second?</li>
+            <li>How do you replay DLQ messages safely after a bug fix?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: visibility timeout at 6× Lambda timeout, DLQ with maxReceiveCount=3 and alerting, idempotency via DynamoDB conditional writes, partial batch failure reporting, and concurrency limits for downstream protection. Draw the flow and explain what goes wrong without each safeguard.</p>
+          <p>You do not need to design the full DLQ replay mechanism or the FIFO ordering strategy. The interviewer wants to see: awareness of the specific failure modes (dual processing, poison messages, partial batch), concrete configuration values with reasoning, and idempotency as an application responsibility, not a queue feature.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../iam_platform/">← Design IAM for a platform team</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../multi_account/">Multi-account strategy for prod/stage/dev →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

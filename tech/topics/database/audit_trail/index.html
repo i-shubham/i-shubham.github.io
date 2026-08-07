@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build an audit trail without killing write throughput | Database | Engineering Notes</title>
+  <meta name="description" content="Audit logs that share the OLTP transaction look correct until they double write latency — or get rolled back with the business row.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Build an audit trail without killing write throughput</p>
+      <p class="eyebrow">Database · Medium · ~60 min</p>
+      <h1>Build an audit trail without killing write throughput</h1>
+      <p class="problem-deck">Audit logs that share the OLTP transaction look correct until they double write latency — or get rolled back with the business row.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Requirements</strong><p>What events, retention, query patterns.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>In-transaction audit</strong><p>Trigger-based, pros and cons.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Async audit via CDC</strong><p>WAL-based CDC, Debezium, outbox pattern.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Storage design</strong><p>Append-only table, partitioning, columnar archive.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Query patterns</strong><p>Who changed what, when, point-in-time reconstruction.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Compliance and tamper-proofing</strong><p>Hash chains, immutable storage.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Trade-offs and wrap-up</strong><p>Consistency vs throughput vs cost.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;ve built audit trails two ways and learned the hard way that the first instinct — a trigger that inserts into an audit table inside the same transaction — is correct for consistency but murders write throughput. Every business INSERT becomes two INSERTs, and the audit table becomes the largest table in the database within months.</p>
+          <p>The better approach for most systems is CDC: capture changes from the WAL (Postgres) or binlog (MySQL) asynchronously and write them to an append-only store. You get eventual consistency — the audit log lags by milliseconds to seconds — but your OLTP writes stay fast. For regulatory scenarios where the audit must be in the same transaction (SOX, PCI), use the outbox pattern: write audit events to an outbox table in the same transaction, and a separate process ships them to the audit store.</p>
+          <p>I&#x27;d ask about retention and query patterns before choosing. If compliance requires 7-year retention and point-in-time queries, we need a different storage strategy than if we just need &#x27;who changed this row last week.&#x27;</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What entities need auditing — all tables or specific ones?</li>
+            <li>What is the retention requirement — 90 days, 1 year, 7 years?</li>
+            <li>Do we need to reconstruct the state of a row at any point in time?</li>
+            <li>Is the audit log for internal debugging or regulatory compliance?</li>
+            <li>What is the current write throughput on the audited tables?</li>
+            <li>Do we need tamper-proof audit (hash chains, WORM storage)?</li>
+            <li>Who queries the audit log — developers, compliance, customers?</li>
+            <li>What is the acceptable lag between a change and its appearance in audit?</li>
+            <li>Are we on Postgres (WAL), MySQL (binlog), or something else?</li>
+            <li>Do we need to audit DDL changes as well (schema migrations)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: audit capture (sync and async), storage design, query API, retention.</li>
+            <li>Out: full SIEM integration, real-time alerting on audit events.</li>
+            <li>Out: application-level authorization (who can view audit logs).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Capture changes</strong>
+              <p>Record every INSERT, UPDATE, DELETE with before/after state.</p>
+            </div>
+            <div>
+              <strong>Actor attribution</strong>
+              <p>Every audit entry includes who made the change.</p>
+            </div>
+            <div>
+              <strong>Point-in-time query</strong>
+              <p>Reconstruct any row&#x27;s state at a given timestamp.</p>
+            </div>
+            <div>
+              <strong>Search</strong>
+              <p>Find all changes to entity X in time range Y.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Throughput impact</strong>
+              <p>&lt; 5% write latency increase on OLTP tables.</p>
+            </div>
+            <div>
+              <strong>Lag</strong>
+              <p>Audit events available within 5 seconds of the change (CDC path).</p>
+            </div>
+            <div>
+              <strong>Retention</strong>
+              <p>7-year retention for compliance; 90-day hot, remainder cold.</p>
+            </div>
+            <div>
+              <strong>Tamper resistance</strong>
+              <p>Append-only; no UPDATE or DELETE on audit records.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>OLTP writes</strong>
+              <p>10,000 writes/s across audited tables.</p>
+            </div>
+            <div>
+              <strong>Audit rows</strong>
+              <p>10K changes/s × 86,400s = 864M audit rows/day.</p>
+            </div>
+            <div>
+              <strong>Row size</strong>
+              <p>~1 KB per audit row (entity_id, before, after, actor, timestamp).</p>
+            </div>
+            <div>
+              <strong>Daily storage</strong>
+              <p>864M × 1 KB = 864 GB/day raw; compressed ~200 GB/day.</p>
+            </div>
+            <div>
+              <strong>7-year retention</strong>
+              <p>200 GB/day × 2,555 days ≈ 500 TB; needs tiered storage (S3 + Parquet).</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Trigger-based audit (synchronous)
+CREATE OR REPLACE FUNCTION audit_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO audit_log (table_name, row_id, action, old_data, new_data, actor, ts)
+    VALUES (TG_TABLE_NAME, COALESCE(NEW.id, OLD.id), TG_OP,
+            row_to_json(OLD), row_to_json(NEW),
+            current_setting(&#x27;app.current_user&#x27;, true), now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Query: who changed order 42?
+SELECT * FROM audit_log
+WHERE table_name = &#x27;orders&#x27; AND row_id = 42
+ORDER BY ts DESC;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE audit_log (
+    id          BIGSERIAL,
+    table_name  TEXT NOT NULL,
+    row_id      BIGINT NOT NULL,
+    action      TEXT NOT NULL,
+    old_data    JSONB,
+    new_data    JSONB,
+    actor       TEXT,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (ts, id)
+) PARTITION BY RANGE (ts);
+
+CREATE TABLE audit_log_2026_08 PARTITION OF audit_log
+    FOR VALUES FROM (&#x27;2026-08-01&#x27;) TO (&#x27;2026-09-01&#x27;);
+
+CREATE INDEX idx_audit_entity ON audit_log (table_name, row_id, ts DESC);
+
+-- Outbox table for CDC-based audit
+CREATE TABLE audit_outbox (
+    id          BIGSERIAL PRIMARY KEY,
+    payload     JSONB NOT NULL,
+    published   BOOLEAN NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Approach 1: Synchronous triggers. Create an AFTER INSERT OR UPDATE OR DELETE trigger on each audited table. The trigger function writes to audit_log in the same transaction. Pros: strong consistency — if the business row commits, the audit row commits. Cons: doubles write I/O, increases transaction duration, audit_log becomes a write bottleneck.</p>
+          <p>Approach 2: CDC from the WAL. Use Debezium (or pg_logical / wal2json) to stream changes from the Postgres WAL to Kafka, then sink to an audit store (Postgres partition, S3 + Parquet, or Elasticsearch). Pros: zero overhead on OLTP writes. Cons: eventual consistency — a few seconds of lag; if the CDC pipeline fails, you lose audit events unless the WAL is retained.</p>
+          <p>Approach 3: Outbox pattern. The application writes audit events to an outbox table in the same transaction as the business row. A separate poller or CDC process reads the outbox and ships events to the audit store. This gives transactional consistency (the event is committed with the business row) without the overhead of a trigger (the app controls what data goes in the outbox). The outbox table stays small because processed rows are deleted.</p>
+          <p>For storage, partition the audit table by month. Hot partitions (last 90 days) live on fast SSD storage. Cold partitions are exported to S3 as Parquet files and queried via Athena or Trino. This keeps the OLTP database lean while meeting 7-year retention requirements.</p>
+          <p>Tamper-proofing: for SOX/PCI, each audit row includes a SHA-256 hash of the previous row&#x27;s hash + current row&#x27;s data, forming a hash chain. Any modification breaks the chain. Store the chain head in an immutable external ledger (AWS QLDB or a simple S3 object with versioning).</p>
+<figure class="diagram dark" aria-label="Audit trail architecture">
+  <div class="flow-row">
+    <div class="node">OLTP write</div>
+    <div class="node accent">WAL / CDC</div>
+    <div class="node">Kafka</div>
+    <div class="node">Audit store<br>(partitioned)</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Trigger vs CDC vs outbox">
+  <div class="flow-row">
+    <div class="node">Trigger<br>same TX, 2x writes</div>
+    <div class="node">CDC<br>async, zero overhead</div>
+    <div class="node accent">Outbox<br>same TX, async ship</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s quantify the trigger approach. Our OLTP table handles 10,000 writes/s. Each write is ~0.5 ms. Adding a trigger that INSERTs into audit_log adds another ~0.5 ms (JSONB serialization + index update). Transaction time doubles from 0.5 ms to 1 ms. Throughput drops from 10K to ~5K at the same connection count. You can recover by adding connections, but that increases lock contention and memory usage.</p>
+          <p>The audit_log table grows at 864M rows/day. Even with monthly partitions, each partition holds ~26B rows after 30 days. The BRIN index on ts helps for time-range queries, but the (table_name, row_id, ts) B-tree index is massive. After 90 days, you&#x27;re looking at 78B rows in hot storage — that&#x27;s untenable on the OLTP instance.</p>
+          <p>CDC sidesteps all of this. Debezium reads the WAL and produces JSON events to Kafka. A Kafka Connect sink writes to S3 in Parquet format, partitioned by date. The OLTP database knows nothing about audit — its write latency is unchanged. The lag is typically 1-3 seconds under normal load, acceptable for most audit use cases.</p>
+          <p>The outbox pattern is a middle ground. The app does INSERT INTO audit_outbox (payload) VALUES (jsonb_build_object(...)) in the same transaction. A separate cron or Debezium on the outbox table picks up new rows every second and ships them to the audit store. The outbox stays tiny because we DELETE processed rows. If the shipper fails, rows accumulate but aren&#x27;t lost — it&#x27;s a durable queue inside the database.</p>
+          <p>Point-in-time reconstruction: to find the state of order 42 at 2026-01-15 14:30:00, query audit_log for all events where table_name=&#x27;orders&#x27; AND row_id=42 AND ts &lt;= &#x27;2026-01-15 14:30:00&#x27; ORDER BY ts. Replay the events: start with the INSERT&#x27;s new_data, apply each UPDATE&#x27;s new_data in order. The last state is the answer. This is effectively event sourcing over the audit log.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="CDC audit pipeline sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">App</span><p>INSERT INTO orders (...) VALUES (...)</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>Write WAL entry for the INSERT</p></div>
+    <div class="seq-row"><span class="actor">Debezium</span><p>Read WAL, produce JSON event to Kafka</p></div>
+    <div class="seq-row"><span class="actor">Kafka</span><p>Buffer event in audit-changes topic</p></div>
+    <div class="seq-row"><span class="actor">Sink</span><p>Write Parquet to S3, update audit index</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Trigger vs CDC</strong>
+              <p>Trigger is strongly consistent but doubles write cost; CDC is async with near-zero overhead but allows brief lag.</p>
+            </div>
+            <div>
+              <strong>Outbox vs direct CDC</strong>
+              <p>Outbox gives transactional consistency without trigger overhead; adds a small table to manage.</p>
+            </div>
+            <div>
+              <strong>JSONB vs normalized columns</strong>
+              <p>JSONB is schema-flexible but harder to query; normalized columns are faster but require migrations.</p>
+            </div>
+            <div>
+              <strong>Hot/cold partitioning</strong>
+              <p>Hot 90-day data on SSD for fast queries; cold data on S3 Parquet for cheap retention.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Trigger on high-write table — doubles latency and the audit table becomes the bottleneck.</li>
+            <li>Not partitioning audit_log — 864M rows/day fills the disk in weeks.</li>
+            <li>CDC pipeline failure without WAL retention — audit events lost permanently.</li>
+            <li>Storing sensitive data (passwords, PII) in audit JSONB — compliance violation.</li>
+            <li>No actor attribution — audit says &#x27;row changed&#x27; but not by whom.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement tamper-proof audit with hash chains?</li>
+            <li>What if audit queries need sub-second response times over 7 years of data?</li>
+            <li>How do you audit schema changes (DDL) in addition to data changes?</li>
+            <li>What is the disaster recovery plan for the audit store itself?</li>
+            <li>How would you handle GDPR right-to-erasure when audit must be immutable?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Compare trigger, CDC, and outbox approaches with quantified throughput impact. Show the partitioned audit table schema and a point-in-time reconstruction query. Address storage tiering for long-term retention. The senior signal is knowing that triggers kill throughput and having a concrete alternative that preserves consistency where it matters.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../shard_users/">← Shard a growing user table</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../zero_downtime_migrate/">Migrate a live table with zero downtime →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

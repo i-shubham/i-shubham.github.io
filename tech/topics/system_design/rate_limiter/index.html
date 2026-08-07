@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a rate limiter | System Design | Engineering Notes</title>
+  <meta name="description" content="Rate limits are easy in one process and awkward across a fleet — especially when product wants different budgets per API key, IP, and user.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a rate limiter</p>
+      <p class="eyebrow">System Design · Medium · ~60 min</p>
+      <h1>Design a rate limiter</h1>
+      <p class="problem-deck">Rate limits are easy in one process and awkward across a fleet — especially when product wants different budgets per API key, IP, and user.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Where in the stack (gateway vs service), granularity (IP, user, API key), hard vs soft limit.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Core limiter with token bucket and sliding window. Defer adaptive throttling.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>10K RPS across 20 API servers, 1M unique clients.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>Algorithm deep dive</strong><p>Token bucket, leaky bucket, fixed window, sliding window log, sliding window counter.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Distributed design</strong><p>Redis-based central counter, race conditions, Lua scripts for atomicity.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Multi-tier rules</strong><p>Per-IP, per-user, per-endpoint limits; rule evaluation order.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Edge cases</strong><p>Clock drift, Redis failure fallback, rate limit headers, retry-after.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Follow-ups — adaptive throttling, DDoS, cost-based limits.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by clarifying where the rate limiter lives. If it is at the API gateway (like Kong or Envoy), it applies globally before requests reach application servers. If it is a library inside each service, it is simpler but harder to enforce consistently across a fleet. For most production systems I&#x27;d choose the gateway approach with a shared Redis backend.</p>
+          <p>The next question is granularity. Do we rate limit by IP address, authenticated user, API key, or some combination? In practice you need at least two tiers: an IP-based limit to stop brute-force attacks from unauthenticated clients, and a user/API-key limit for authenticated traffic with different tiers (free: 100 req/min, pro: 1000 req/min).</p>
+          <p>Then I&#x27;d walk through the algorithm trade-offs — token bucket for smooth traffic, sliding window counter for simplicity, and why fixed windows have the boundary burst problem.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Is this a gateway-level or application-level limiter?</li>
+            <li>What dimensions do we limit on — IP, user ID, API key, endpoint?</li>
+            <li>Hard limit (reject immediately) or soft limit (queue/degrade)?</li>
+            <li>What response should rejected requests get — 429 with Retry-After?</li>
+            <li>Do we need per-endpoint limits (e.g., /login stricter than /search)?</li>
+            <li>What is the fleet size — how many API servers share the limit?</li>
+            <li>Do we need to support tiered rate plans (free, pro, enterprise)?</li>
+            <li>Is there a global rate limit in addition to per-client limits?</li>
+            <li>How should we handle Redis outages — fail open or fail closed?</li>
+            <li>Do we need real-time dashboard visibility into rate limit hits?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: token bucket and sliding window counter algorithms, Redis-backed distributed state.</li>
+            <li>In: per-IP and per-user limits, 429 responses with Retry-After headers.</li>
+            <li>Out: DDoS mitigation (that is a CDN/WAF concern), adaptive ML-based throttling.</li>
+            <li>Defer: cost-based rate limiting (charging per request above a threshold).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Check</strong>
+              <p>For each incoming request, decide allow or reject based on current counter state.</p>
+            </div>
+            <div>
+              <strong>Configure</strong>
+              <p>Admin API to set/update rate limit rules per dimension and tier.</p>
+            </div>
+            <div>
+              <strong>Headers</strong>
+              <p>Return X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After.</p>
+            </div>
+            <div>
+              <strong>Monitor</strong>
+              <p>Emit metrics for total requests, allowed, and rejected per rule.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency overhead</strong>
+              <p>&lt; 2 ms per request — the limiter must not become the bottleneck.</p>
+            </div>
+            <div>
+              <strong>Accuracy</strong>
+              <p>Within 1-2% of the configured limit — small overcount is acceptable.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>Limiter failure should fail open (allow traffic) to avoid outages.</p>
+            </div>
+            <div>
+              <strong>Consistency</strong>
+              <p>Eventual — a brief burst above the limit during a Redis hiccup is acceptable.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Total RPS</strong>
+              <p>10K RPS across 20 API servers → 500 RPS per server.</p>
+            </div>
+            <div>
+              <strong>Redis ops/sec</strong>
+              <p>10K RPS × 2 ops (GET+INCR per sliding window) = 20K Redis ops/sec.</p>
+            </div>
+            <div>
+              <strong>Unique clients</strong>
+              <p>1M unique API keys × 16 bytes key + 16 bytes counter = 32 MB in Redis.</p>
+            </div>
+            <div>
+              <strong>Rule storage</strong>
+              <p>~100 rate limit rules × 1 KB each — trivially small.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Rate limit is applied as middleware; no dedicated user-facing API.
+-- Internal admin API for rule management:
+
+POST /internal/rate-limits/rules
+  Body: { dimension: &#x27;api_key&#x27;, limit: 1000, window_sec: 60, tier: &#x27;pro&#x27; }
+  Response 201: { rule_id }
+
+-- Response headers added to every API response:
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 742
+X-RateLimit-Reset: 1690000060
+
+-- When rate limited:
+HTTP 429 Too Many Requests
+Retry-After: 23</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Redis key patterns for sliding window counter:
+
+-- Per-client sliding window:
+-- Key: rl:{dimension}:{client_id}:{window_start}
+-- Value: integer counter
+-- TTL: 2 × window_size (auto-expire old windows)
+
+-- Example:
+-- rl:api_key:ak_abc123:1690000020 = 47  (TTL 120s for 60s window)
+-- rl:api_key:ak_abc123:1690000040 = 12  (current sub-window)
+
+-- Rule config in Postgres (loaded into memory at startup):
+CREATE TABLE rate_limit_rules (
+  rule_id     SERIAL PRIMARY KEY,
+  dimension   VARCHAR(32) NOT NULL,  -- &#x27;ip&#x27;, &#x27;api_key&#x27;, &#x27;user_id&#x27;
+  tier        VARCHAR(32),
+  endpoint    VARCHAR(256),           -- nullable = all endpoints
+  max_requests INT NOT NULL,
+  window_sec  INT NOT NULL,
+  updated_at  TIMESTAMP DEFAULT now()
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>I&#x27;d implement a sliding window counter algorithm backed by Redis. The idea is to divide time into fixed sub-windows (say, 1/60th of the full window) and maintain a counter per sub-window. To check the current rate, we sum the counters from sub-windows that overlap with the trailing window. This avoids the fixed-window boundary burst problem where a client sends the full limit at :59 and again at :00, effectively doubling throughput.</p>
+          <p>Each request triggers a Lua script on Redis that atomically increments the current sub-window counter and sums the relevant sub-windows. If the sum exceeds the limit, the script returns REJECTED with the reset timestamp. Using a Lua script ensures the read-increment-check is atomic — no race condition between two servers checking the same key.</p>
+          <p>The alternative is a token bucket: each client has a bucket with N tokens, refilled at a fixed rate. A request consumes one token. This is better for smoothing bursty traffic — a client can burst up to the bucket size and then is limited to the refill rate. I&#x27;d choose sliding window counter for simplicity at the gateway and offer token bucket as an option for specific endpoints that need burst control.</p>
+          <p>For multi-tier support, the gateway looks up the client&#x27;s tier (free, pro, enterprise) from a local cache (refreshed every 30 seconds from a tier service) and selects the appropriate rule. Rules are evaluated in order: per-endpoint first, then per-user, then per-IP. The most specific matching rule wins.</p>
+          <p>If Redis is unreachable, the limiter fails open — all requests are allowed. This prevents the rate limiter from becoming a single point of failure. We&#x27;d monitor Redis availability closely and have a local in-memory fallback (per-server token bucket with conservative limits) for brief outages. The fallback is less accurate since it does not share state across servers, but it prevents total loss of rate limiting.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node accent">API Gateway</span><b>&rarr;</b><span class="node">Rate Limiter (Lua)</span><b>&rarr;</b><span class="node">Redis</span></div><figcaption>Request flow: gateway calls Redis via Lua script before forwarding to backend</figcaption></figure>
+<figure class="diagram dark"><div class="compare"><div><span class="label">Fixed Window</span><p>Simple counter per window. Boundary burst: 2× limit at window edges.</p></div><div><span class="label">Sliding Window Counter</span><p>Weighted sum of current + previous window. Smooth, ~1% error.</p></div><div><span class="label">Token Bucket</span><p>Allows controlled bursts up to bucket size. Best for bursty APIs.</p></div></div><figcaption>Algorithm trade-offs</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Rule: api_key:pro → 1000 req/60s</span><span class="node accent">Sub-windows: [t-60..t-40]=380, [t-40..t-20]=290, [t-20..t]=315</span><span class="node">Total = 985 → ALLOW (15 remaining)</span></div><figcaption>Sliding window counter evaluation</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>The fixed-window boundary burst is the classic gotcha. If the window is 60 seconds and the limit is 100, a client can send 100 requests at second 59 of window N, then 100 more at second 0 of window N+1 — 200 requests in 2 seconds. The sliding window counter fixes this by weighting the previous window&#x27;s count. If 70% of the previous window overlaps with the current trailing window, we compute: previous_count × 0.7 + current_count. This gives a smooth approximation with at most a ~1% error under uniform traffic.</p>
+          <p>The Redis Lua script is critical for correctness in a distributed setting. Without it, two API servers could both read the counter as 99 (limit 100), both increment to 100, and both allow the request — exceeding the limit by 1. The Lua script runs atomically on the Redis server:
+1. INCR the current sub-window key
+2. Sum all sub-window keys in the trailing window
+3. If sum &gt; limit, DECR back and return REJECTED
+4. Otherwise return ALLOWED with remaining count
+This guarantees serializability per client key.</p>
+          <p>The token bucket algorithm is better understood as a state machine with two variables: tokens_remaining and last_refill_timestamp. On each request, we compute how many tokens to add based on elapsed time since last_refill, cap at bucket_size, then subtract one if tokens &gt; 0. The beauty is that we only need to store two numbers per client in Redis, and refill is implicit (computed on demand, not via a background job). The downside is that burst size equals bucket size, which might be too permissive for some endpoints.</p>
+          <p>Multi-tier rule evaluation needs careful ordering. A single request might match an IP rule, a user rule, and an endpoint-specific rule. I&#x27;d evaluate all matching rules and reject if any rule is exceeded — this prevents a user from bypassing their per-endpoint limit by staying under the global user limit. The headers should reflect the most restrictive matching rule so the client knows which limit they are approaching.</p>
+          <p>Distributed rate limiting across multiple data centers is much harder. If each region has its own Redis, a global limit of 1000 req/min cannot be enforced by giving each region 500 — traffic patterns are uneven. Options include a single global Redis (adds cross-region latency), periodic sync between regions (allows brief overcount), or client-side estimation with server-side correction. For most systems, a single Redis cluster in a central region with &lt; 5 ms RTT to API servers is sufficient.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Sliding window (sorted set) and token bucket implementations</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import time
+import redis
+
+# Atomic sliding-window limiter implemented as a Redis Lua script.
+# Uses a sorted set keyed by timestamp; stale entries are pruned each call.
+SLIDING_WINDOW_LUA = &quot;&quot;&quot;
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+redis.call(&quot;ZREMRANGEBYSCORE&quot;, key, 0, now - window)
+local count = redis.call(&quot;ZCARD&quot;, key)
+if count &lt; limit then
+    redis.call(&quot;ZADD&quot;, key, now, now .. &quot;:&quot; .. math.random(1000000))
+    redis.call(&quot;EXPIRE&quot;, key, window)
+    return {1, limit - count - 1}  -- allowed, remaining
+end
+return {0, 0}  -- rejected, 0 remaining
+&quot;&quot;&quot;
+
+
+class SlidingWindowLimiter:
+    def __init__(self, redis_client: redis.Redis):
+        self.r = redis_client
+        self.script = self.r.register_script(SLIDING_WINDOW_LUA)
+
+    def allow(self, client_id: str, limit: int, window_sec: int) -&gt; dict:
+        key = f&quot;rl:{client_id}&quot;
+        now = time.time()
+        result = self.script(keys=[key], args=[window_sec, limit, now])
+        allowed, remaining = int(result[0]), int(result[1])
+        return {
+            &quot;allowed&quot;: bool(allowed),
+            &quot;remaining&quot;: remaining,
+            &quot;reset_at&quot;: int(now) + window_sec,
+        }
+
+
+class TokenBucket:
+    &quot;&quot;&quot;Classic token bucket backed by a Redis hash.
+    Tokens refill at a constant rate up to a max capacity.&quot;&quot;&quot;
+
+    def __init__(self, redis_client: redis.Redis):
+        self.r = redis_client
+
+    def allow(self, client_id: str, capacity: int, refill_rate: float) -&gt; bool:
+        key = f&quot;tb:{client_id}&quot;
+        now = time.time()
+        pipe = self.r.pipeline()
+        pipe.hmget(key, &quot;tokens&quot;, &quot;last_refill&quot;)
+        state = pipe.execute()[0]
+        tokens = float(state[0] or capacity)
+        last = float(state[1] or now)
+        elapsed = now - last
+        # Refill tokens proportional to elapsed time, capped at capacity
+        tokens = min(capacity, tokens + elapsed * refill_rate)
+        if tokens &lt; 1:
+            return False
+        tokens -= 1
+        self.r.hset(key, mapping={&quot;tokens&quot;: tokens, &quot;last_refill&quot;: now})
+        self.r.expire(key, int(capacity / refill_rate) + 60)
+        return True</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::BTreeMap;
+use std::time::{Instant, Duration};
+
+/// Sliding-window rate limiter: tracks request timestamps in a BTreeMap,
+/// prunes entries outside the window on each check.
+struct SlidingWindowLimiter {
+    windows: std::collections::HashMap&lt;String, BTreeMap&lt;u128, u32&gt;&gt;,
+}
+impl SlidingWindowLimiter {
+    fn new() -&gt; Self { Self { windows: Default::default() } }
+
+    fn allow(&amp;mut self, client: &amp;str, limit: usize, window: Duration) -&gt; bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
+        let cutoff = now - window.as_millis();
+        let entry = self.windows.entry(client.into()).or_default();
+        // Remove timestamps outside the current window
+        let stale: Vec&lt;_&gt; = entry.range(..cutoff).map(|(&amp;k, _)| k).collect();
+        for k in stale { entry.remove(&amp;k); }
+        if entry.len() &lt; limit {
+            entry.insert(now, 1);
+            true
+        } else {
+            false // rate exceeded
+        }
+    }
+}
+
+/// Token bucket: tokens refill at a constant rate, consumed on each request.
+struct TokenBucket {
+    tokens: f64,
+    capacity: f64,
+    refill_rate: f64,   // tokens per second
+    last_refill: Instant,
+}
+impl TokenBucket {
+    fn new(capacity: f64, refill_rate: f64) -&gt; Self {
+        Self { tokens: capacity, capacity, refill_rate, last_refill: Instant::now() }
+    }
+    fn allow(&amp;mut self) -&gt; bool {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        // Refill proportional to elapsed time, capped at capacity
+        self.tokens = (self.tokens + elapsed * self.refill_rate).min(self.capacity);
+        self.last_refill = now;
+        if self.tokens &gt;= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;map&gt;
+#include &lt;string&gt;
+#include &lt;chrono&gt;
+#include &lt;mutex&gt;
+
+// Sliding-window limiter: prunes old timestamps, counts recent ones
+class SlidingWindowLimiter {
+    std::map&lt;double, int&gt; _timestamps; // ts → count
+    std::mutex _mu;
+public:
+    bool allow(int limit, double windowSec) {
+        std::lock_guard&lt;std::mutex&gt; lock(_mu);
+        double now = CFAbsoluteTimeGetCurrent();
+        double cutoff = now - windowSec;
+        // Prune entries outside the window
+        _timestamps.erase(_timestamps.begin(), _timestamps.upper_bound(cutoff));
+        int total = 0;
+        for (auto &amp;kv : _timestamps) total += kv.second;
+        if (total &lt; limit) {
+            _timestamps[now]++;
+            return true;
+        }
+        return false;
+    }
+};
+
+// Token bucket: tokens refill continuously up to capacity
+@interface TokenBucket : NSObject
+- (instancetype)initWithCapacity:(double)cap refillRate:(double)rate;
+- (BOOL)allow;
+@end
+
+@implementation TokenBucket {
+    double _tokens, _capacity, _refillRate;
+    CFAbsoluteTime _lastRefill;
+}
+- (instancetype)initWithCapacity:(double)cap refillRate:(double)rate {
+    if (self = [super init]) {
+        _tokens = cap; _capacity = cap;
+        _refillRate = rate; _lastRefill = CFAbsoluteTimeGetCurrent();
+    }
+    return self;
+}
+- (BOOL)allow {
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    double elapsed = now - _lastRefill;
+    // Refill proportional to elapsed time, capped at capacity
+    _tokens = fmin(_capacity, _tokens + elapsed * _refillRate);
+    _lastRefill = now;
+    if (_tokens &gt;= 1.0) { _tokens -= 1.0; return YES; }
+    return NO;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>GET /api/v1/search?q=shoes (API key: ak_abc123)</p></div><div class="seq-row"><span class="actor">API Gateway</span><p>Extracts API key, looks up tier (pro: 1000/min)</p></div><div class="seq-row"><span class="actor">Redis Lua Script</span><p>INCR rl:api_key:ak_abc123:1690000040, SUM sliding window = 985 &lt; 1000 → ALLOW</p></div><div class="seq-row"><span class="actor">API Gateway</span><p>Forwards request to backend, adds X-RateLimit-Remaining: 15 to response</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Sliding window vs token bucket</strong>
+              <p>Sliding window is precise per window; token bucket smooths bursts but is harder to reason about.</p>
+            </div>
+            <div>
+              <strong>Central Redis vs local counters</strong>
+              <p>Central is accurate but adds ~1 ms RTT; local is fast but inaccurate for shared limits.</p>
+            </div>
+            <div>
+              <strong>Fail open vs fail closed</strong>
+              <p>Fail open prevents outages but allows unlimited traffic during Redis downtime.</p>
+            </div>
+            <div>
+              <strong>Lua script vs multi-step</strong>
+              <p>Lua is atomic but opaque; multi-step is readable but has race conditions.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Redis goes down — if fail-open, rate limiting is effectively disabled system-wide.</li>
+            <li>Clock drift between API servers — sub-window alignment breaks, causing under/over counting.</li>
+            <li>Hot API key saturates a Redis shard — one heavy client slows rate checks for all clients on that shard.</li>
+            <li>Lua script timeout under load — Redis blocks other operations while the script runs.</li>
+            <li>Rule cache stale after admin update — old limits enforced for up to 30 seconds.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement adaptive rate limiting that tightens under high server load?</li>
+            <li>Design a distributed rate limiter across multiple geographic regions.</li>
+            <li>How would you handle rate limiting for WebSocket connections (long-lived)?</li>
+            <li>Add cost-based rate limiting where expensive endpoints consume more tokens.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the fixed-window boundary burst problem and why sliding window counter solves it. Sketch the Redis Lua script for atomic check-and-increment. Describe the fail-open strategy and rate limit response headers. Mentioning token bucket as an alternative and multi-tier rule evaluation shows breadth.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../news_feed/">← Design a news feed</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../chat_messaging/">Design a chat messaging system →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detect and drain a bad deploy safely | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Bad deploys become incidents when canaries are cosmetic and rollbacks need a meeting.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Detect and drain a bad deploy safely</p>
+      <p class="eyebrow">Distributed Systems · Medium · ~60 min</p>
+      <h1>Detect and drain a bad deploy safely</h1>
+      <p class="problem-deck">Bad deploys become incidents when canaries are cosmetic and rollbacks need a meeting.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify deployment model</strong><p>Rolling, blue-green, canary — what&#x27;s the starting point?</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Health check design</strong><p>Liveness vs readiness, deep checks, startup probes.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Canary deployment</strong><p>Traffic splitting, success criteria, auto-promotion vs auto-rollback.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Automated rollback triggers</strong><p>Error rate, latency percentiles, business metrics.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Connection draining</strong><p>Graceful shutdown, in-flight request completion, load balancer deregistration.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code walkthrough</strong><p>Health check endpoint + graceful shutdown handler.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Blast radius and wrap-up</strong><p>Percentage caps, region-by-region rollout, feature flags.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;ve been on-call during deploys where the canary was purely cosmetic — it got 1% of traffic for 30 seconds, nobody looked at metrics, and the full rollout went ahead. The bad version hit 100% in 3 minutes and caused a 45-minute outage because rollback required someone to find the right Jenkins job and remember the last good SHA.</p>
+          <p>A safe deploy pipeline has three legs. First, health checks that actually check something: not just &#x27;the process is alive&#x27; but &#x27;the database connection pool is healthy, the cache is warm enough, and the dependency endpoints are reachable.&#x27; Second, canary deployment with automated analysis: 5% of traffic for 10 minutes, comparing error rates and p99 latency against the baseline — auto-promote if within thresholds, auto-rollback if not. Third, graceful draining: when a bad instance is pulled, it stops accepting new requests, finishes in-flight ones (up to a 30-second grace period), then shuts down.</p>
+          <p>The blast-radius principle: never let more than X% of instances serve a new version simultaneously. Start at 5%, bake for 10 minutes, go to 25%, bake, then 100%. At each stage, the rollback surface is small enough that reverting takes seconds, not minutes.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What&#x27;s the deployment target — Kubernetes, ECS, bare metal, Lambda?</li>
+            <li>Current deployment strategy — rolling update, blue-green, or manual?</li>
+            <li>How long does the application take to start up and become healthy?</li>
+            <li>What metrics define a healthy deploy — error rate, latency, business KPIs?</li>
+            <li>How many instances serve production traffic?</li>
+            <li>Are there long-running requests (WebSocket, streaming) that need special draining?</li>
+            <li>Is there a service mesh or load balancer that supports traffic splitting?</li>
+            <li>What&#x27;s the current rollback process and how long does it take?</li>
+            <li>Do we have feature flags to decouple deploy from release?</li>
+            <li>What&#x27;s the acceptable blast radius — maximum % of instances on new version at once?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: health checks (liveness/readiness), canary with auto-rollback, graceful draining, blast radius.</li>
+            <li>Out: full CI/CD pipeline design, container orchestration internals.</li>
+            <li>Stretch: feature flag integration for dark launches and gradual rollouts.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>health_check()</strong>
+              <p>Returns 200 if the instance is ready to serve; 503 if not.</p>
+            </div>
+            <div>
+              <strong>canary_analyze(baseline_metrics, canary_metrics)</strong>
+              <p>Compares error rate and latency; returns promote/rollback.</p>
+            </div>
+            <div>
+              <strong>drain(instance, grace_period_s)</strong>
+              <p>Stops new traffic, completes in-flight requests, shuts down.</p>
+            </div>
+            <div>
+              <strong>rollback(deployment, target_version)</strong>
+              <p>Reverts all instances to the last known good version.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Health check latency</strong>
+              <p>p99 &lt; 50 ms — must not slow down the load balancer&#x27;s polling.</p>
+            </div>
+            <div>
+              <strong>Canary detection</strong>
+              <p>Detect a 2× error rate increase within 5 minutes of canary start.</p>
+            </div>
+            <div>
+              <strong>Drain completeness</strong>
+              <p>99.9% of in-flight requests complete before shutdown; &lt; 0.1% dropped.</p>
+            </div>
+            <div>
+              <strong>Rollback speed</strong>
+              <p>Full rollback completes within 2 minutes from trigger to all instances reverted.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Fleet size</strong>
+              <p>100 instances across 2 availability zones.</p>
+            </div>
+            <div>
+              <strong>Canary size</strong>
+              <p>5 instances (5%) for initial canary; 25 instances (25%) for bake stage.</p>
+            </div>
+            <div>
+              <strong>Grace period</strong>
+              <p>30 seconds for HTTP; 60 seconds for WebSocket/streaming.</p>
+            </div>
+            <div>
+              <strong>Health check interval</strong>
+              <p>Every 5 seconds from the load balancer, 3 consecutive failures = unhealthy.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Health check endpoints
+GET /healthz           → 200 OK {&quot;status&quot;: &quot;healthy&quot;}
+GET /readyz            → 200 OK | 503 {&quot;status&quot;: &quot;not_ready&quot;, &quot;reason&quot;: &quot;cache_cold&quot;}
+GET /healthz/deep      → 200 OK {&quot;db&quot;: &quot;ok&quot;, &quot;cache&quot;: &quot;ok&quot;, &quot;deps&quot;: &quot;ok&quot;}
+
+# Canary analysis (internal)
+POST /deploy/canary/analyze
+  Body: {&quot;baseline&quot;: {&quot;error_rate&quot;: 0.001, &quot;p99_ms&quot;: 120}, 
+         &quot;canary&quot;:   {&quot;error_rate&quot;: 0.005, &quot;p99_ms&quot;: 350}}
+  Response: {&quot;decision&quot;: &quot;rollback&quot;, &quot;reason&quot;: &quot;error_rate 5x baseline&quot;}
+
+# Graceful shutdown signal
+SIGTERM → stop accepting new connections, drain in-flight, exit(0)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Deployment state
+deployment_id: str              # unique deployment identifier
+target_version: str             # SHA or version being deployed
+current_phase: enum(canary, bake, full, rolled_back)
+canary_instances: List[str]     # instance IDs in canary
+baseline_instances: List[str]   # instance IDs serving old version
+
+# Canary metrics (collected per window)
+window_start: timestamp
+window_end: timestamp
+error_count: int
+request_count: int
+p50_latency_ms: float
+p99_latency_ms: float
+business_metric: float          # e.g., conversion rate, order value</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Health checks: Kubernetes distinguishes liveness (is the process alive?) from readiness (should it receive traffic?). Liveness failures restart the container. Readiness failures remove it from the service. A startup probe gives slow-starting apps extra time. The deep health check verifies database connectivity, cache health, and downstream dependencies — but be careful: if the database is down for everyone, deep checks make all instances unready, and the load balancer has nowhere to route traffic. Use deep checks for readiness, shallow checks for liveness.</p>
+          <p>Canary deployment: deploy the new version to 5% of instances. Route 5% of traffic to them (via load balancer weights or service mesh). Collect error rate, p99 latency, and business metrics for 10 minutes. Compare against the baseline (the other 95%). If the canary&#x27;s error rate is &gt; 2× baseline or p99 &gt; 1.5× baseline, auto-rollback. If within thresholds, promote to 25%, bake for another 10 minutes, then 100%.</p>
+          <p>Graceful draining: when an instance receives SIGTERM (from Kubernetes or the deployment system), it should: (1) deregister from the load balancer (or fail readiness checks so the LB stops sending new requests), (2) finish processing in-flight requests (up to the grace period), (3) close connections and exit. In Kubernetes, the terminationGracePeriodSeconds controls how long before SIGKILL. Set it to grace_period + buffer (e.g., 40 s).</p>
+          <p>Blast-radius control: cap the maximum percentage of fleet on a new version at each stage. A rolling update that replaces 25% at a time limits blast radius to 25%. With canary, it&#x27;s 5% initially. Feature flags decouple deployment from activation — deploy the code to 100% but enable the feature for 0%, then ramp gradually. This separates deploy risk (process crash, startup failure) from feature risk (business logic bugs).</p>
+<figure class="diagram dark" aria-label="Canary deploy pipeline">
+  <div class="flow-row">
+    <div class="node">Deploy to 5% (canary)</div>
+    <div class="node">Analyze 10 min</div>
+    <div class="node">Pass? → 25%</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Analyze 10 min</div>
+    <div class="node">Pass? → 100%</div>
+    <div class="node accent">Fail at any stage → auto-rollback</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Graceful drain sequence">
+  <div class="flow-row">
+    <div class="node">SIGTERM received</div>
+    <div class="node">Fail readiness check</div>
+    <div class="node">LB stops new traffic</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Complete in-flight (≤ 30 s)</div>
+    <div class="node">Close connections</div>
+    <div class="node accent">exit(0)</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Health check design traps: a deep health check that queries the database adds latency and creates a dependency — if the DB is slow, the health check is slow, and the LB might mark the instance unhealthy even though it could serve cached responses. Solution: separate the liveness check (shallow: process alive, goroutines not deadlocked) from the readiness check (deep: DB connected, cache warm). And set a timeout on the deep check (500 ms) so a slow dependency doesn&#x27;t cascade into a fleet-wide readiness failure.</p>
+          <p>Canary analysis pitfalls: with 5% traffic, you might only get 500 requests in 10 minutes for a low-traffic endpoint. A single slow request can skew p99 dramatically. Use statistical significance tests (chi-squared for error rates, Mann-Whitney U for latency distributions) rather than raw threshold comparisons. Also compare business metrics: a deploy that drops error rate but also drops conversion rate has a bug that manifests as 200 OK with wrong data.</p>
+          <p>Drain edge cases: WebSocket connections and server-sent events (SSE) are long-lived. A 30-second grace period kills them mid-stream. Solutions: (1) send a &#x27;reconnect&#x27; frame before shutting down the WebSocket, letting the client reconnect to a healthy instance; (2) extend the grace period for WebSocket instances (60–120 s); (3) use a separate drain signal for long-lived connections that gives more warning.</p>
+          <p>Kubernetes-specific: when a Pod is terminated, Kubernetes simultaneously sends SIGTERM and removes the Pod from the Endpoints object. But the Endpoints change propagates asynchronously — there&#x27;s a window (typically 1–5 seconds) where the LB still sends traffic to the draining Pod. Fix: add a preStop hook with a sleep (e.g., 5 s) before the container starts shutting down, giving time for the Endpoints update to propagate.</p>
+          <p>Blast-radius real-world failure: a team deployed a version with a memory leak. The canary passed (10-minute window was too short for the leak to matter). At 100%, memory grew over 30 minutes until OOM kills cascaded across the fleet. Fix: extend bake times based on the type of change. Memory-intensive changes get a 1-hour bake at 25% before full rollout. Monitor memory growth rate, not just absolute memory usage.</p>
+        </section>
+        <section class="problem-section">
+          <h2>HTTP server with readiness check and graceful drain</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import signal, threading, time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+
+class AppState:
+    def __init__(self):
+        self.ready = False
+        self.draining = False
+        self.in_flight = 0
+        self.lock = threading.Lock()
+
+    def start_request(self) -&gt; bool:
+        with self.lock:
+            if self.draining:
+                return False
+            self.in_flight += 1
+            return True
+
+    def end_request(self):
+        with self.lock:
+            self.in_flight -= 1
+
+    def drain(self, grace_s: int = 30):
+        self.draining = True
+        self.ready = False
+        deadline = time.monotonic() + grace_s
+        while time.monotonic() &lt; deadline:
+            with self.lock:
+                if self.in_flight == 0:
+                    return
+            time.sleep(0.5)
+
+
+state = AppState()
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == &#x27;/healthz&#x27;:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b&#x27;{&quot;status&quot;:&quot;alive&quot;}&#x27;)
+        elif self.path == &#x27;/readyz&#x27;:
+            code = 200 if (state.ready and not state.draining) else 503
+            self.send_response(code)
+            self.end_headers()
+        else:
+            if not state.start_request():
+                self.send_response(503)
+                self.end_headers()
+                return
+            try:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b&#x27;{&quot;ok&quot;:true}&#x27;)
+            finally:
+                state.end_request()
+
+
+def shutdown_handler(signum, frame):
+    state.drain(grace_s=30)
+    raise SystemExit(0)
+
+
+if __name__ == &#x27;__main__&#x27;:
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    state.ready = True
+    HTTPServer((&#x27;&#x27;, 8080), Handler).serve_forever()</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use hyper::{Body, Request, Response, Server, StatusCode};
+use hyper::service::{make_service_fn, service_fn};
+use tokio::signal::unix::{signal, SignalKind};
+
+struct AppState {
+    ready: AtomicBool,
+    draining: AtomicBool,
+    in_flight: AtomicUsize,
+}
+
+impl AppState {
+    fn new() -&gt; Self {
+        Self {
+            ready: AtomicBool::new(false),
+            draining: AtomicBool::new(false),
+            in_flight: AtomicUsize::new(0),
+        }
+    }
+
+    fn start_request(&amp;self) -&gt; bool {
+        if self.draining.load(Ordering::Acquire) { return false; }
+        self.in_flight.fetch_add(1, Ordering::AcqRel);
+        // Double-check after increment to avoid race with drain
+        if self.draining.load(Ordering::Acquire) {
+            self.in_flight.fetch_sub(1, Ordering::AcqRel);
+            return false;
+        }
+        true
+    }
+
+    fn end_request(&amp;self) {
+        self.in_flight.fetch_sub(1, Ordering::AcqRel);
+    }
+
+    async fn drain(&amp;self, grace_s: u64) {
+        self.draining.store(true, Ordering::Release);
+        self.ready.store(false, Ordering::Release);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(grace_s);
+        while tokio::time::Instant::now() &lt; deadline {
+            if self.in_flight.load(Ordering::Acquire) == 0 { return; }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+}
+
+async fn handle(req: Request&lt;Body&gt;, state: Arc&lt;AppState&gt;) -&gt; Result&lt;Response&lt;Body&gt;, hyper::Error&gt; {
+    match req.uri().path() {
+        &quot;/healthz&quot; =&gt; Ok(Response::new(Body::from(r#&quot;{&quot;status&quot;:&quot;alive&quot;}&quot;#))),
+        &quot;/readyz&quot; =&gt; {
+            let code = if state.ready.load(Ordering::Acquire)
+                &amp;&amp; !state.draining.load(Ordering::Acquire) {
+                StatusCode::OK
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            Ok(Response::builder().status(code).body(Body::empty()).unwrap())
+        }
+        _ =&gt; {
+            if !state.start_request() {
+                return Ok(Response::builder()
+                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                    .body(Body::empty()).unwrap());
+            }
+            let resp = Response::new(Body::from(r#&quot;{&quot;ok&quot;:true}&quot;#));
+            state.end_request();
+            Ok(resp)
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let state = Arc::new(AppState::new());
+    state.ready.store(true, Ordering::Release);
+    let st = state.clone();
+
+    let make_svc = make_service_fn(move |_| {
+        let st = st.clone();
+        async move { Ok::&lt;_, hyper::Error&gt;(service_fn(move |r| handle(r, st.clone()))) }
+    });
+    let server = Server::bind(&amp;([0, 0, 0, 0], 8080).into()).serve(make_svc);
+
+    let drain_state = state.clone();
+    tokio::spawn(async move {
+        let mut sigterm = signal(SignalKind::terminate()).unwrap();
+        sigterm.recv().await;
+        drain_state.drain(30).await;
+        std::process::exit(0);
+    });
+
+    server.await.unwrap();
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;chrono&gt;
+#include &lt;signal.h&gt;
+
+// ── Shared application state ─────────────────────────────────────────
+
+class AppState {
+public:
+    std::atomic&lt;bool&gt;   ready{false};
+    std::atomic&lt;bool&gt;   draining{false};
+    std::atomic&lt;int&gt;    inFlight{0};
+
+    bool startRequest() {
+        if (draining.load()) return false;
+        inFlight.fetch_add(1);
+        if (draining.load()) { inFlight.fetch_sub(1); return false; }
+        return true;
+    }
+    void endRequest() { inFlight.fetch_sub(1); }
+
+    void drain(int graceS = 30) {
+        draining.store(true);
+        ready.store(false);
+        auto deadline = std::chrono::steady_clock::now()
+                      + std::chrono::seconds(graceS);
+        while (std::chrono::steady_clock::now() &lt; deadline) {
+            if (inFlight.load() == 0) return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+    }
+};
+
+static AppState gState;
+
+// ── Minimal HTTP responder using GCD + BSD sockets (sketch) ──────────
+
+@interface SimpleHTTPServer : NSObject
+- (void)startOnPort:(uint16_t)port;
+@end
+
+@implementation SimpleHTTPServer
+
+// Route dispatch mirrors the Python Handler.do_GET logic.
+- (NSData *)responseForPath:(NSString *)path statusCode:(int *)code {
+    if ([path isEqualToString:@&quot;/healthz&quot;]) {
+        *code = 200;
+        return [@&quot;{\&quot;status\&quot;:\&quot;alive\&quot;}&quot; dataUsingEncoding:NSUTF8StringEncoding];
+    }
+    if ([path isEqualToString:@&quot;/readyz&quot;]) {
+        *code = (gState.ready.load() &amp;&amp; !gState.draining.load()) ? 200 : 503;
+        return [NSData data];
+    }
+    // Application route — gate on drain state
+    if (!gState.startRequest()) {
+        *code = 503;
+        return [NSData data];
+    }
+    *code = 200;
+    NSData *body = [@&quot;{\&quot;ok\&quot;:true}&quot; dataUsingEncoding:NSUTF8StringEncoding];
+    gState.endRequest();
+    return body;
+}
+
+- (void)startOnPort:(uint16_t)port {
+    // Production: open socket, accept loop, call responseForPath:statusCode:
+    // Omitted for brevity — focus is on the drain / readiness logic above.
+    NSLog(@&quot;Listening on :%d&quot;, port);
+}
+
+@end
+
+// ── SIGTERM handler triggers graceful drain ──────────────────────────
+
+static void sigtermHandler(int) {
+    gState.drain(30);
+    exit(0);
+}
+
+int main() {
+    signal(SIGTERM, sigtermHandler);
+    gState.ready.store(true);
+
+    SimpleHTTPServer *srv = [[SimpleHTTPServer alloc] init];
+    [srv startOnPort:8080];
+    [[NSRunLoop mainRunLoop] run];
+    return 0;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Canary deploy with auto-rollback">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Deploy system</span><p>Deploy v2.1 to 5 instances (canary)</p></div>
+    <div class="seq-row"><span class="actor">Load balancer</span><p>Route 5% traffic to canary instances</p></div>
+    <div class="seq-row"><span class="actor">Metrics</span><p>Canary error rate: 0.8% vs baseline 0.1% (8× increase)</p></div>
+    <div class="seq-row"><span class="actor">Analyzer</span><p>Threshold exceeded (2× max) → trigger rollback</p></div>
+    <div class="seq-row"><span class="actor">Deploy system</span><p>Send SIGTERM to canary instances, deploy v2.0</p></div>
+    <div class="seq-row"><span class="actor">Canary instances</span><p>Drain in-flight requests (≤ 30 s), shut down</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Deep vs shallow health check</strong>
+              <p>Deep checks catch more issues but create dependency chains; shallow checks are resilient but miss broken dependencies.</p>
+            </div>
+            <div>
+              <strong>Canary duration vs speed</strong>
+              <p>Longer canary bake catches slow-onset issues (memory leaks) but delays deployments.</p>
+            </div>
+            <div>
+              <strong>Grace period length</strong>
+              <p>Longer grace completes more in-flight work but delays rollback completion.</p>
+            </div>
+            <div>
+              <strong>Feature flags vs canary</strong>
+              <p>Flags decouple deploy from release but add code complexity; canaries test the full binary.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Health check that always returns 200 — hides all failures from the load balancer.</li>
+            <li>Canary window too short to catch memory leaks or connection pool exhaustion.</li>
+            <li>No preStop hook in Kubernetes — traffic arrives during shutdown, gets 503.</li>
+            <li>Rolling update replacing 100% of instances simultaneously — no rollback surface.</li>
+            <li>Rollback requiring a new build/deploy instead of reverting to the previous image.</li>
+            <li>Deep health check without timeout — slow DB makes all instances unready.</li>
+            <li>Ignoring business metrics in canary analysis — functional bugs ship with green error rates.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Integrate feature flags for dark launches: deploy code to 100%, enable for 0%, ramp separately.</li>
+            <li>Build automated rollback triggered by PagerDuty alert severity.</li>
+            <li>Design a progressive rollout across regions: US-West canary → US-East → EU.</li>
+            <li>Add replay-based validation: replay production traffic against canary in shadow mode before live traffic.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Distinguish liveness from readiness checks and explain why each matters. Walk through a canary deploy with concrete thresholds (error rate 2× baseline = rollback). Implement graceful draining with SIGTERM handling and in-flight request tracking. Mention the Kubernetes preStop hook timing gap. The candidate who mentions business metrics in canary analysis (not just error rates) shows real operational experience.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../multi_region_store/">← Design a multi-region active-active store</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../cap_shopping_cart/">Explain CAP for a shopping cart →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

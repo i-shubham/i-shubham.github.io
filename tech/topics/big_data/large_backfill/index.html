@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backfill 18 months without melting the cluster | Big Data | Engineering Notes</title>
+  <meta name="description" content="An 18-month backfill will either be a quiet background crawl or the reason today&#x27;s jobs miss SLA.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Backfill 18 months without melting the cluster</p>
+      <p class="eyebrow">Big Data · Hard · ~60 min</p>
+      <h1>Backfill 18 months without melting the cluster</h1>
+      <p class="problem-deck">An 18-month backfill will either be a quiet background crawl or the reason today&#x27;s jobs miss SLA.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Confirm date range, per-date volume, cluster sharing, and production SLA</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Concurrency design</strong><p>Airflow pool with 5 slots, or YARN/K8s queue with resource ceiling</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Date ordering</strong><p>Reverse-chronological, skip already-completed dates, handle dependencies</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Resource isolation</strong><p>Separate YARN queue or K8s namespace with max 30% cluster resources</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Quality + publish</strong><p>Same validate → publish pipeline; watermark table updated per date</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Kill switch</strong><p>Monitor production job latency; pause backfill if p99 exceeds threshold</p></div></div>
+            <div class="stack-step"><strong>45-52m</strong><div><strong>Progress tracking</strong><p>State table: date, status (pending/running/done/failed), started_at, completed_at</p></div></div>
+            <div class="stack-step"><strong>52-60m</strong><div><strong>Failure modes</strong><p>Date fails quality check, cluster scaling event during backfill, data dependency between dates</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Someone changed a business rule retroactively, or a new column was added that needs historical values, or the pipeline was buggy for 6 months and nobody noticed. Now you need to reprocess 18 months of daily partitions — 540 dates — on a cluster that is already 70% utilized by today&#x27;s production jobs.</p>
+          <p>The naive approach: loop through all 540 dates and submit them as Airflow tasks. This melts the cluster. 540 Spark jobs competing for executors means none of them finish, production jobs queue behind the backfill, SLAs break, and someone pages you at 3 AM.</p>
+          <p>The right approach treats the backfill as a managed background workload: bound concurrency (at most 5 dates in parallel), use a separate resource pool or queue with lower priority, process dates in reverse-chronological order (recent data is more valuable), and include a kill switch that pauses the backfill if production job latency exceeds threshold. Each completed date goes through the same validate → publish pipeline as the daily run — you do not skip quality checks just because it is a backfill.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What changed — business rule, new column, or bug fix?</li>
+            <li>How many dates and what is the data volume per date?</li>
+            <li>Is the cluster shared with production jobs?</li>
+            <li>What is the production SLA — must daily jobs finish by 08:00?</li>
+            <li>Can we use a separate backfill cluster, or must we share?</li>
+            <li>Is the backfill idempotent — can we restart a failed date safely?</li>
+            <li>Do downstream consumers need to be notified when historical data changes?</li>
+            <li>Priority: all 18 months equally, or recent months first?</li>
+            <li>Time budget: must complete in 3 days, or can it run for 2 weeks?</li>
+            <li>Are there dependencies between dates (e.g., running totals)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Reprocess 540 daily partitions with bounded concurrency and production safety</li>
+            <li>In scope — Quality gates per date, progress tracking, kill switch</li>
+            <li>Out of scope — Redesigning the pipeline logic itself — just re-running it</li>
+            <li>Defer — Downstream notification and dependency re-triggering</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Range slicing</strong>
+              <p>Break 540 dates into manageable batches of N concurrent jobs</p>
+            </div>
+            <div>
+              <strong>Priority</strong>
+              <p>Process in reverse-chronological order: 2024-06 before 2023-01</p>
+            </div>
+            <div>
+              <strong>Throttle</strong>
+              <p>Limit concurrency to 5 parallel dates; queue the rest</p>
+            </div>
+            <div>
+              <strong>Checkpoint</strong>
+              <p>Track completed dates so a restart skips already-done work</p>
+            </div>
+            <div>
+              <strong>Quality gate</strong>
+              <p>Every date goes through the same validation as the daily run</p>
+            </div>
+            <div>
+              <strong>Kill switch</strong>
+              <p>Pause backfill automatically if production job latency &gt; 2× baseline</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Production safety</strong>
+              <p>Daily jobs must not miss SLA due to backfill resource consumption</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>Complete 540 dates in 5–7 days at 5-way parallelism</p>
+            </div>
+            <div>
+              <strong>Resumability</strong>
+              <p>Restart after failure picks up from the last incomplete date</p>
+            </div>
+            <div>
+              <strong>Correctness</strong>
+              <p>Every backfilled partition passes the same quality checks as production</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Spot instances for backfill cluster: ~$200/day × 7 days = $1,400 total</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Total dates</strong>
+              <p>540 (18 months × 30 days)</p>
+            </div>
+            <div>
+              <strong>Per-date volume</strong>
+              <p>50M rows × 2KB = 100GB raw per date</p>
+            </div>
+            <div>
+              <strong>Total volume</strong>
+              <p>540 × 100GB = 54TB to reprocess</p>
+            </div>
+            <div>
+              <strong>Per-date runtime</strong>
+              <p>~25 min with 10 executors at lower priority</p>
+            </div>
+            <div>
+              <strong>5-way parallelism</strong>
+              <p>5 dates × 25 min = 108 batch-hours; at 24h/day = 4.5 days</p>
+            </div>
+            <div>
+              <strong>Cluster utilization</strong>
+              <p>Backfill uses 30% of cluster (50 executors); production retains 70%</p>
+            </div>
+            <div>
+              <strong>Spot savings</strong>
+              <p>On-demand: $2.50/hr per executor × 50 × 108h = $13,500. Spot: ~$1,400</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Airflow DAG for managed backfill
+# ─────────────────────────────────
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+
+BACKFILL_START = &#x27;2023-01-01&#x27;
+BACKFILL_END = &#x27;2024-06-30&#x27;
+MAX_CONCURRENT = 5
+
+dag = DAG(
+    &#x27;orders_backfill&#x27;,
+    schedule_interval=None,       # manual trigger
+    max_active_tasks=MAX_CONCURRENT,
+    catchup=False
+)
+
+def process_date(dt: str, **ctx):
+    if is_already_done(dt): return
+    if production_latency_exceeded(): raise AirflowSkipException(&#x27;Kill switch&#x27;)
+    run_transform(dt)
+    run_quality_checks(dt)
+    publish_partition(dt)
+    mark_done(dt)
+
+# Generate tasks in reverse-chronological order
+dates = generate_date_range(BACKFILL_END, BACKFILL_START, step=-1)
+for dt in dates:
+    PythonOperator(task_id=f&#x27;backfill_{dt}&#x27;, python_callable=process_date,
+                   op_kwargs={&#x27;dt&#x27;: dt}, pool=&#x27;backfill_pool&#x27;, dag=dag)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Backfill progress tracking table
+CREATE TABLE meta.backfill_progress (
+  backfill_id    STRING,              -- &#x27;orders_2023_recompute&#x27;
+  dt             STRING,
+  status         STRING,              -- pending | running | done | failed
+  started_at     TIMESTAMP,
+  completed_at   TIMESTAMP,
+  row_count      BIGINT,
+  error_message  STRING,
+  PRIMARY KEY (backfill_id, dt)
+);
+
+-- Production health monitoring
+SELECT
+  dag_id,
+  AVG(duration) AS avg_duration,
+  MAX(duration) AS max_duration,
+  CASE WHEN MAX(duration) &gt; 2 * AVG(duration) THEN &#x27;BACKOFF&#x27; ELSE &#x27;OK&#x27; END AS signal
+FROM airflow.task_instance
+WHERE dag_id = &#x27;daily_orders&#x27; AND execution_date &gt; now() - INTERVAL &#x27;7&#x27; DAY
+GROUP BY dag_id;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The design centers on three principles: bounded concurrency, production priority, and resumability.</p>
+          <p>Bounded concurrency: I use an Airflow pool with 5 slots. Each backfill date is a task in a non-scheduled DAG (manual trigger). The pool ensures at most 5 tasks run simultaneously, regardless of how many dates are pending. Tasks are submitted in reverse-chronological order so recent data is backfilled first.</p>
+          <p>Production priority: the backfill jobs run in a separate YARN queue (or K8s namespace) with a resource ceiling of 30% of cluster capacity. If production jobs need more resources, YARN preempts backfill executors. Additionally, each backfill task checks production job latency before starting: if the daily orders pipeline&#x27;s p99 runtime exceeds 2× its 7-day average, the backfill task raises AirflowSkipException and retries later.</p>
+          <p>Resumability: the backfill_progress table tracks the status of every date. On restart, tasks check this table first — if status=&#x27;done&#x27;, skip. If status=&#x27;running&#x27; (from a crashed previous attempt), reset to &#x27;pending&#x27; and re-run. Since the underlying pipeline is idempotent (stage → validate → overwrite), re-running a date is safe.</p>
+          <p>Quality gates: every backfilled date goes through the same quality checks as the daily run. I do not lower the bar for backfill — if a date fails quality checks, it is marked &#x27;failed&#x27; and the next date proceeds. Failed dates are reviewed manually and retried after fixing.</p>
+          <p>Cost optimization: the backfill cluster uses Spot instances with 70% savings. If Spot capacity is reclaimed, the task fails and automatically retries with a new Spot instance. The bounded concurrency ensures we never have more than 50 executors on Spot, limiting blast radius.</p>
+<figure class="diagram dark">
+  <figcaption>Backfill Architecture</figcaption>
+  <div class="flow-row">
+    <div class="node">Date Range<br><small>540 dates</small></div>
+    <div class="node accent">Airflow Pool<br><small>5 slots max</small></div>
+    <div class="node">YARN Queue<br><small>30% ceiling</small></div>
+    <div class="node">Transform<br><small>same as daily</small></div>
+    <div class="node accent">Quality Gate<br><small>validate</small></div>
+    <div class="node">Publish<br><small>atomic swap</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Resource Isolation</figcaption>
+  <div class="compare">
+    <div class="node accent"><span class="label">Production Queue (70%)</span><p>Daily pipeline, SLA-critical</p></div>
+    <div class="node"><span class="label">Backfill Queue (30%)</span><p>Historical reprocessing, preemptible</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Kill Switch Logic</figcaption>
+  <div class="flow-row">
+    <div class="node">Check prod p99</div>
+    <div class="node accent">p99 > 2× baseline?</div>
+    <div class="node">Yes → Pause backfill</div>
+    <div class="node">No → Continue</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Date dependencies: most backfills are embarrassingly parallel — each date can be processed independently. But if the pipeline computes running totals (e.g., cumulative revenue), dates must be processed in order. For serial dependencies, I reduce parallelism to 1 and process oldest-first. For partial dependencies (e.g., month-to-date aggregations), I batch by month and process dates within each month serially, but months in parallel.</p>
+          <p>Downstream notification: when a historical partition is rewritten, downstream consumers (dashboards, ML training data) may need to know. I publish a backfill_complete event to a Kafka topic with the affected date range. Dashboard materialization jobs can subscribe and refresh affected views. ML training pipelines can invalidate cached feature datasets.</p>
+          <p>Cost modeling: 540 dates × 25 min/date at 10 executors = 2,250 executor-hours. At Spot pricing ($0.62/hr for m5.2xlarge), total cost is ~$1,400. On-demand would be ~$5,625. The key risk with Spot is interruption: if Spot capacity drops, mid-run tasks fail. The idempotent pipeline ensures retries are safe, and the progress tracker skips completed dates. Worst case: a task is interrupted 3 times, adding ~75 min of wasted work per date.</p>
+          <p>Monitoring during backfill: I set up a Grafana dashboard showing: (1) backfill progress — completed/failed/pending counts, (2) production latency — overlay of daily pipeline runtime with the kill-switch threshold, (3) cluster utilization — queue-level resource consumption, (4) cost tracking — accumulated Spot spend vs budget. The kill switch sends a Slack alert when it triggers so the team knows the backfill is paused.</p>
+          <p>Validation thoroughness: for the first few dates of a backfill, I run both the old and new pipeline logic and diff the outputs. If the diff shows only the expected changes (e.g., the new column is populated, the business rule produces different revenue numbers), I trust the rest of the backfill. If unexpected differences appear, I stop and investigate before processing the remaining 530 dates.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Backfill manager with kill switch</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from datetime import datetime, timedelta
+
+
+class BackfillManager:
+    &quot;&quot;&quot;
+    Backfill 18 months of data without melting the cluster.
+    Features:
+    - Processes dates in reverse-chronological order (most valuable first).
+    - Kill switch: pauses if production latency exceeds threshold.
+    - Progress tracking for resumability after failures.
+    - Configurable concurrency limit.
+    &quot;&quot;&quot;
+
+    def __init__(self, start_dt, end_dt, max_concurrent=5, prod_latency_threshold=2.0):
+        self.dates = self._generate_dates(start_dt, end_dt)
+        self.max_concurrent = max_concurrent
+        self.threshold = prod_latency_threshold
+        self.progress = {}  # dt -&gt; status
+
+    def _generate_dates(self, start, end):
+        &quot;&quot;&quot;Generate dates in reverse-chronological order.&quot;&quot;&quot;
+        dates = []
+        current = datetime.strptime(end, &#x27;%Y-%m-%d&#x27;)
+        stop = datetime.strptime(start, &#x27;%Y-%m-%d&#x27;)
+        while current &gt;= stop:
+            dates.append(current.strftime(&#x27;%Y-%m-%d&#x27;))
+            current -= timedelta(days=1)
+        return dates
+
+    def should_pause(self) -&gt; bool:
+        &quot;&quot;&quot;Kill switch: check if production latency is dangerously elevated.&quot;&quot;&quot;
+        avg_latency = get_prod_avg_latency_7d()
+        current_latency = get_prod_current_p99()
+        return current_latency &gt; self.threshold * avg_latency
+
+    def run_date(self, dt: str):
+        &quot;&quot;&quot;Process a single date partition with safety checks.&quot;&quot;&quot;
+        if self.progress.get(dt) == &#x27;done&#x27;:
+            return  # already completed, skip
+
+        # Kill switch check before starting
+        if self.should_pause():
+            raise RuntimeError(
+                f&#x27;Kill switch: prod latency exceeded {self.threshold}x baseline&#x27;
+            )
+
+        self.progress[dt] = &#x27;running&#x27;
+        try:
+            run_transform(dt)
+            run_quality_checks(dt)
+            publish_partition(dt)
+            self.progress[dt] = &#x27;done&#x27;
+        except Exception as e:
+            self.progress[dt] = &#x27;failed&#x27;
+            raise</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use chrono::{NaiveDate, Duration};
+use std::collections::HashMap;
+use tokio::sync::Semaphore;
+use std::sync::Arc;
+
+#[derive(Clone, PartialEq)]
+pub enum BackfillStatus {
+    Pending,
+    Running,
+    Done,
+    Failed(String),
+}
+
+/// Backfill 18 months of data without melting the cluster.
+/// - Reverse-chronological processing (most valuable data first).
+/// - Kill switch pauses if production latency spikes.
+/// - Semaphore limits concurrent partition processing.
+pub struct BackfillManager {
+    dates: Vec&lt;String&gt;,
+    max_concurrent: usize,
+    prod_latency_threshold: f64,
+    progress: HashMap&lt;String, BackfillStatus&gt;,
+}
+
+impl BackfillManager {
+    pub fn new(
+        start_dt: &amp;str,
+        end_dt: &amp;str,
+        max_concurrent: usize,
+        prod_latency_threshold: f64,
+    ) -&gt; Self {
+        let dates = Self::generate_dates(start_dt, end_dt);
+        let progress = dates.iter()
+            .map(|d| (d.clone(), BackfillStatus::Pending))
+            .collect();
+
+        Self { dates, max_concurrent, prod_latency_threshold, progress }
+    }
+
+    /// Generate dates in reverse-chronological order.
+    fn generate_dates(start: &amp;str, end: &amp;str) -&gt; Vec&lt;String&gt; {
+        let start_date = NaiveDate::parse_from_str(start, &quot;%Y-%m-%d&quot;).unwrap();
+        let end_date = NaiveDate::parse_from_str(end, &quot;%Y-%m-%d&quot;).unwrap();
+
+        let mut dates = Vec::new();
+        let mut current = end_date;
+        while current &gt;= start_date {
+            dates.push(current.format(&quot;%Y-%m-%d&quot;).to_string());
+            current -= Duration::days(1);
+        }
+        dates
+    }
+
+    /// Kill switch: check if production latency is dangerously elevated.
+    async fn should_pause(&amp;self) -&gt; bool {
+        let avg_latency = get_prod_avg_latency_7d().await;
+        let current_latency = get_prod_current_p99().await;
+        current_latency &gt; self.prod_latency_threshold * avg_latency
+    }
+
+    /// Process a single date partition with safety checks.
+    pub async fn run_date(&amp;mut self, dt: &amp;str) -&gt; Result&lt;(), String&gt; {
+        if self.progress.get(dt) == Some(&amp;BackfillStatus::Done) {
+            return Ok(());  // already completed
+        }
+
+        // Kill switch check before starting
+        if self.should_pause().await {
+            return Err(format!(
+                &quot;Kill switch: prod latency exceeded {}x baseline&quot;,
+                self.prod_latency_threshold
+            ));
+        }
+
+        self.progress.insert(dt.to_string(), BackfillStatus::Running);
+
+        match self.execute_partition(dt).await {
+            Ok(()) =&gt; {
+                self.progress.insert(dt.to_string(), BackfillStatus::Done);
+                Ok(())
+            }
+            Err(e) =&gt; {
+                self.progress.insert(dt.to_string(), BackfillStatus::Failed(e.clone()));
+                Err(e)
+            }
+        }
+    }
+
+    async fn execute_partition(&amp;self, dt: &amp;str) -&gt; Result&lt;(), String&gt; {
+        run_transform(dt).await?;
+        run_quality_checks(dt).await?;
+        publish_partition(dt).await?;
+        Ok(())
+    }
+}
+
+// Placeholder functions for the pipeline steps
+async fn get_prod_avg_latency_7d() -&gt; f64 { 1.0 }
+async fn get_prod_current_p99() -&gt; f64 { 0.8 }
+async fn run_transform(dt: &amp;str) -&gt; Result&lt;(), String&gt; { Ok(()) }
+async fn run_quality_checks(dt: &amp;str) -&gt; Result&lt;(), String&gt; { Ok(()) }
+async fn publish_partition(dt: &amp;str) -&gt; Result&lt;(), String&gt; { Ok(()) }</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;map&gt;
+
+// Backfill manager for processing 18 months of historical data.
+// Kill switch, progress tracking, and concurrency control.
+
+typedef NS_ENUM(NSInteger, BackfillStatus) {
+    BackfillStatusPending,
+    BackfillStatusRunning,
+    BackfillStatusDone,
+    BackfillStatusFailed
+};
+
+@interface BackfillManager : NSObject {
+    std::vector&lt;std::string&gt; _dates;
+    std::map&lt;std::string, BackfillStatus&gt; _progress;
+}
+
+@property (nonatomic) int maxConcurrent;
+@property (nonatomic) double prodLatencyThreshold;
+
+- (instancetype)initWithStartDate:(NSString *)startDt
+                          endDate:(NSString *)endDt
+                    maxConcurrent:(int)maxConcurrent
+              latencyThreshold:(double)threshold;
+- (BOOL)runDate:(NSString *)dt error:(NSError **)error;
+- (BOOL)shouldPause;
+@end
+
+@implementation BackfillManager
+
+- (instancetype)initWithStartDate:(NSString *)startDt
+                          endDate:(NSString *)endDt
+                    maxConcurrent:(int)maxConcurrent
+              latencyThreshold:(double)threshold {
+    self = [super init];
+    if (self) {
+        _maxConcurrent = maxConcurrent;
+        _prodLatencyThreshold = threshold;
+        [self generateDatesFrom:startDt to:endDt];
+    }
+    return self;
+}
+
+/// Generate dates in reverse-chronological order (most valuable first).
+- (void)generateDatesFrom:(NSString *)start to:(NSString *)end {
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @&quot;yyyy-MM-dd&quot;;
+
+    NSDate *startDate = [fmt dateFromString:start];
+    NSDate *endDate = [fmt dateFromString:end];
+    NSDate *current = endDate;
+
+    while ([current compare:startDate] != NSOrderedAscending) {
+        std::string dateStr([[fmt stringFromDate:current] UTF8String]);
+        _dates.push_back(dateStr);
+        _progress[dateStr] = BackfillStatusPending;
+        current = [current dateByAddingTimeInterval:-86400];
+    }
+}
+
+/// Kill switch: pause if production latency exceeds threshold.
+- (BOOL)shouldPause {
+    double avgLatency = [self getProdAvgLatency7d];
+    double currentLatency = [self getProdCurrentP99];
+    return currentLatency &gt; (_prodLatencyThreshold * avgLatency);
+}
+
+/// Process a single date partition with safety checks.
+- (BOOL)runDate:(NSString *)dt error:(NSError **)error {
+    std::string dtStr([dt UTF8String]);
+
+    // Skip if already completed
+    if (_progress[dtStr] == BackfillStatusDone) {
+        return YES;
+    }
+
+    // Kill switch check before starting
+    if ([self shouldPause]) {
+        if (error) {
+            *error = [NSError errorWithDomain:@&quot;BackfillError&quot; code:1
+                userInfo:@{NSLocalizedDescriptionKey:
+                    [NSString stringWithFormat:
+                        @&quot;Kill switch: prod latency exceeded %.1fx baseline&quot;,
+                        _prodLatencyThreshold]}];
+        }
+        return NO;
+    }
+
+    _progress[dtStr] = BackfillStatusRunning;
+
+    @try {
+        [self runTransform:dt];
+        [self runQualityChecks:dt];
+        [self publishPartition:dt];
+        _progress[dtStr] = BackfillStatusDone;
+        return YES;
+    } @catch (NSException *e) {
+        _progress[dtStr] = BackfillStatusFailed;
+        if (error) {
+            *error = [NSError errorWithDomain:@&quot;BackfillError&quot; code:2
+                userInfo:@{NSLocalizedDescriptionKey: e.reason ?: @&quot;Unknown&quot;}];
+        }
+        return NO;
+    }
+}
+
+// Pipeline step placeholders — in production these invoke Spark/Airflow
+- (void)runTransform:(NSString *)dt {}
+- (void)runQualityChecks:(NSString *)dt {}
+- (void)publishPartition:(NSString *)dt {}
+- (double)getProdAvgLatency7d { return 1.0; }
+- (double)getProdCurrentP99 { return 0.8; }
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Operator</span><p>Trigger backfill DAG: 540 dates, pool=5, reverse-chronological</p></div>
+    <div class="seq-row"><span class="actor">Airflow</span><p>Schedule first 5 dates: 2024-06-30, 2024-06-29, ..., 2024-06-26</p></div>
+    <div class="seq-row"><span class="actor">Task 2024-06-30</span><p>Check progress table → status=pending, proceed. Check prod p99 → OK</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Transform dt=2024-06-30: 50M rows, 22 min on backfill queue</p></div>
+    <div class="seq-row"><span class="actor">Quality Gate</span><p>Row count 50.2M ✓, null revenue 0.2% ✓, PK unique ✓</p></div>
+    <div class="seq-row"><span class="actor">Publish</span><p>Overwrite curated.orders dt=2024-06-30, update watermark</p></div>
+    <div class="seq-row"><span class="actor">Progress</span><p>UPDATE backfill_progress SET status=done WHERE dt=2024-06-30</p></div>
+    <div class="seq-row"><span class="actor">Airflow</span><p>Slot freed → schedule next date 2024-06-25</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Parallelism level</strong>
+              <p>More parallelism finishes faster but risks starving production. 5 slots is conservative; 10 works if the cluster is large enough</p>
+            </div>
+            <div>
+              <strong>Reverse-chrono vs oldest-first</strong>
+              <p>Recent data has more business value; reverse-chrono prioritizes it. Oldest-first is needed when dates have dependencies</p>
+            </div>
+            <div>
+              <strong>Shared cluster vs dedicated</strong>
+              <p>Shared saves money but needs resource isolation. Dedicated backfill cluster is cleaner but doubles cost</p>
+            </div>
+            <div>
+              <strong>Spot vs on-demand</strong>
+              <p>Spot saves 70% but tasks can be interrupted. Idempotent pipelines make Spot safe; non-idempotent pipelines should use on-demand</p>
+            </div>
+            <div>
+              <strong>Quality gates on backfill</strong>
+              <p>Same checks as production ensures correctness but slows backfill. Lowering thresholds risks publishing bad data</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Backfill steals too many executors — production daily job misses SLA; kill switch should have triggered earlier</li>
+            <li>Spot instance reclaimed mid-transform — task fails, retries on new instance; 25 min of work lost per interruption</li>
+            <li>Quality check fails for historical date: data was genuinely different 18 months ago — adjust thresholds or manually approve</li>
+            <li>Progress table becomes stale: task marked &#x27;running&#x27; from a crashed attempt blocks re-submission — add a TTL that resets stale running tasks</li>
+            <li>Date dependency missed: running totals computed wrong because dates processed out of order — validate running totals separately</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle a backfill that also changes the schema (adding a new column)?</li>
+            <li>How do you validate that the backfill produced correct results for all 540 dates?</li>
+            <li>What if the source data for old dates is in a different format or location?</li>
+            <li>How would you communicate to stakeholders that historical data changed?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: bounded concurrency with a pool or queue, production priority with resource isolation, reverse-chronological processing, resumability via progress tracking, quality gates that do not get skipped, and a kill switch for production safety. Show the math on timeline and cost.</p>
+          <p>You do not need to design the monitoring dashboard or the downstream notification system. The interviewer wants to see: awareness that uncontrolled backfills break production, a systematic approach to throttling and prioritization, and idempotency that makes retries safe.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../tiny_files/">← Compact a tiny-file disaster</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../data_quality_drops/">Detect silent data quality drops →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

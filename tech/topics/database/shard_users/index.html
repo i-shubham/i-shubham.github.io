@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shard a growing user table | Database | Engineering Notes</title>
+  <meta name="description" content="Sharding users is easy until you pick email as the key and then need lookup by user_id, or vice versa.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Shard a growing user table</p>
+      <p class="eyebrow">Database · Hard · ~60 min</p>
+      <h1>Shard a growing user table</h1>
+      <p class="problem-deck">Sharding users is easy until you pick email as the key and then need lookup by user_id, or vice versa.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Why shard</strong><p>Single-node limits: storage, write throughput, connection count.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Shard key selection</strong><p>user_id hash vs email hash vs geo-based.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Routing layer</strong><p>Consistent hashing, shard map, connection pooling.</p></div></div>
+            <div class="stack-step"><strong>25–40</strong><div><strong>Cross-shard operations</strong><p>Secondary lookups, scatter-gather, denormalization.</p></div></div>
+            <div class="stack-step"><strong>40–50</strong><div><strong>Resharding</strong><p>Adding shards, data migration, dual-write strategy.</p></div></div>
+            <div class="stack-step"><strong>50–60</strong><div><strong>Monitoring and trade-offs</strong><p>Hotspot detection, operational cost, when not to shard.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by asking whether we&#x27;ve exhausted vertical scaling options. Sharding is an operational tax you pay on every query, every migration, and every debugging session for the rest of the system&#x27;s life. A 1 TB user table on a modern Postgres instance with proper indexing handles 50,000 reads/s and 5,000 writes/s. If we&#x27;re beyond that, then yes, we shard.</p>
+          <p>The key question is the shard key. user_id is the obvious choice because most queries are per-user: &#x27;get user by id&#x27;, &#x27;get user&#x27;s orders&#x27;. But login is by email. If we shard by user_id, email lookup becomes a scatter-gather across all shards — or we maintain a global email→user_id lookup table. Neither is free.</p>
+          <p>I&#x27;ve seen teams pick email as the shard key to optimize login, and then struggle when every other query needs user_id. The pragmatic answer is shard by user_id and maintain a small, highly-cached global lookup for email→shard. That table is tiny (email + shard_id, ~100 bytes per user) and fits in Redis easily.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many users now and projected growth rate?</li>
+            <li>What are the primary access patterns — by user_id, email, phone?</li>
+            <li>Are there cross-user queries (admin search, leaderboard, friends)?</li>
+            <li>What database engine — Postgres, MySQL, Vitess, CockroachDB?</li>
+            <li>How many shards initially and what is the resharding plan?</li>
+            <li>Is the application already shard-aware, or do we need a proxy layer?</li>
+            <li>What is the write/read ratio on the user table?</li>
+            <li>Are there regulatory constraints on data residency (geo-sharding)?</li>
+            <li>Do we need global uniqueness for email and username?</li>
+            <li>What is the acceptable latency for login (email-based lookup)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: shard key design, routing, secondary lookups, resharding strategy.</li>
+            <li>Out: full database proxy implementation (Vitess internals).</li>
+            <li>Out: sharding non-user tables (orders, messages) — related but separate.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Lookup by user_id</strong>
+              <p>Route directly to the correct shard.</p>
+            </div>
+            <div>
+              <strong>Lookup by email</strong>
+              <p>Resolve email to shard, then fetch user.</p>
+            </div>
+            <div>
+              <strong>Create user</strong>
+              <p>Assign shard, insert, update global lookup atomically.</p>
+            </div>
+            <div>
+              <strong>Cross-shard search</strong>
+              <p>Admin search by name returns results from all shards.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency</strong>
+              <p>Single-shard read p99 &lt; 5 ms; email lookup p99 &lt; 10 ms (cache hit).</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>100,000 reads/s across all shards; 10,000 writes/s.</p>
+            </div>
+            <div>
+              <strong>Balance</strong>
+              <p>No shard holds more than 120% of the average row count.</p>
+            </div>
+            <div>
+              <strong>Resharding</strong>
+              <p>Add shards with zero downtime and &lt; 1% performance degradation during migration.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Users</strong>
+              <p>500M users × 1 KB avg row = 500 GB total.</p>
+            </div>
+            <div>
+              <strong>Shards</strong>
+              <p>16 shards → ~31M users per shard, ~31 GB each.</p>
+            </div>
+            <div>
+              <strong>Global lookup</strong>
+              <p>500M rows × 100 bytes = 50 GB; fits in Redis cluster or dedicated table.</p>
+            </div>
+            <div>
+              <strong>Write throughput</strong>
+              <p>10K writes/s ÷ 16 shards = 625 writes/s per shard (comfortable).</p>
+            </div>
+            <div>
+              <strong>Connection pool</strong>
+              <p>16 shards × 100 connections = 1,600 total connections to manage.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Shard routing (application layer)
+shard_id = hash(user_id) % num_shards
+conn = shard_pool[shard_id]
+
+-- Read user by ID (single shard)
+SELECT * FROM users WHERE id = :user_id;  -- on shard N
+
+-- Email lookup (global table + shard hop)
+SELECT shard_id FROM global_email_lookup WHERE email = :email;
+-- then: SELECT * FROM users WHERE id = :user_id;  -- on resolved shard
+
+-- Create user
+BEGIN;  -- on global DB
+INSERT INTO global_email_lookup (email, user_id, shard_id) VALUES (:email, :uid, :sid);
+COMMIT;
+BEGIN;  -- on shard N
+INSERT INTO users (id, email, name, ...) VALUES (:uid, :email, :name, ...);
+COMMIT;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Per-shard schema (identical on each shard)
+CREATE TABLE users (
+    id          BIGINT PRIMARY KEY,
+    email       TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT &#x27;active&#x27;,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Global lookup table (separate DB or Redis)
+CREATE TABLE global_email_lookup (
+    email       TEXT PRIMARY KEY,
+    user_id     BIGINT NOT NULL,
+    shard_id    SMALLINT NOT NULL
+);
+
+CREATE INDEX idx_global_lookup_uid ON global_email_lookup (user_id);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Shard key selection is the most consequential decision. Hash(user_id) % num_shards gives uniform distribution and makes per-user queries trivial: compute the shard, route the connection, run the query. The alternative — range-based sharding (users 1-10M on shard 0, 10M-20M on shard 1) — is simpler to reason about but creates hotspots as new users concentrate on the latest shard.</p>
+          <p>The email lookup problem is the classic secondary-index challenge in sharded systems. Three options: (1) scatter-gather every email query across all shards — O(num_shards) latency, unacceptable at 16+ shards. (2) Maintain a global email→(user_id, shard_id) table in a separate store. (3) Use a consistent hash on email for a separate &#x27;login shard&#x27;, duplicating minimal data. Option 2 is the most practical.</p>
+          <p>The global lookup table is small: 500M rows × ~100 bytes = 50 GB. Put it in a dedicated Postgres instance with hot standby, or in a Redis cluster for sub-millisecond reads. Writes happen only on user creation and email change — both rare. Cache hit rate should exceed 99.9%.</p>
+          <p>Resharding is the hard part. When you need to go from 16 to 32 shards, you can&#x27;t just change the modulus — that rehashes half the users. Use consistent hashing (or virtual shards mapped to physical nodes) so adding a shard only moves ~1/N of the data. During migration, dual-write to both old and new shard, backfill historical data, then cut over reads.</p>
+          <p>An alternative is to over-provision virtual shards from day one: create 256 virtual shards mapped to 16 physical nodes. When you scale, move virtual shards between nodes without rehashing. Vitess and Citus both use this pattern.</p>
+<figure class="diagram dark" aria-label="Shard routing architecture">
+  <div class="flow-row">
+    <div class="node">App server</div>
+    <div class="node accent">Shard router<br>hash(user_id) % N</div>
+    <div class="node">Shard 0</div>
+    <div class="node">Shard 1</div>
+    <div class="node">Shard N</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Email lookup two-hop">
+  <div class="flow-row">
+    <div class="node">Login request<br>email=alice@co</div>
+    <div class="node accent">Global lookup<br>email → shard_3</div>
+    <div class="node">Shard 3<br>fetch user row</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s work through a concrete example. We have 500M users across 16 shards. Shard key is hash(user_id) % 16. User alice@example.com has user_id = 7890. hash(7890) % 16 = 6, so Alice lives on shard 6.</p>
+          <p>Login flow: the client sends email=alice@example.com. We query the global lookup: SELECT user_id, shard_id FROM global_email_lookup WHERE email = &#x27;alice@example.com&#x27;. Returns (7890, 6). We connect to shard 6 and run SELECT * FROM users WHERE id = 7890. Two queries, but the first is cached in Redis 99.9% of the time, so effective latency is ~5 ms.</p>
+          <p>Now consider the hotspot problem. Suppose a celebrity user generates 10x the read traffic. That user&#x27;s shard handles disproportionate load. Solutions: read replicas per shard (scale reads), application-level caching (CDN for profiles), or shard-splitting (move hot users to dedicated shards). The virtual-shard model helps: move the virtual shard containing the hot user to a beefier node.</p>
+          <p>Cross-shard queries are the tax. Admin wants to search users by name containing &#x27;alice&#x27;. Without a global search index, we scatter the query to all 16 shards, gather results, merge and sort client-side. For admin tools this is tolerable; for user-facing search, you need Elasticsearch or a dedicated search service fed by CDC from all shards.</p>
+          <p>Resharding from 16 to 32 shards with consistent hashing: each new shard takes ownership of half the hash range from one existing shard. We backfill by streaming rows from the old shard to the new one via logical replication. During backfill, dual-write: new writes go to both old and new shard. Once backfill completes and both shards are in sync, update the shard map and cut reads over. Total migration time for 31M users per shard split: ~2 hours at 5,000 rows/s with batched inserts.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Sharded user lookup sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Client</span><p>Login with email=alice@example.com</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Check Redis cache for email → (user_id, shard_id)</p></div>
+    <div class="seq-row"><span class="actor">Redis</span><p>Cache hit: (7890, shard_6)</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Query shard_6: SELECT * FROM users WHERE id=7890</p></div>
+    <div class="seq-row"><span class="actor">Shard 6</span><p>Return user row; verify password hash</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Issue JWT, return to client</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Hash vs range sharding</strong>
+              <p>Hash gives even distribution but makes range queries impossible; range supports time-based queries but creates write hotspots.</p>
+            </div>
+            <div>
+              <strong>Global lookup table vs scatter-gather</strong>
+              <p>Lookup adds a hop but is O(1); scatter-gather is O(shards) and gets worse as you add shards.</p>
+            </div>
+            <div>
+              <strong>Virtual shards vs physical shards</strong>
+              <p>Virtual shards (256 mapped to 16 nodes) make resharding a metadata change; physical shards require rehashing.</p>
+            </div>
+            <div>
+              <strong>Shard-local joins vs denormalization</strong>
+              <p>Joins within a shard are fast; cross-shard joins require scatter-gather. Denormalize to avoid them.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Picking email as shard key — every user_id query becomes scatter-gather.</li>
+            <li>Modulus-based routing without virtual shards — resharding rehashes half your data.</li>
+            <li>Not handling the global lookup table as a SPOF — replicate and cache it.</li>
+            <li>Cross-shard transactions for user creation (global lookup + shard insert) — use saga pattern.</li>
+            <li>Celebrity hotspot on a single shard — read replicas or shard splitting needed.</li>
+            <li>Schema migrations on 16 shards simultaneously — one failure leaves shards inconsistent.</li>
+            <li>Connection pool exhaustion: 16 shards × 100 connections per app server × 50 servers = 80,000 connections.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you shard the orders table to co-locate with users?</li>
+            <li>What if you need to merge two users (account linking) across shards?</li>
+            <li>How do you implement globally unique usernames without a global lock?</li>
+            <li>What monitoring detects shard imbalance before it causes problems?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the shard key trade-off between user_id and email. Show the two-hop email lookup pattern with caching. Discuss resharding with virtual shards. Address cross-shard queries honestly — don&#x27;t pretend they&#x27;re free. That&#x27;s the senior answer. The staff-level add is the virtual shard model and the dual-write migration strategy.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../isolation_booking/">← Choose isolation level for a booking system</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../audit_trail/">Build an audit trail without killing write throughput →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

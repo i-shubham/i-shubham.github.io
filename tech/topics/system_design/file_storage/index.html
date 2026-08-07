@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a file storage service | System Design | Engineering Notes</title>
+  <meta name="description" content="Object storage wraps blob durability; the product pain is resumable uploads, metadata search, and not serving malware.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a file storage service</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a file storage service</h1>
+      <p class="problem-deck">Object storage wraps blob durability; the product pain is resumable uploads, metadata search, and not serving malware.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>File sizes, upload frequency, access patterns (write once read many?), sharing model.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Upload, download, resumable chunked upload, metadata search. Defer versioning.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>500M files, 10 MB avg, 5 PB total storage, 10K uploads/hour peak.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>API gateway, upload service, blob store (S3), metadata DB, async virus scanner.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Chunked upload</strong><p>Initiate → upload chunks → complete. Resumability via chunk-level tracking.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Virus scanning</strong><p>Async scan pipeline, quarantine state, release or reject.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Metadata &amp; search</strong><p>Elasticsearch for file metadata, tags, full-text search on names.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Dedup, CDN for downloads, access control.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by clarifying the expected file sizes. If most files are under 5 MB (like profile photos), a simple single-request upload works. But if we support files up to 5 GB (like video), we need chunked uploads with resumability — a user on a flaky connection should not restart a 2 GB upload from scratch. That design decision cascades through the entire architecture.</p>
+          <p>The second key question is the access pattern. If files are write-once-read-many (like a document sharing service), we can optimize for read throughput with CDN caching. If files are frequently updated (like a collaboration tool), we need versioning and conflict resolution.</p>
+          <p>I&#x27;d sketch four layers: an upload service that handles chunked uploads and reassembly, a blob store (S3 or a similar object store) for durable storage, a metadata database for file attributes and search, and an async virus-scanning pipeline that quarantines files until they pass.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the maximum file size we need to support?</li>
+            <li>Do we need resumable uploads for large files?</li>
+            <li>Write-once-read-many, or frequent updates with versioning?</li>
+            <li>Do we need file sharing with access control (public/private/shared)?</li>
+            <li>Is full-text search on file contents in scope, or just metadata?</li>
+            <li>Do we need deduplication (same file uploaded by different users)?</li>
+            <li>What is the expected storage retention — indefinite or time-limited?</li>
+            <li>Do we need to scan files for malware before serving?</li>
+            <li>Is there a CDN requirement for download performance?</li>
+            <li>What client platforms — web, mobile, desktop?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: chunked resumable upload, download with presigned URLs, metadata storage and search.</li>
+            <li>In: async virus scanning with quarantine, basic access control.</li>
+            <li>Out: real-time collaboration/editing, file versioning history.</li>
+            <li>Defer: content-based deduplication, preview/thumbnail generation, CDN integration.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Initiate upload</strong>
+              <p>POST /uploads returns upload_id and presigned chunk URLs.</p>
+            </div>
+            <div>
+              <strong>Upload chunk</strong>
+              <p>PUT /uploads/{id}/chunks/{n} uploads a single chunk with checksum.</p>
+            </div>
+            <div>
+              <strong>Complete upload</strong>
+              <p>POST /uploads/{id}/complete triggers assembly and virus scan.</p>
+            </div>
+            <div>
+              <strong>Download</strong>
+              <p>GET /files/{id}/download returns presigned S3 URL (302 redirect).</p>
+            </div>
+            <div>
+              <strong>Search</strong>
+              <p>GET /files?q=name&amp;tags=report returns matching file metadata.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Upload throughput</strong>
+              <p>10K uploads/hour peak, support files up to 5 GB.</p>
+            </div>
+            <div>
+              <strong>Download latency</strong>
+              <p>Presigned URL generation &lt; 50 ms; actual download speed depends on S3/CDN.</p>
+            </div>
+            <div>
+              <strong>Durability</strong>
+              <p>99.999999999% (11 nines) — delegated to S3 replication.</p>
+            </div>
+            <div>
+              <strong>Scan latency</strong>
+              <p>Virus scan completes within 5 minutes for 99% of files.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.9% for upload/download APIs.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Total files</strong>
+              <p>500M files × 10 MB avg = 5 PB stored in S3.</p>
+            </div>
+            <div>
+              <strong>Uploads/hour</strong>
+              <p>10K peak → ~3 uploads/sec avg.</p>
+            </div>
+            <div>
+              <strong>Chunk size</strong>
+              <p>5 MB per chunk → 1 GB file = 200 chunks.</p>
+            </div>
+            <div>
+              <strong>Metadata DB size</strong>
+              <p>500M files × 1 KB metadata = 500 GB in Postgres.</p>
+            </div>
+            <div>
+              <strong>Scan queue</strong>
+              <p>10K files/hour × 30s avg scan = 83 concurrent scan workers.</p>
+            </div>
+            <div>
+              <strong>S3 cost</strong>
+              <p>5 PB × $0.023/GB/month ≈ $115K/month for storage alone.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/uploads
+  Body: { filename, size_bytes, content_type, chunk_size? }
+  Response 201: { upload_id, chunk_urls[{ chunk_no, presigned_url }], expires_at }
+
+PUT /api/v1/uploads/{upload_id}/chunks/{chunk_no}
+  Headers: Content-MD5: &lt;checksum&gt;
+  Body: &lt;binary chunk data&gt;
+  Response 200: { chunk_no, status: &#x27;received&#x27; }
+
+POST /api/v1/uploads/{upload_id}/complete
+  Response 202: { file_id, status: &#x27;scanning&#x27; }
+
+GET /api/v1/files/{file_id}
+  Response 200: { file_id, filename, size, status, download_url, created_at, tags }
+
+GET /api/v1/files?q=&lt;search&gt;&amp;tags=&lt;tag1,tag2&gt;
+  Response 200: { files[], total, next_cursor }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- File metadata (Postgres)
+CREATE TABLE files (
+  file_id      UUID PRIMARY KEY,
+  owner_id     BIGINT NOT NULL,
+  filename     VARCHAR(512) NOT NULL,
+  size_bytes   BIGINT,
+  content_type VARCHAR(128),
+  s3_key       VARCHAR(1024),
+  status       VARCHAR(16) DEFAULT &#x27;uploading&#x27;,  -- uploading|scanning|clean|quarantined
+  checksum_sha256 CHAR(64),
+  created_at   TIMESTAMP DEFAULT now()
+);
+
+-- Chunked upload tracking (Postgres or Redis)
+CREATE TABLE upload_chunks (
+  upload_id    UUID,
+  chunk_no     INT,
+  s3_part_key  VARCHAR(1024),
+  checksum_md5 CHAR(32),
+  received_at  TIMESTAMP,
+  PRIMARY KEY (upload_id, chunk_no)
+);
+
+-- Tags for search (Elasticsearch mirrors this)
+CREATE TABLE file_tags (
+  file_id  UUID REFERENCES files(file_id),
+  tag      VARCHAR(64),
+  PRIMARY KEY (file_id, tag)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The upload flow has three phases: initiate, chunk upload, and complete. The client calls POST /uploads with file metadata. The upload service creates an upload record, calculates the number of chunks (file_size / chunk_size, typically 5 MB chunks), and returns presigned S3 URLs for each chunk. The client uploads chunks in parallel (up to 4 concurrent uploads for network efficiency). Each chunk goes directly to S3 via the presigned URL — the upload service never touches the file data, avoiding a bottleneck.</p>
+          <p>Resumability works because each chunk is tracked independently. If the upload fails after chunk 37 of 200, the client calls GET /uploads/{id}/status to see which chunks are received and resumes from chunk 38. The upload record has a TTL (e.g., 24 hours) — incomplete uploads are garbage-collected and their orphaned S3 parts are cleaned up by a background job.</p>
+          <p>When the client calls POST /uploads/{id}/complete, the upload service verifies all chunks are present, initiates an S3 multipart-upload completion (which assembles chunks into a single object server-side), and transitions the file status to &#x27;scanning&#x27;. A message is published to an SQS queue for the virus scanner.</p>
+          <p>The virus scanner is a fleet of workers that download the file from S3, run ClamAV (or a commercial engine), and update the file status to &#x27;clean&#x27; or &#x27;quarantined&#x27;. Quarantined files are never served — download requests for quarantined files return 403. The scan is async to avoid blocking the upload response, but the file is not downloadable until the scan completes.</p>
+          <p>For downloads, the API generates a short-lived presigned S3 URL (valid for 15 minutes) and returns a 302 redirect. This offloads bandwidth to S3/CloudFront and avoids proxying file data through our servers. The presigned URL includes the file&#x27;s content-disposition header to force the correct filename on download.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node accent">Upload Service</span><b>&rarr;</b><span class="node">S3 (presigned)</span></div><div class="flow-row"><span class="node">S3</span><b>&rarr;</b><span class="node accent">SQS → Virus Scanner</span><b>&rarr;</b><span class="node">Status: clean/quarantined</span></div><figcaption>Upload + scan pipeline — data flows directly to S3 via presigned URLs</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">POST /uploads → upload_id + presigned URLs</span><span class="node accent">Client uploads chunks 1..N directly to S3 (parallel)</span><span class="node">POST /complete → S3 multipart assembly</span><span class="node accent">SQS → ClamAV scan → status: clean</span><span class="node">GET /files/{id}/download → presigned S3 URL (302)</span></div><figcaption>Full file lifecycle from upload to download</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Presigned URLs are the key architectural decision. By generating time-limited, authenticated URLs that point directly to S3, we avoid proxying file data through our application servers. A presigned PUT URL lets the client upload a chunk directly to S3 with a specific key and content-MD5 constraint. If the MD5 does not match, S3 rejects the upload — integrity checking is delegated to the storage layer. This means our upload service handles only metadata operations (a few KB per request), not multi-GB data transfers.</p>
+          <p>The virus scanning pipeline needs careful state management. A file goes through four states: uploading → scanning → clean (or quarantined). The state machine is enforced in the database with a CHECK constraint. Only clean files can be downloaded. The scan worker retries up to 3 times on transient failures (e.g., ClamAV process crash). If all retries fail, the file is marked &#x27;scan_failed&#x27; and flagged for manual review. We monitor the scan queue depth and auto-scale workers when the backlog exceeds 1,000 files.</p>
+          <p>Content-based deduplication saves significant storage. After the file is assembled, we compute a SHA-256 hash of the entire file. If the hash matches an existing file, we create a new metadata record pointing to the same S3 object. Reference counting tracks how many metadata records point to each S3 object — the object is only deleted when the reference count reaches zero. This is a post-upload dedup strategy; inline dedup (checking before upload) would require the client to compute and send the hash first, adding a round trip.</p>
+          <p>For metadata search, I&#x27;d mirror the files table into Elasticsearch with fields for filename, content_type, tags, owner, and created_at. Searches like &#x27;all PDFs tagged quarterly-report&#x27; become simple ES queries. The mirror is maintained via a change-data-capture (CDC) pipeline from Postgres to ES — so metadata writes go to Postgres (source of truth) and asynchronously propagate to ES. Search results may lag writes by a few seconds, which is acceptable.</p>
+          <p>Garbage collection is essential. Incomplete uploads leave orphaned S3 multipart parts that cost money. A daily cron job lists all S3 multipart uploads older than 24 hours and aborts them. Similarly, quarantined files that have been quarantined for more than 30 days are permanently deleted to reclaim storage.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Chunked upload service with S3 multipart and scan queue</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import uuid
+import hashlib
+from datetime import datetime, timedelta
+
+CHUNK_SIZE = 5 * 1024 * 1024  # 5 MB — S3 multipart minimum
+UPLOAD_TTL = timedelta(hours=24)
+
+
+class UploadService:
+    def __init__(self, s3, db, scan_queue):
+        self.s3 = s3              # boto3 S3 client
+        self.db = db              # metadata database
+        self.scan_queue = scan_queue  # antivirus scan queue
+
+    def initiate(self, owner_id: int, filename: str, size: int) -&gt; dict:
+        &quot;&quot;&quot;Start a chunked upload: create S3 multipart + presigned URLs.&quot;&quot;&quot;
+        upload_id = str(uuid.uuid4())
+        num_chunks = (size + CHUNK_SIZE - 1) // CHUNK_SIZE
+        s3_key = f&quot;uploads/{upload_id}/{filename}&quot;
+        mpu = self.s3.create_multipart_upload(Bucket=&quot;files&quot;, Key=s3_key)
+        chunk_urls = []
+        for i in range(1, num_chunks + 1):
+            url = self.s3.generate_presigned_url(
+                &quot;upload_part&quot;,
+                Params={&quot;Bucket&quot;: &quot;files&quot;, &quot;Key&quot;: s3_key,
+                        &quot;UploadId&quot;: mpu[&quot;UploadId&quot;], &quot;PartNumber&quot;: i},
+                ExpiresIn=86400,
+            )
+            chunk_urls.append({&quot;chunk_no&quot;: i, &quot;url&quot;: url})
+        self.db.insert_upload(upload_id, owner_id, filename, size,
+                              s3_key, mpu[&quot;UploadId&quot;], num_chunks)
+        return {&quot;upload_id&quot;: upload_id, &quot;chunk_urls&quot;: chunk_urls}
+
+    def complete(self, upload_id: str) -&gt; dict:
+        &quot;&quot;&quot;Finalize upload: verify all chunks, complete S3 MPU, queue scan.&quot;&quot;&quot;
+        rec = self.db.get_upload(upload_id)
+        received = self.db.get_received_chunks(upload_id)
+        if len(received) != rec[&quot;num_chunks&quot;]:
+            missing = set(range(1, rec[&quot;num_chunks&quot;] + 1)) - set(received)
+            raise ValueError(f&quot;Missing chunks: {missing}&quot;)
+        parts = [{&quot;PartNumber&quot;: c[&quot;chunk_no&quot;], &quot;ETag&quot;: c[&quot;etag&quot;]}
+                 for c in self.db.get_chunk_details(upload_id)]
+        self.s3.complete_multipart_upload(
+            Bucket=&quot;files&quot;, Key=rec[&quot;s3_key&quot;],
+            UploadId=rec[&quot;mpu_id&quot;],
+            MultipartUpload={&quot;Parts&quot;: parts},
+        )
+        file_id = str(uuid.uuid4())
+        # Mark as &quot;scanning&quot; until antivirus check completes
+        self.db.insert_file(file_id, rec[&quot;owner_id&quot;], rec[&quot;filename&quot;],
+                            rec[&quot;size&quot;], rec[&quot;s3_key&quot;], status=&quot;scanning&quot;)
+        self.scan_queue.send({&quot;file_id&quot;: file_id, &quot;s3_key&quot;: rec[&quot;s3_key&quot;]})
+        return {&quot;file_id&quot;: file_id, &quot;status&quot;: &quot;scanning&quot;}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
+
+const CHUNK_SIZE: u64 = 5 * 1024 * 1024; // 5 MB — S3 multipart minimum
+
+struct UploadRecord {
+    upload_id: String,
+    owner_id: u64,
+    filename: String,
+    s3_key: String,
+    mpu_id: String,
+    num_chunks: u32,
+}
+
+/// Chunked upload service — manages S3 multipart lifecycle and virus scan queue.
+struct UploadService {
+    uploads: HashMap&lt;String, UploadRecord&gt;,
+    received: HashMap&lt;String, HashSet&lt;u32&gt;&gt;, // upload_id → received chunk numbers
+}
+
+impl UploadService {
+    fn new() -&gt; Self {
+        Self { uploads: HashMap::new(), received: HashMap::new() }
+    }
+
+    /// Start a chunked upload: compute chunk count, generate presigned URLs
+    fn initiate(&amp;mut self, owner_id: u64, filename: &amp;str, size: u64)
+        -&gt; Result&lt;(String, Vec&lt;u32&gt;), &amp;&#x27;static str&gt;
+    {
+        let upload_id = Uuid::new_v4().to_string();
+        let num_chunks = ((size + CHUNK_SIZE - 1) / CHUNK_SIZE) as u32;
+        let s3_key = format!(&quot;uploads/{}/{}&quot;, upload_id, filename);
+        self.uploads.insert(upload_id.clone(), UploadRecord {
+            upload_id: upload_id.clone(), owner_id,
+            filename: filename.to_string(), s3_key,
+            mpu_id: Uuid::new_v4().to_string(), num_chunks,
+        });
+        // In production: call S3 create_multipart_upload + generate_presigned_url
+        let chunks: Vec&lt;u32&gt; = (1..=num_chunks).collect();
+        Ok((upload_id, chunks))
+    }
+
+    /// Finalize: verify all chunks received, complete S3 MPU, queue scan
+    fn complete(&amp;self, upload_id: &amp;str) -&gt; Result&lt;String, String&gt; {
+        let rec = self.uploads.get(upload_id)
+            .ok_or(&quot;Upload not found&quot;)?;
+        let received = self.received.get(upload_id)
+            .map(|s| s.len() as u32).unwrap_or(0);
+        if received != rec.num_chunks {
+            return Err(format!(&quot;Missing chunks: got {}/{}&quot;, received, rec.num_chunks));
+        }
+        // In production: call S3 complete_multipart_upload
+        let file_id = Uuid::new_v4().to_string();
+        // Queue antivirus scan before marking file as available
+        Ok(file_id)
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;unordered_map&gt;
+#include &lt;unordered_set&gt;
+#include &lt;string&gt;
+
+static const uint64_t kChunkSize = 5 * 1024 * 1024; // 5 MB
+
+struct UploadRecord {
+    std::string uploadID, filename, s3Key, mpuID;
+    uint64_t ownerID;
+    uint32_t numChunks;
+};
+
+// Manages chunked uploads with S3 multipart and antivirus scan queue
+@interface UploadService : NSObject
+- (NSDictionary *)initiateForOwner:(uint64_t)owner
+                          filename:(NSString *)name
+                              size:(uint64_t)size;
+- (NSDictionary *)complete:(NSString *)uploadID error:(NSError **)error;
+@end
+
+@implementation UploadService {
+    std::unordered_map&lt;std::string, UploadRecord&gt; _uploads;
+    std::unordered_map&lt;std::string, std::unordered_set&lt;uint32_t&gt;&gt; _received;
+}
+
+- (NSDictionary *)initiateForOwner:(uint64_t)owner
+                          filename:(NSString *)name
+                              size:(uint64_t)size {
+    NSString *uid = [NSUUID UUID].UUIDString;
+    uint32_t numChunks = (uint32_t)((size + kChunkSize - 1) / kChunkSize);
+    std::string key = uid.UTF8String;
+    _uploads[key] = {key, name.UTF8String,
+        &quot;uploads/&quot; + key + &quot;/&quot; + std::string(name.UTF8String),
+        NSUUID.UUID.UUIDString.UTF8String, owner, numChunks};
+    // Production: call S3 createMultipartUpload + generatePresignedURL
+    NSMutableArray *chunks = [NSMutableArray new];
+    for (uint32_t i = 1; i &lt;= numChunks; i++)
+        [chunks addObject:@(i)];
+    return @{@&quot;upload_id&quot;: uid, @&quot;chunks&quot;: chunks};
+}
+
+- (NSDictionary *)complete:(NSString *)uploadID error:(NSError **)error {
+    std::string key = uploadID.UTF8String;
+    auto it = _uploads.find(key);
+    if (it == _uploads.end()) {
+        if (error) *error = [NSError errorWithDomain:@&quot;Upload&quot; code:404 userInfo:nil];
+        return nil;
+    }
+    auto &amp;rec = it-&gt;second;
+    uint32_t got = (uint32_t)_received[key].size();
+    if (got != rec.numChunks) {
+        if (error) *error = [NSError errorWithDomain:@&quot;Upload&quot; code:400 userInfo:
+            @{NSLocalizedDescriptionKey:
+              [NSString stringWithFormat:@&quot;Missing chunks: %u/%u&quot;, got, rec.numChunks]}];
+        return nil;
+    }
+    // Production: complete S3 MPU, queue antivirus scan
+    NSString *fileID = [NSUUID UUID].UUIDString;
+    return @{@&quot;file_id&quot;: fileID, @&quot;status&quot;: @&quot;scanning&quot;};
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>POST /uploads {filename: "report.pdf", size: 52428800} → 10 chunks of 5MB</p></div><div class="seq-row"><span class="actor">Upload Service</span><p>Creates upload record, generates 10 presigned S3 PUT URLs, returns upload_id</p></div><div class="seq-row"><span class="actor">Client</span><p>PUT chunks 1-10 directly to S3 in parallel (4 concurrent)</p></div><div class="seq-row"><span class="actor">Client</span><p>POST /uploads/{id}/complete — upload service verifies all 10 chunks received</p></div><div class="seq-row"><span class="actor">S3</span><p>Completes multipart upload, assembles 10 parts into single object</p></div><div class="seq-row"><span class="actor">Scan Worker</span><p>Downloads from S3, runs ClamAV, updates status to "clean"</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Presigned URL vs proxy</strong>
+              <p>Presigned offloads bandwidth but exposes S3 structure; proxy gives control but bottlenecks throughput.</p>
+            </div>
+            <div>
+              <strong>Sync vs async virus scan</strong>
+              <p>Sync blocks upload response but guarantees safety; async is faster but serves a brief window of unscanned files.</p>
+            </div>
+            <div>
+              <strong>Post-upload vs inline dedup</strong>
+              <p>Post-upload is simpler but uploads redundant data; inline saves bandwidth but adds a round trip.</p>
+            </div>
+            <div>
+              <strong>S3 vs self-managed blob store</strong>
+              <p>S3 gives 11-nines durability out of the box; self-managed gives cost control but operational burden.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Incomplete multipart uploads accumulate orphaned S3 parts — costs grow silently without GC.</li>
+            <li>Virus scanner falls behind during upload spikes — files stuck in &#x27;scanning&#x27; state for hours.</li>
+            <li>Presigned URL expires before client finishes slow upload — chunk rejected, user must restart.</li>
+            <li>SHA-256 dedup collision (astronomically unlikely but not zero) — two different files share one object.</li>
+            <li>S3 eventual consistency on overwrite — rare read-after-write inconsistency for updated files.</li>
+            <li>Metadata DB out of sync with S3 — file record exists but S3 object was deleted externally.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add file versioning with rollback to previous versions?</li>
+            <li>Design a thumbnail/preview generation pipeline for images and PDFs.</li>
+            <li>How would you implement fine-grained access control (user, team, org, public)?</li>
+            <li>Add a CDN layer for frequently downloaded files with cache invalidation.</li>
+            <li>How would you handle cross-region replication for disaster recovery?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the three-phase chunked upload (initiate, upload chunks, complete) with presigned S3 URLs for direct upload. Sketch the async virus scanning pipeline with quarantine states. Mention metadata in Postgres mirrored to Elasticsearch for search. The dedup and CDN layers are nice-to-have — acknowledging them without full design is sufficient.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../chat_messaging/">← Design a chat messaging system</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../notification_system/">Design a notification system →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

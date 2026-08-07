@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix a skewed Spark join | Big Data | Engineering Notes</title>
+  <meta name="description" content="One key with 5% of rows turns a 20-minute join into a 3-hour wait on a single executor.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Fix a skewed Spark join</p>
+      <p class="eyebrow">Big Data · Hard · ~60 min</p>
+      <h1>Fix a skewed Spark join</h1>
+      <p class="problem-deck">One key with 5% of rows turns a 20-minute join into a 3-hour wait on a single executor.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Diagnose</strong><p>Confirm skew in Spark UI: task duration distribution, spill metrics, identify hot keys</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Null key fix</strong><p>Filter nulls before join, union back with NULL columns; explain why equi-join on NULL never matches</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Broadcast evaluation</strong><p>Check small-side size; explain broadcast threshold, network cost, and when it fails</p></div></div>
+            <div class="stack-step"><strong>22-35m</strong><div><strong>Key salting</strong><p>Explode hot keys with salt 0..N-1 on big side; replicate small-side rows N times; join on (key, salt)</p></div></div>
+            <div class="stack-step"><strong>35-45m</strong><div><strong>AQE skew join</strong><p>Spark 3.x automatic skew handling: config knobs, when it triggers, and when it is too conservative</p></div></div>
+            <div class="stack-step"><strong>45-52m</strong><div><strong>Two-pass approach</strong><p>Separate hot keys into a dedicated join path, union with the non-skewed join result</p></div></div>
+            <div class="stack-step"><strong>52-60m</strong><div><strong>Verification</strong><p>Compare row counts, spot-check hot-key output, confirm task balance in Spark UI</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by confirming skew in the Spark UI: one task in the join stage at 10× the median duration, with massive spill to disk while the other 199 tasks finished in 30 seconds. That single task is processing all rows for a hot key — often null, &#x27;UNKNOWN&#x27;, or a mega-customer that generates 5% of all orders.</p>
+          <p>The naive fix is &#x27;throw more memory at it&#x27; — increase executor memory from 8GB to 32GB. That hides the OOM but does not fix the wall time: you still have one task doing 50× the work of its peers. The cluster sits idle waiting for it.</p>
+          <p>Broadcast join is the first thing people reach for, but it only works if one side is genuinely small. I have seen &#x27;small&#x27; dimension tables that were 12GB after a bad filter push-down — well beyond the broadcast threshold. And broadcasting a 12GB table to 200 executors means 2.4TB of network transfer.</p>
+          <p>The real fix depends on the skew pattern. If it is null keys, filter them out before the join and union them back (nulls never match anyway in equi-joins). If it is a genuine hot key, salt it: append a random integer 0..N-1 to the hot key on the big side, and replicate the matching rows N times on the small side. This spreads the hot partition across N tasks. AQE (Adaptive Query Execution) in Spark 3.x can do this automatically, but it has configuration thresholds that are often too conservative for real skew.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Approximate row counts for both sides of the join?</li>
+            <li>Which keys are hot — top 10 by frequency?</li>
+            <li>Is AQE enabled and what Spark version?</li>
+            <li>Are null join keys present in significant volume?</li>
+            <li>Is the join selective enough to pre-filter before joining?</li>
+            <li>SLA constraint — can we afford a two-pass approach?</li>
+            <li>Is the small side actually small (&lt; 1GB), or has it grown?</li>
+            <li>Join type — inner, left, or full outer?</li>
+            <li>How many executors and how much memory per executor?</li>
+            <li>Is the skew stable (same keys every run) or shifting?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Fix one skewed equi-join to balance task runtimes</li>
+            <li>In scope — Verify correctness: output matches naive join exactly</li>
+            <li>Out of scope — Redesigning the entire warehouse data model</li>
+            <li>Defer — Automating skew detection across all jobs</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Correctness</strong>
+              <p>Produce the same result set as the original naive join</p>
+            </div>
+            <div>
+              <strong>Balance</strong>
+              <p>No single task should take more than 3× the median task duration</p>
+            </div>
+            <div>
+              <strong>Null handling</strong>
+              <p>Null join keys handled explicitly — filtered or coalesced</p>
+            </div>
+            <div>
+              <strong>Reproducibility</strong>
+              <p>Fix must work across daily runs, not just today&#x27;s data</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Wall time</strong>
+              <p>Reduce from 3 hours to under 30 minutes</p>
+            </div>
+            <div>
+              <strong>Memory</strong>
+              <p>No executor OOM with 8GB heap — avoid increasing to 32GB as the fix</p>
+            </div>
+            <div>
+              <strong>Spill</strong>
+              <p>Eliminate disk spill on the hot-key task</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Do not 10× cluster size as the first move</p>
+            </div>
+            <div>
+              <strong>Maintainability</strong>
+              <p>Salting logic must be clear and documented; future engineers must understand it</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Big side</strong>
+              <p>500M rows, 200GB on disk (orders table)</p>
+            </div>
+            <div>
+              <strong>Small side</strong>
+              <p>10M rows, 2GB on disk (customer dimension)</p>
+            </div>
+            <div>
+              <strong>Hot key</strong>
+              <p>customer_id = 9999 has 25M rows (5% of big side)</p>
+            </div>
+            <div>
+              <strong>Null keys</strong>
+              <p>8M rows with NULL customer_id (1.6%)</p>
+            </div>
+            <div>
+              <strong>Normal join</strong>
+              <p>200 partitions × 2.5M rows each = balanced at ~25 sec/task</p>
+            </div>
+            <div>
+              <strong>Skewed task</strong>
+              <p>One partition has 25M + 8M = 33M rows → 45 min, heavy spill</p>
+            </div>
+            <div>
+              <strong>Salt factor</strong>
+              <p>N=10: hot partition splits into 10 tasks of 2.5M rows each → 25 sec each</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Spark SQL — naive skewed join (before fix)
+SELECT o.*, c.customer_name, c.segment
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+
+# Fix 1: filter nulls
+SELECT o.*, c.customer_name, c.segment
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE o.customer_id IS NOT NULL
+UNION ALL
+SELECT o.*, NULL, NULL
+FROM orders o
+WHERE o.customer_id IS NULL
+
+# Fix 2: AQE config
+SET spark.sql.adaptive.enabled = true;
+SET spark.sql.adaptive.skewJoin.enabled = true;
+SET spark.sql.adaptive.skewJoin.skewedPartitionFactor = 5;
+SET spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes = 256m;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Orders (big side, 500M rows)
+CREATE TABLE orders (
+  order_id        BIGINT,
+  customer_id     BIGINT,          -- hot key: 9999 has 25M rows
+  order_total     DECIMAL(12,2),
+  order_date      DATE,
+  status          STRING
+) STORED AS PARQUET;
+
+-- Customers (small side, 10M rows)
+CREATE TABLE customers (
+  customer_id     BIGINT PRIMARY KEY,
+  customer_name   STRING,
+  segment         STRING,
+  region          STRING
+) STORED AS PARQUET;
+
+-- Salted join helper (created at runtime)
+-- orders_salted: adds salt column = rand() % N
+-- customers_exploded: replicates each row N times with salt 0..N-1</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The approach has three layers, applied in order of simplicity.</p>
+          <p>Layer 1 — Filter nulls: NULL keys never match in an equi-join, so they consume shuffle and memory for zero output. I filter WHERE customer_id IS NOT NULL before the join and UNION ALL the null rows with NULL dimension columns after. This alone removes 8M rows from the shuffle and eliminates one source of skew.</p>
+          <p>Layer 2 — AQE skew join: In Spark 3.2+, AQE detects partitions that are N× larger than the median and automatically splits them, replicating the small side for the split portions. I set skewedPartitionFactor=5 and skewedPartitionThresholdInBytes=256MB. This handles moderate skew without code changes. But AQE only kicks in after the shuffle — if the hot partition causes OOM during the shuffle write, AQE cannot help.</p>
+          <p>Layer 3 — Manual salting: For severe skew (one key with 5%+ of rows), I salt explicitly. On the big side, I add a column: salt = abs(hash(order_id)) % 10. On the small side, I explode: for each customer row where customer_id is in the hot-key set, I generate 10 copies with salt 0..9. Non-hot keys get salt=0 and one copy. The join becomes ON (customer_id, salt). The hot partition splits into 10 balanced tasks.</p>
+          <p>The two-pass variant is cleaner for production: separate hot keys into a dedicated Spark job that broadcasts the filtered small side (only hot-key rows), and run the non-skewed majority as a normal join. UNION the results. This avoids polluting the main job with salting logic.</p>
+<figure class="diagram dark">
+  <figcaption>Key Salting Strategy</figcaption>
+  <div class="flow-row">
+    <div class="node">Orders<br><small>500M rows</small></div>
+    <div class="node accent">Add salt<br><small>hash(id) % 10</small></div>
+    <div class="node">Customers<br><small>10M rows</small></div>
+    <div class="node accent">Explode hot keys<br><small>10 copies each</small></div>
+    <div class="node">Join on<br><small>(customer_id, salt)</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Before vs After Salting</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Before</span><p>One task: 33M rows, 45 min, spill to disk</p></div>
+    <div class="node accent"><span class="label">After</span><p>Ten tasks: 2.5M rows each, 25 sec, no spill</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Two-Pass Approach</figcaption>
+  <div class="flow-row">
+    <div class="node">Orders</div>
+    <div class="node accent">Split<br><small>hot keys vs rest</small></div>
+    <div class="node">Normal Join<br><small>95% of rows</small></div>
+    <div class="node">Broadcast Join<br><small>5% hot keys</small></div>
+    <div class="node accent">UNION ALL</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Salting math: the hot key has 25M rows. With salt factor N=10, each salted partition gets ~2.5M rows — roughly equal to the median non-skewed partition. The small side replication adds 10 × 1 row (for the hot customer) × 10 = 10 extra rows. If there are 50 hot keys, replication adds 500 rows — negligible. The cost is the salt column in the shuffle: 4 bytes × 500M = 2GB extra shuffle data, acceptable.</p>
+          <p>Choosing the salt factor: N should make hot partitions roughly equal to the median. If the hot key has 25M rows and the median is 2.5M, N = 25M / 2.5M = 10. Over-salting (N=100) wastes shuffle partitions and increases small-side replication. Under-salting (N=3) still leaves the hot partition at 8M — better but not balanced.</p>
+          <p>AQE internals: AQE&#x27;s skew join works at the physical plan level. After the shuffle, it inspects partition sizes. If a partition is &gt; skewedPartitionFactor × median AND &gt; skewedPartitionThreshold, it splits the partition into sub-partitions and reads the corresponding small-side partition multiple times (one read per sub-partition). The limitation: AQE cannot prevent OOM during shuffle write if the hot partition materializes in memory before AQE inspects sizes.</p>
+          <p>Broadcast join pitfalls: the broadcast threshold default is 10MB (spark.sql.autoBroadcastJoinThreshold). Engineers often bump it to 1GB+ without checking actual table size after filters. I have seen a &#x27;small&#x27; dimension that was 12GB because a filter push-down failed silently. Broadcasting 12GB to 200 executors = 2.4TB of driver memory allocation + network transfer. Always verify with df.persist().count() + spark.catalog.isCached() before relying on broadcast.</p>
+          <p>Full outer join with skew: salting is harder here because both sides contribute unmatched rows. The approach is: (1) inner join with salting, (2) anti-join left side for unmatched left, (3) anti-join right side for unmatched right, (4) UNION ALL. More complex but correct.</p>
+          <p>Monitoring skew proactively: I add a post-job check that reads the Spark event log, extracts task-level metrics for shuffle read bytes, and alerts if max/median &gt; 10. This catches new skew before it becomes a 3-hour incident. The check runs in 2 seconds against the JSON log.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Salted join with null handling</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from pyspark.sql import SparkSession, functions as F
+
+
+def salted_join(spark, orders_df, customers_df, hot_keys, salt_n=10):
+    &quot;&quot;&quot;
+    Fix a skewed join by salting hot keys.
+    Strategy:
+    - Separate hot keys (large customers) from cold keys.
+    - Salt hot-key rows with random bucket to spread them across partitions.
+    - Replicate the dimension side for hot keys to match the salted buckets.
+    - Handle NULL join keys separately to avoid data loss.
+    - Union all three paths for the final result.
+    &quot;&quot;&quot;
+    # Separate hot, cold, and null-key rows
+    hot_orders = orders_df.filter(F.col(&#x27;customer_id&#x27;).isin(hot_keys))
+    cold_orders = orders_df.filter(
+        ~F.col(&#x27;customer_id&#x27;).isin(hot_keys) &amp; F.col(&#x27;customer_id&#x27;).isNotNull()
+    )
+    null_orders = orders_df.filter(F.col(&#x27;customer_id&#x27;).isNull())
+
+    # Salt the hot path: add random bucket column
+    hot_orders = hot_orders.withColumn(&#x27;_salt&#x27;, (F.rand() * salt_n).cast(&#x27;int&#x27;))
+
+    # Replicate dimension rows for hot keys across all salt buckets
+    hot_customers = (
+        customers_df.filter(F.col(&#x27;customer_id&#x27;).isin(hot_keys))
+        .crossJoin(spark.range(salt_n).withColumnRenamed(&#x27;id&#x27;, &#x27;_salt&#x27;))
+    )
+
+    # Join hot path on (customer_id, _salt) — evenly distributed
+    hot_result = hot_orders.join(hot_customers, [&#x27;customer_id&#x27;, &#x27;_salt&#x27;]).drop(&#x27;_salt&#x27;)
+
+    # Cold path: standard equi-join (no skew)
+    cold_result = cold_orders.join(customers_df, &#x27;customer_id&#x27;)
+
+    # Null path: preserve rows with NULL join key (left-side only columns)
+    null_result = null_orders.select(
+        *[null_orders[c] for c in orders_df.columns],
+        F.lit(None).alias(&#x27;customer_name&#x27;),
+        F.lit(None).alias(&#x27;segment&#x27;),
+    )
+
+    return hot_result.unionByName(cold_result).unionByName(null_result)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Conceptual salted join using Polars DataFrames.
+// Polars handles skew differently (parallel hash joins), but the salting
+// pattern is useful when interfacing with distributed systems.
+
+use polars::prelude::*;
+use rand::Rng;
+
+/// Fix a skewed join by salting hot keys.
+/// - Hot keys are salted with a random bucket to spread across partitions.
+/// - Dimension side is replicated for hot keys to match salt buckets.
+/// - NULL keys are preserved separately to avoid data loss.
+pub fn salted_join(
+    orders: &amp;DataFrame,
+    customers: &amp;DataFrame,
+    hot_keys: &amp;[&amp;str],
+    salt_n: u32,
+) -&gt; Result&lt;DataFrame, PolarsError&gt; {
+    let hot_set: Vec&lt;String&gt; = hot_keys.iter().map(|s| s.to_string()).collect();
+
+    // Separate hot, cold, and null-key rows
+    let customer_id_col = orders.column(&quot;customer_id&quot;)?;
+    let is_hot = customer_id_col.utf8()?.into_iter().map(|opt| {
+        opt.map_or(false, |v| hot_set.contains(&amp;v.to_string()))
+    });
+
+    let hot_mask = BooleanChunked::from_iter_values(&quot;mask&quot;, is_hot.clone());
+    let null_mask = customer_id_col.is_null();
+    let cold_mask = !&amp;hot_mask &amp; !&amp;null_mask;
+
+    let hot_orders = orders.filter(&amp;hot_mask)?;
+    let cold_orders = orders.filter(&amp;cold_mask)?;
+    let null_orders = orders.filter(&amp;null_mask)?;
+
+    // Add random salt column to hot orders
+    let mut rng = rand::thread_rng();
+    let salt_values: Vec&lt;u32&gt; = (0..hot_orders.height())
+        .map(|_| rng.gen_range(0..salt_n))
+        .collect();
+    let salt_col = Series::new(&quot;_salt&quot;, salt_values);
+    let hot_orders = hot_orders.hstack(&amp;[salt_col])?;
+
+    // Replicate hot customers across all salt buckets
+    let hot_customers = customers.filter(
+        &amp;customers.column(&quot;customer_id&quot;)?.utf8()?.into_iter().map(|opt| {
+            opt.map_or(false, |v| hot_set.contains(&amp;v.to_string()))
+        }).collect::&lt;BooleanChunked&gt;()
+    )?;
+
+    // Cross-join with salt range [0..salt_n)
+    let mut replicated_frames = Vec::new();
+    for bucket in 0..salt_n {
+        let mut frame = hot_customers.clone();
+        let salt_col = Series::new(&quot;_salt&quot;, vec![bucket; frame.height()]);
+        frame = frame.hstack(&amp;[salt_col])?;
+        replicated_frames.push(frame);
+    }
+    let hot_customers_salted = concat_df(&amp;replicated_frames)?;
+
+    // Join hot path on (customer_id, _salt)
+    let hot_result = hot_orders.join(
+        &amp;hot_customers_salted,
+        &amp;[&quot;customer_id&quot;, &quot;_salt&quot;],
+        &amp;[&quot;customer_id&quot;, &quot;_salt&quot;],
+        JoinArgs::new(JoinType::Inner),
+    )?.drop(&quot;_salt&quot;)?;
+
+    // Cold path: standard equi-join
+    let cold_result = cold_orders.join(
+        customers,
+        &amp;[&quot;customer_id&quot;],
+        &amp;[&quot;customer_id&quot;],
+        JoinArgs::new(JoinType::Inner),
+    )?;
+
+    // Null path: add NULL columns for customer fields
+    let null_result = null_orders.hstack(&amp;[
+        Series::new(&quot;customer_name&quot;, vec![None::&lt;&amp;str&gt;; null_orders.height()]),
+        Series::new(&quot;segment&quot;, vec![None::&lt;&amp;str&gt;; null_orders.height()]),
+    ])?;
+
+    // Union all three paths
+    let combined = concat_df(&amp;[hot_result, cold_result, null_result])?;
+    Ok(combined)
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;set&gt;
+#include &lt;cstdlib&gt;
+
+// Conceptual salted join for fixing data skew in a distributed pipeline.
+// In an Objective-C++ context, this would orchestrate a Spark job or
+// implement the logic for an in-process DataFrame library.
+
+struct OrderRow {
+    std::string order_id;
+    std::string customer_id;  // empty string represents NULL
+    double amount;
+};
+
+struct CustomerRow {
+    std::string customer_id;
+    std::string customer_name;
+    std::string segment;
+};
+
+struct JoinedRow {
+    std::string order_id;
+    std::string customer_id;
+    double amount;
+    std::string customer_name;
+    std::string segment;
+};
+
+@interface SaltedJoinExecutor : NSObject
+
+/// Execute a salted join to fix data skew on hot keys.
+/// - hotKeys: set of customer_ids that cause skew
+/// - saltN: number of salt buckets to spread hot keys across
++ (std::vector&lt;JoinedRow&gt;)saltedJoin:(const std::vector&lt;OrderRow&gt; &amp;)orders
+                           customers:(const std::vector&lt;CustomerRow&gt; &amp;)customers
+                             hotKeys:(const std::set&lt;std::string&gt; &amp;)hotKeys
+                               saltN:(int)saltN;
+@end
+
+@implementation SaltedJoinExecutor
+
++ (std::vector&lt;JoinedRow&gt;)saltedJoin:(const std::vector&lt;OrderRow&gt; &amp;)orders
+                           customers:(const std::vector&lt;CustomerRow&gt; &amp;)customers
+                             hotKeys:(const std::set&lt;std::string&gt; &amp;)hotKeys
+                               saltN:(int)saltN {
+    std::vector&lt;JoinedRow&gt; results;
+
+    // Partition orders into hot, cold, and null-key buckets
+    std::vector&lt;OrderRow&gt; hotOrders, coldOrders, nullOrders;
+    for (const auto &amp;o : orders) {
+        if (o.customer_id.empty()) {
+            nullOrders.push_back(o);
+        } else if (hotKeys.count(o.customer_id)) {
+            hotOrders.push_back(o);
+        } else {
+            coldOrders.push_back(o);
+        }
+    }
+
+    // Build lookup map for customers
+    std::unordered_map&lt;std::string, CustomerRow&gt; custMap;
+    for (const auto &amp;c : customers) {
+        custMap[c.customer_id] = c;
+    }
+
+    // Hot path: salted join — assign random bucket and match with replicated dimension
+    // The salt distributes hot-key rows evenly across partitions
+    for (const auto &amp;o : hotOrders) {
+        int salt = std::rand() % saltN;
+        // In distributed execution, dimension rows are replicated per salt bucket.
+        // Here we simulate by direct lookup (same logical result).
+        auto it = custMap.find(o.customer_id);
+        if (it != custMap.end()) {
+            results.push_back({o.order_id, o.customer_id, o.amount,
+                              it-&gt;second.customer_name, it-&gt;second.segment});
+        }
+    }
+
+    // Cold path: standard equi-join (no skew, direct lookup)
+    for (const auto &amp;o : coldOrders) {
+        auto it = custMap.find(o.customer_id);
+        if (it != custMap.end()) {
+            results.push_back({o.order_id, o.customer_id, o.amount,
+                              it-&gt;second.customer_name, it-&gt;second.segment});
+        }
+    }
+
+    // Null path: preserve rows with NULL join key
+    for (const auto &amp;o : nullOrders) {
+        results.push_back({o.order_id, &quot;&quot;, o.amount, &quot;&quot;, &quot;&quot;});
+    }
+
+    return results;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Engineer</span><p>Spark UI shows Stage 4: 199 tasks done in 30s, task 142 running for 45 min</p></div>
+    <div class="seq-row"><span class="actor">Diagnosis</span><p>Task 142: 33M records, 18GB shuffle read, 12GB spill to disk — hot key identified: customer_id=9999</p></div>
+    <div class="seq-row"><span class="actor">Fix: Null filter</span><p>Filter 8M null customer_id rows before join → UNION ALL after → removes null skew</p></div>
+    <div class="seq-row"><span class="actor">Fix: Salt</span><p>orders: add salt = hash(order_id) % 10; customers: explode hot keys × 10</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Join on (customer_id, salt) — 200 balanced partitions, max task 2.8M rows</p></div>
+    <div class="seq-row"><span class="actor">Verify</span><p>Total output: 492M rows (matches original). Max task: 35 sec. Wall time: 22 min (was 3h)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Salting vs AQE</strong>
+              <p>Salting gives full control and works on all Spark versions. AQE is zero-code but has thresholds that may not trigger for moderate skew</p>
+            </div>
+            <div>
+              <strong>Two-pass vs inline salt</strong>
+              <p>Two-pass (separate hot/cold jobs) is cleaner but doubles job management. Inline salt is one job but adds complexity to the query</p>
+            </div>
+            <div>
+              <strong>Broadcast vs shuffle join</strong>
+              <p>Broadcast eliminates shuffle but requires the small side to fit in driver + executor memory. Wrong assumption here causes OOM at scale</p>
+            </div>
+            <div>
+              <strong>Salt factor tuning</strong>
+              <p>Too low: hot partition still dominates. Too high: excessive small-side replication and empty shuffle partitions</p>
+            </div>
+            <div>
+              <strong>Filter push-down reliance</strong>
+              <p>AQE and broadcast both assume accurate size estimation; broken filter push-down silently inflates the small side</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Broadcasting a &#x27;small&#x27; table that grew to 12GB after filter push-down failure — driver OOM</li>
+            <li>Salt factor too low (N=2) for a key with 50M rows — still skewed, just less obviously</li>
+            <li>Forgot to handle nulls — 8M null-key rows silently joined to nothing, dropped from output</li>
+            <li>AQE splits partition but replication of small side causes memory pressure on executors with limited heap</li>
+            <li>Full outer join with salting: unmatched rows on both sides need separate anti-join passes</li>
+            <li>Hot keys change over time — static hot-key list goes stale; need periodic profiling</li>
+            <li>Salting adds a column to the output: downstream queries break if they SELECT * and expect fixed schema</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you automate hot-key detection across all jobs in the warehouse?</li>
+            <li>What if both sides of the join are skewed on the same key?</li>
+            <li>How does this change for a streaming join in Structured Streaming?</li>
+            <li>What if the skew is not on the join key but on the partition key (post-shuffle)?</li>
+            <li>How would you handle skew in a multi-way join (3+ tables)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: diagnosing skew via Spark UI (task duration imbalance, spill metrics), the null-key optimization, broadcast join with its limitations, salting with clear math on salt factor, and AQE configuration. You should show before/after metrics (wall time, task balance) and explain why increasing executor memory is not a real fix.</p>
+          <p>You do not need to implement the full Spark job or explain AQE internals in detail. The interviewer wants to see systematic debugging: identify the hot key, quantify the skew, apply the simplest fix first (nulls, broadcast), and escalate to salting only when simpler approaches are insufficient.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../safe_orders_pipeline/">← Build a daily orders pipeline that can be re-run safely</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../clickstream_lake/">Design a near-real-time clickstream lake →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Locks, retries, clocks, and split brains — the awkward parts of building software that runs on more than one machine.">
+  <link rel="icon" href="../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../css/tech.css" rel="stylesheet">
+  <script src="../../../assets/js/navigation.js"></script>
+</head>
+<body>
+  <main>
+    <section class="topic-hero">
+      <div class="container">
+        <p class="breadcrumbs"><a href="../../tech-index.html">Engineering Notes</a> / Distributed Systems</p>
+        <p class="eyebrow">Failure is the common case</p>
+        <h1>Distributed Systems</h1>
+        <p class="topic-deck">Locks, retries, clocks, and split brains — the awkward parts of building software that runs on more than one machine.</p>
+      </div>
+    </section>
+
+    <section class="section topic-section">
+      <div class="container">
+        <div class="topic-nav" aria-label="Other topics">
+          <a class="topic-pill" href="../system_design/">System Design</a>
+          <a class="topic-pill" href="../dsa/">DSA</a>
+          <a class="topic-pill" href="../database/">Database</a>
+          <a class="topic-pill" href="../big_data/">Big Data</a>
+          <a class="topic-pill is-active" href="../distributed_systems/">Distributed Systems</a>
+          <a class="topic-pill" href="../cloud/">Cloud</a>
+        </div>
+
+        <div class="problem-list">
+          <a class="problem-card" href="distributed_lock/">
+            <div class="problem-index">01</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Implement a distributed lock</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Redis SETNX, fencing tokens, and what happens when the holder pauses.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="exactly_once_consumer/">
+            <div class="problem-index">02</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Design an exactly-once consumer</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Idempotent handlers, dedupe stores, and at-least-once reality.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="split_brain/">
+            <div class="problem-index">03</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Handle split-brain in a leader election</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Quorums, term numbers, and stale leader writes.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="retry_policy/">
+            <div class="problem-index">04</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Build a retry policy that does not amplify outages</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Jitter, budgets, and circuit breakers.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="clock_skew/">
+            <div class="problem-index">05</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Reconcile clocks across regions</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>NTP skew, event-time vs processing-time, and hybrid logical clocks.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="multi_region_store/">
+            <div class="problem-index">06</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Design a multi-region active-active store</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Conflict resolution, lag SLOs, and read-your-writes expectations.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="safe_deploy_drain/">
+            <div class="problem-index">07</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Detect and drain a bad deploy safely</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Health checks, canaries, and blast-radius limits.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="cap_shopping_cart/">
+            <div class="problem-index">08</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Explain CAP for a shopping cart</h2>
+                <span class="difficulty">Easy</span>
+              </div>
+              <p>What you actually sacrifice under partition, in plain language.</p>
+            </div>
+          </a>
+        </div>
+        <p class="topic-foot">Each write-up is paced for a ~60 minute interview: clarifying questions, estimates, APIs/schemas, diagrams, failure modes, and follow-ups.</p>
+      </div>
+    </section>
+  </main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../tech-index.html">All notes</a>
+        <a href="../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../js/code-tabs.js" defer></script>
+</body>
+</html>

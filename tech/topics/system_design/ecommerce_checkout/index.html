@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design an e-commerce checkout | System Design | Engineering Notes</title>
+  <meta name="description" content="Checkout is a distributed transaction you cannot actually run as one — inventory, payment, and order records disagree under failure.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design an e-commerce checkout</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design an e-commerce checkout</h1>
+      <p class="problem-deck">Checkout is a distributed transaction you cannot actually run as one — inventory, payment, and order records disagree under failure.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Checkout flow (cart → order → payment → fulfillment), payment methods, inventory model.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Cart, inventory reservation, payment processing, order creation. Defer fulfillment.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>10K orders/min peak (flash sale), $100 avg order, 50M SKUs.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Cart service, inventory service, payment service, order service.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Saga pattern</strong><p>Orchestrator coordinates reserve → charge → confirm. Compensating actions on failure.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Payment idempotency</strong><p>Idempotency keys, double-charge prevention, webhook reconciliation.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Failure modes</strong><p>Payment timeout, partial inventory, cart expiry, abandoned checkout.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Consistency guarantees, follow-ups — fraud detection, multi-currency.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Checkout looks like a simple sequence — reserve inventory, charge the card, create the order — but it is really a distributed transaction across three independent services, and distributed transactions are where optimism goes to die. What happens if payment succeeds but the order service is down? What if inventory was reserved but the user abandoned the checkout? Every failure mode needs a compensating action.</p>
+          <p>I&#x27;d model this as a saga with an orchestrator. The checkout orchestrator drives the sequence: reserve inventory, process payment, create order. If any step fails, it runs compensating actions in reverse: refund payment, release inventory. The key insight is that each step must be idempotent — retrying a step should not double-charge the user or double-reserve inventory.</p>
+          <p>I&#x27;d walk through the happy path first, then systematically cover every failure mode and its compensating action.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What payment methods — credit card, PayPal, buy-now-pay-later?</li>
+            <li>Do we reserve inventory at add-to-cart or at checkout initiation?</li>
+            <li>What is the cart/reservation TTL before items are released?</li>
+            <li>How do we handle flash sales with massive concurrent demand for limited inventory?</li>
+            <li>Is split payment (partial gift card + credit card) in scope?</li>
+            <li>Do we need to support promo codes and discount calculations?</li>
+            <li>What is the acceptable checkout latency?</li>
+            <li>How do we handle payment provider timeouts — retry or abandon?</li>
+            <li>Do we need to support guest checkout (no account)?</li>
+            <li>Is multi-currency / multi-region in scope?</li>
+            <li>What happens if the item price changes between add-to-cart and checkout?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: cart management, inventory reservation with TTL, payment processing with idempotency, order creation.</li>
+            <li>In: saga orchestrator with compensating actions, abandoned cart recovery.</li>
+            <li>Out: fulfillment/shipping, fraud detection ML model, multi-currency.</li>
+            <li>Defer: promo code engine, tax calculation, split payments.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Add to cart</strong>
+              <p>POST /cart/items adds SKU with quantity. No inventory lock yet.</p>
+            </div>
+            <div>
+              <strong>Initiate checkout</strong>
+              <p>POST /checkout reserves inventory with 15-min TTL, calculates totals.</p>
+            </div>
+            <div>
+              <strong>Process payment</strong>
+              <p>POST /checkout/{id}/pay with payment method. Idempotent via idempotency_key.</p>
+            </div>
+            <div>
+              <strong>Confirm order</strong>
+              <p>On successful payment, creates immutable order record and triggers fulfillment.</p>
+            </div>
+            <div>
+              <strong>Cancel</strong>
+              <p>POST /checkout/{id}/cancel releases inventory and voids any pending auth.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Checkout latency</strong>
+              <p>p99 &lt; 3 seconds end-to-end (reserve + charge + confirm).</p>
+            </div>
+            <div>
+              <strong>Payment accuracy</strong>
+              <p>Zero double-charges. At-most-once payment execution.</p>
+            </div>
+            <div>
+              <strong>Inventory accuracy</strong>
+              <p>No overselling — reserved count must reflect reality within seconds.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.95% — checkout downtime directly costs revenue.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>10K orders/min peak during flash sales.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Orders/min peak</strong>
+              <p>10K → ~167 orders/sec sustained.</p>
+            </div>
+            <div>
+              <strong>Avg items/order</strong>
+              <p>3 items → 500 inventory reservation ops/sec peak.</p>
+            </div>
+            <div>
+              <strong>Payment calls/sec</strong>
+              <p>167/sec to payment gateway — within typical Stripe limits.</p>
+            </div>
+            <div>
+              <strong>Cart storage</strong>
+              <p>Active carts: 1M × 2 KB = 2 GB in Redis.</p>
+            </div>
+            <div>
+              <strong>Order storage/year</strong>
+              <p>50M orders × 5 KB = 250 GB in Postgres.</p>
+            </div>
+            <div>
+              <strong>Inventory writes/sec</strong>
+              <p>500/sec peak — partitionable by warehouse/region.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/cart/items
+  Body: { sku_id, quantity }
+  Response 200: { cart_id, items[], subtotal }
+
+POST /api/v1/checkout
+  Body: { cart_id, shipping_address }
+  Response 201: { checkout_id, reserved_until, total, tax }
+
+POST /api/v1/checkout/{checkout_id}/pay
+  Headers: Idempotency-Key: &lt;uuid&gt;
+  Body: { payment_method_id }
+  Response 200: { order_id, status: &#x27;confirmed&#x27;, payment_status: &#x27;captured&#x27; }
+
+POST /api/v1/checkout/{checkout_id}/cancel
+  Response 200: { status: &#x27;cancelled&#x27;, inventory_released: true }
+
+GET /api/v1/orders/{order_id}
+  Response 200: { order_id, items[], total, status, payment_status, created_at }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Inventory (sharded by sku_id)
+CREATE TABLE inventory (
+  sku_id        VARCHAR(32) PRIMARY KEY,
+  total_stock   INT NOT NULL,
+  reserved      INT DEFAULT 0,
+  -- available = total_stock - reserved
+  version       INT DEFAULT 0         -- optimistic locking
+);
+
+-- Reservations (auto-expire via TTL)
+CREATE TABLE reservations (
+  reservation_id  UUID PRIMARY KEY,
+  checkout_id     UUID NOT NULL,
+  sku_id          VARCHAR(32),
+  quantity        INT,
+  expires_at      TIMESTAMP NOT NULL,
+  status          VARCHAR(16) DEFAULT &#x27;active&#x27;  -- active|confirmed|released
+);
+
+-- Orders (immutable after creation)
+CREATE TABLE orders (
+  order_id      UUID PRIMARY KEY,
+  user_id       BIGINT NOT NULL,
+  total_cents   INT NOT NULL,
+  currency      CHAR(3) DEFAULT &#x27;USD&#x27;,
+  status        VARCHAR(16) DEFAULT &#x27;confirmed&#x27;,
+  created_at    TIMESTAMP DEFAULT now()
+);
+
+-- Payments (idempotency enforced via unique key)
+CREATE TABLE payments (
+  payment_id       UUID PRIMARY KEY,
+  order_id         UUID,
+  idempotency_key  VARCHAR(64) UNIQUE,
+  amount_cents     INT,
+  provider         VARCHAR(32),
+  provider_ref     VARCHAR(128),
+  status           VARCHAR(16),  -- pending|captured|failed|refunded
+  created_at       TIMESTAMP DEFAULT now()
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The checkout flow is orchestrated as a saga with three steps: reserve inventory, process payment, and confirm order. Each step is idempotent and has a compensating action.</p>
+          <p>Step 1: Reserve Inventory. When the user initiates checkout, the orchestrator calls the inventory service to reserve each item. The reservation uses optimistic locking: UPDATE inventory SET reserved = reserved + qty, version = version + 1 WHERE sku_id = ? AND version = ? AND (total_stock - reserved) &gt;= qty. If the WHERE clause fails (version changed or insufficient stock), the reservation fails immediately — no overselling. Each reservation has a 15-minute TTL. A background reaper job releases expired reservations and decrements the reserved count.</p>
+          <p>Step 2: Process Payment. The orchestrator calls the payment service with an idempotency key (a UUID generated by the client and stored in the checkout record). The payment service checks if a payment with this idempotency key already exists — if so, it returns the existing result instead of charging again. This prevents double-charges on retry. The payment service calls Stripe (or similar) with the idempotency key forwarded, so even Stripe deduplicates.</p>
+          <p>Step 3: Confirm Order. On successful payment, the orchestrator creates an immutable order record, transitions the reservation status from &#x27;active&#x27; to &#x27;confirmed&#x27; (removing the TTL), and emits an &#x27;order_confirmed&#x27; event for downstream services (fulfillment, email notification).</p>
+          <p>Compensating actions: if payment fails, the orchestrator releases the inventory reservation. If the order service is unreachable after successful payment, the orchestrator retries with exponential backoff (the order creation is idempotent via checkout_id). If retries are exhausted, an alert fires for manual reconciliation — we never auto-refund without human review because the payment already succeeded.</p>
+          <p>Cart expiry: if the user abandons the checkout, the 15-minute reservation TTL expires, the reaper releases inventory, and the checkout record transitions to &#x27;expired&#x27;. An abandoned-cart email is triggered 30 minutes after expiry.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Cart</span><b>&rarr;</b><span class="node accent">Reserve Inventory</span><b>&rarr;</b><span class="node">Process Payment</span><b>&rarr;</b><span class="node accent">Confirm Order</span></div><figcaption>Saga: three idempotent steps with compensating rollbacks</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Step 1: Reserve → Success</span><span class="node accent">Step 2: Payment → FAILS</span><span class="node">Compensate: Release reservation</span><span class="node accent">Checkout status: failed, inventory restored</span></div><figcaption>Saga compensating action on payment failure</figcaption></figure>
+<figure class="diagram dark"><div class="compare"><div><span class="label">Optimistic Lock</span><p>UPDATE ... WHERE version=X. Fails fast under contention. Best for moderate concurrency.</p></div><div><span class="label">Pessimistic Lock</span><p>SELECT FOR UPDATE. Serializes access. Safer but slower under flash-sale load.</p></div></div><figcaption>Inventory reservation concurrency strategies</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Payment idempotency is the most critical piece. Without it, a network timeout after Stripe processes the charge leads to a retry that double-charges the customer. The solution has three layers. First, the client generates a UUID idempotency key and includes it in the pay request. Second, our payment service stores (idempotency_key, result) in the payments table with a unique constraint — a retry hits the constraint and returns the stored result. Third, we forward the idempotency key to Stripe, which has its own dedup mechanism. Belt, suspenders, and a parachute.</p>
+          <p>Inventory reservation under flash-sale load requires careful concurrency control. Optimistic locking works well when contention is moderate — say, 10 concurrent buyers for 1,000 units. But during a flash sale where 10,000 users hit &#x27;buy&#x27; on 100 units simultaneously, the retry rate on optimistic lock failures becomes unsustainable. For hot SKUs, I&#x27;d switch to a Redis-based atomic decrement: DECRBY inventory:{sku} {qty} and check the result. If the result goes negative, INCRBY to restore and reject. Redis handles 100K ops/sec on a single key, far outperforming a database row lock.</p>
+          <p>The 15-minute reservation TTL is a trade-off. Too short (5 min) and users entering payment details slowly lose their reservation. Too long (30 min) and scarce inventory is tied up by indecisive shoppers, preventing real buyers from purchasing. I&#x27;d start at 15 minutes and show a countdown timer on the checkout page. For high-demand items (detected by reservation rate relative to stock), we could dynamically shorten the TTL to 10 minutes.</p>
+          <p>The abandoned cart recovery flow is revenue-critical. When a checkout expires, we emit an event that triggers a marketing pipeline: 30 minutes later, send a &#x27;you left items in your cart&#x27; email with a deep link back to the checkout. If the user returns, we attempt to re-reserve the items. If stock has been depleted, we show a &#x27;sorry, these items are no longer available&#x27; message. Industry data shows abandoned cart emails recover 5-10% of lost revenue.</p>
+          <p>Webhook reconciliation is the safety net for payment edge cases. Stripe sends webhooks for payment_intent.succeeded, payment_intent.payment_failed, and charge.refunded. Our webhook handler reconciles these events against our payments table. If we have a payment in &#x27;pending&#x27; status (we never got the synchronous response) and a webhook arrives saying it succeeded, we complete the checkout asynchronously. This handles the case where our server crashed between Stripe charging the card and our code running the confirmation logic.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Checkout saga orchestrator with compensating rollbacks</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import uuid
+from enum import Enum
+from dataclasses import dataclass
+
+
+class CheckoutStatus(Enum):
+    PENDING = &quot;pending&quot;
+    PAID = &quot;paid&quot;
+    FAILED = &quot;failed&quot;
+    EXPIRED = &quot;expired&quot;
+
+
+@dataclass
+class CheckoutResult:
+    order_id: str | None
+    status: CheckoutStatus
+    error: str | None = None
+
+
+class CheckoutOrchestrator:
+    &quot;&quot;&quot;Saga-style orchestrator: reserve → charge → confirm.
+    Any failure triggers compensating rollbacks in reverse order.&quot;&quot;&quot;
+
+    def __init__(self, inventory_svc, payment_svc, order_svc):
+        self.inventory = inventory_svc
+        self.payment = payment_svc
+        self.orders = order_svc
+
+    def execute(
+        self, checkout_id: str, cart_items: list[dict],
+        payment_method: str, idempotency_key: str,
+    ) -&gt; CheckoutResult:
+        # Step 1: Reserve inventory for each SKU
+        reservation_ids = []
+        try:
+            for item in cart_items:
+                rid = self.inventory.reserve(
+                    sku=item[&quot;sku&quot;], qty=item[&quot;qty&quot;], ttl_min=15,
+                )
+                reservation_ids.append(rid)
+        except self.inventory.InsufficientStock as e:
+            self._release_all(reservation_ids)  # compensating action
+            return CheckoutResult(None, CheckoutStatus.FAILED, str(e))
+
+        # Step 2: Charge the payment (idempotency key prevents double-charge)
+        total = sum(i[&quot;price&quot;] * i[&quot;qty&quot;] for i in cart_items)
+        try:
+            payment = self.payment.charge(
+                amount_cents=total,
+                method=payment_method,
+                idempotency_key=idempotency_key,
+            )
+        except self.payment.PaymentFailed as e:
+            self._release_all(reservation_ids)  # compensating action
+            return CheckoutResult(None, CheckoutStatus.FAILED, str(e))
+
+        # Step 3: Create order and confirm reservations
+        order_id = str(uuid.uuid4())
+        self.orders.create(
+            order_id=order_id, checkout_id=checkout_id,
+            items=cart_items, total_cents=total,
+            payment_ref=payment.provider_ref,
+        )
+        for rid in reservation_ids:
+            self.inventory.confirm(rid)
+        return CheckoutResult(order_id, CheckoutStatus.PAID)
+
+    def _release_all(self, reservation_ids: list[str]):
+        &quot;&quot;&quot;Best-effort release; reaper job cleans up any missed ones.&quot;&quot;&quot;
+        for rid in reservation_ids:
+            try:
+                self.inventory.release(rid)
+            except Exception:
+                pass  # log and alert; TTL-based reaper will clean up</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+#[derive(Debug)]
+enum CheckoutStatus { Pending, Paid, Failed, Expired }
+
+#[derive(Debug)]
+struct CheckoutResult {
+    order_id: Option&lt;String&gt;,
+    status: CheckoutStatus,
+    error: Option&lt;String&gt;,
+}
+
+struct CartItem { sku: String, qty: u32, price_cents: u64 }
+
+/// Saga-style orchestrator: reserve → charge → confirm.
+/// Any step failure triggers compensating rollbacks in reverse.
+struct CheckoutOrchestrator;
+
+impl CheckoutOrchestrator {
+    fn execute(
+        &amp;self, checkout_id: &amp;str, items: &amp;[CartItem],
+        payment_method: &amp;str, idempotency_key: &amp;str,
+    ) -&gt; CheckoutResult {
+        // Step 1: Reserve inventory for each SKU
+        let mut reservations: Vec&lt;String&gt; = Vec::new();
+        for item in items {
+            match self.reserve_inventory(&amp;item.sku, item.qty) {
+                Ok(rid) =&gt; reservations.push(rid),
+                Err(e) =&gt; {
+                    self.release_all(&amp;reservations); // compensate
+                    return CheckoutResult {
+                        order_id: None, status: CheckoutStatus::Failed,
+                        error: Some(e),
+                    };
+                }
+            }
+        }
+
+        // Step 2: Charge payment (idempotency key prevents double-charge)
+        let total: u64 = items.iter().map(|i| i.price_cents * i.qty as u64).sum();
+        let payment_ref = match self.charge(total, payment_method, idempotency_key) {
+            Ok(r) =&gt; r,
+            Err(e) =&gt; {
+                self.release_all(&amp;reservations); // compensate
+                return CheckoutResult {
+                    order_id: None, status: CheckoutStatus::Failed,
+                    error: Some(e),
+                };
+            }
+        };
+
+        // Step 3: Create order, confirm reservations
+        let order_id = uuid::Uuid::new_v4().to_string();
+        for rid in &amp;reservations { self.confirm_reservation(rid); }
+        CheckoutResult { order_id: Some(order_id), status: CheckoutStatus::Paid, error: None }
+    }
+
+    // Placeholder trait methods — in production these call external services
+    fn reserve_inventory(&amp;self, _sku: &amp;str, _qty: u32) -&gt; Result&lt;String, String&gt; { Ok(&quot;r1&quot;.into()) }
+    fn charge(&amp;self, _cents: u64, _m: &amp;str, _k: &amp;str) -&gt; Result&lt;String, String&gt; { Ok(&quot;pay_ref&quot;.into()) }
+    fn confirm_reservation(&amp;self, _rid: &amp;str) {}
+
+    /// Best-effort release; TTL reaper cleans up any missed ones
+    fn release_all(&amp;self, reservations: &amp;[String]) {
+        for rid in reservations {
+            let _ = self.release(rid); // swallow errors, log in production
+        }
+    }
+    fn release(&amp;self, _rid: &amp;str) -&gt; Result&lt;(), String&gt; { Ok(()) }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+typedef NS_ENUM(NSInteger, CheckoutStatus) {
+    CheckoutPending, CheckoutPaid, CheckoutFailed, CheckoutExpired
+};
+
+// Saga orchestrator: reserve → charge → confirm.
+// Any step failure triggers compensating rollbacks.
+@interface CheckoutOrchestrator : NSObject
+- (NSDictionary *)executeCheckout:(NSString *)checkoutID
+                            items:(NSArray&lt;NSDictionary *&gt; *)items
+                           method:(NSString *)method
+                    idempotencyKey:(NSString *)key;
+@end
+
+@implementation CheckoutOrchestrator
+
+- (NSDictionary *)executeCheckout:(NSString *)checkoutID
+                            items:(NSArray&lt;NSDictionary *&gt; *)items
+                           method:(NSString *)method
+                    idempotencyKey:(NSString *)key {
+    // Step 1: Reserve inventory for each SKU
+    NSMutableArray&lt;NSString *&gt; *reservations = [NSMutableArray new];
+    for (NSDictionary *item in items) {
+        NSString *rid = [self _reserve:item[@&quot;sku&quot;] qty:[item[@&quot;qty&quot;] intValue]];
+        if (!rid) {
+            [self _releaseAll:reservations]; // compensating rollback
+            return @{@&quot;status&quot;: @(CheckoutFailed), @&quot;error&quot;: @&quot;Insufficient stock&quot;};
+        }
+        [reservations addObject:rid];
+    }
+
+    // Step 2: Charge payment (idempotency key prevents double-charge)
+    NSInteger total = 0;
+    for (NSDictionary *item in items)
+        total += [item[@&quot;price&quot;] integerValue] * [item[@&quot;qty&quot;] integerValue];
+    NSString *payRef = [self _charge:total method:method key:key];
+    if (!payRef) {
+        [self _releaseAll:reservations]; // compensating rollback
+        return @{@&quot;status&quot;: @(CheckoutFailed), @&quot;error&quot;: @&quot;Payment failed&quot;};
+    }
+
+    // Step 3: Create order, confirm all reservations
+    NSString *orderID = [NSUUID UUID].UUIDString;
+    for (NSString *rid in reservations)
+        [self _confirm:rid];
+    return @{@&quot;order_id&quot;: orderID, @&quot;status&quot;: @(CheckoutPaid)};
+}
+
+// Best-effort release; reaper cleans up any missed reservations
+- (void)_releaseAll:(NSArray&lt;NSString *&gt; *)rids {
+    for (NSString *rid in rids)
+        @try { [self _release:rid]; } @catch (id e) { /* log */ }
+}
+
+// Placeholder methods — production calls external services
+- (NSString *)_reserve:(NSString *)sku qty:(int)qty { return @&quot;r1&quot;; }
+- (NSString *)_charge:(NSInteger)cents method:(NSString *)m key:(NSString *)k { return @&quot;pay&quot;; }
+- (void)_confirm:(NSString *)rid {}
+- (void)_release:(NSString *)rid {}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>POST /checkout {cart_id: "c1"} — initiates checkout</p></div><div class="seq-row"><span class="actor">Checkout Orchestrator</span><p>Calls Inventory: reserve 2× SKU-A, 1× SKU-B. Sets 15-min TTL.</p></div><div class="seq-row"><span class="actor">Client</span><p>POST /checkout/chk_1/pay {payment_method: pm_visa, idempotency_key: "ik_abc"}</p></div><div class="seq-row"><span class="actor">Payment Service</span><p>Checks idempotency_key — new. Calls Stripe PaymentIntent.create → captured.</p></div><div class="seq-row"><span class="actor">Checkout Orchestrator</span><p>Creates order, confirms reservations (removes TTL), emits order_confirmed event.</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Reserve at cart vs checkout</strong>
+              <p>Cart reservation locks stock longer but prevents disappointment; checkout reservation is leaner.</p>
+            </div>
+            <div>
+              <strong>Optimistic vs pessimistic locking</strong>
+              <p>Optimistic fails fast but retries under contention; pessimistic serializes but is slower.</p>
+            </div>
+            <div>
+              <strong>Sync payment vs async</strong>
+              <p>Sync gives immediate feedback but blocks the user; async is resilient but adds status polling.</p>
+            </div>
+            <div>
+              <strong>Saga vs 2PC</strong>
+              <p>Saga is more resilient and doesn&#x27;t lock resources across services; 2PC is stronger but fragile.</p>
+            </div>
+            <div>
+              <strong>Auto-refund vs manual review</strong>
+              <p>Auto-refund is faster but risks refunding valid charges; manual is safer but slower.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Payment succeeds but order service is down — money charged, no order record. Requires webhook reconciliation.</li>
+            <li>Reservation TTL expires during slow payment entry — user pays for out-of-stock items.</li>
+            <li>Double-click on &#x27;Pay&#x27; button sends two requests — without idempotency key, user is double-charged.</li>
+            <li>Flash sale: 10K concurrent reservations for 100 units — optimistic lock retry storm.</li>
+            <li>Price changed between add-to-cart and checkout — user charged a different amount than displayed.</li>
+            <li>Reaper job and payment confirmation race — reservation released just as payment succeeds.</li>
+            <li>Stripe webhook arrives before synchronous response — duplicate processing if not idempotent.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add support for split payments (gift card + credit card)?</li>
+            <li>Design a fraud detection layer that scores orders before payment.</li>
+            <li>How would you handle multi-currency with real-time exchange rates?</li>
+            <li>Add support for subscription/recurring payments.</li>
+            <li>How would you implement order price-lock guarantees during flash sales?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Walk through the three-step saga (reserve, pay, confirm) with compensating actions for each failure mode. Explain payment idempotency with the triple-layer approach (client key, DB unique constraint, provider forwarding). Discuss the reservation TTL trade-off and the abandoned cart recovery. You do not need to solve multi-currency or fraud detection in 60 minutes.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../notification_system/">← Design a notification system</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../search_autocomplete/">Design a search autocomplete →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

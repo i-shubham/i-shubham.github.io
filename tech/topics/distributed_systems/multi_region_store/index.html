@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a multi-region active-active store | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Active-active means you will get conflicts — pick the data model that survives them, or admit you&#x27;re active-passive.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Design a multi-region active-active store</p>
+      <p class="eyebrow">Distributed Systems · Hard · ~60 min</p>
+      <h1>Design a multi-region active-active store</h1>
+      <p class="problem-deck">Active-active means you will get conflicts — pick the data model that survives them, or admit you&#x27;re active-passive.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify active-active vs active-passive</strong><p>Both regions accept writes vs one primary, one standby.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Replication topology</strong><p>Bidirectional async replication, conflict detection, lag SLOs.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Conflict resolution strategies</strong><p>LWW, vector clocks, CRDTs, application-level merge.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Read-your-writes consistency</strong><p>Sticky sessions, causal tokens, read-after-write routing.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Data model constraints</strong><p>Designing for conflict-free operations — CRDTs, append-only, idempotent.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code + failure trace</strong><p>Python conflict resolver with LWW and CRDT counter.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Operational concerns</strong><p>Lag monitoring, region failover, data reconciliation.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by making sure we actually need active-active. If the traffic can tolerate routing to one primary region with a standby for failover, active-passive is dramatically simpler — no conflicts, strong consistency, straightforward failover. Active-active only makes sense when you need writes in multiple regions for latency (users in EU and US both need &lt; 50 ms write latency) or for availability during a full region outage.</p>
+          <p>Once we commit to active-active, we commit to conflicts. Two users in different regions can update the same record within the replication lag window (typically 50–200 ms cross-region). The question is: how do we resolve those conflicts? Last-writer-wins (LWW) with HLC timestamps is the simplest — one write silently drops. CRDTs (counters, sets, registers) resolve automatically with mathematically guaranteed convergence. Application-level merge functions give the most control but are the hardest to get right.</p>
+          <p>The sneaky problem is read-your-writes. A user writes in US-East, then reads from US-West (because DNS rotated them). If replication hasn&#x27;t caught up, they see stale data — their own write vanished. Solutions: sticky sessions (route the user to the same region), causal tokens (the write returns a token; the read includes it, and the local replica waits for replication to reach that point), or read-after-write routing (forward reads to the write region if the causal token hasn&#x27;t arrived locally).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Which regions need to accept writes — 2, 3, more?</li>
+            <li>What is the data model — key-value, document, relational?</li>
+            <li>What is the acceptable replication lag between regions?</li>
+            <li>Are conflicts expected to be rare (&lt; 0.1%) or common?</li>
+            <li>Can the data model be redesigned to avoid conflicts (CRDTs, append-only)?</li>
+            <li>Do users expect read-your-writes consistency?</li>
+            <li>What is the conflict resolution strategy — LWW, merge function, user prompt?</li>
+            <li>What is the region failover time SLA?</li>
+            <li>Is this a greenfield design or retrofitting an existing single-region store?</li>
+            <li>What is the cross-region RTT between the chosen regions?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: replication topology, conflict resolution (LWW, CRDT, merge), read-your-writes, lag SLOs.</li>
+            <li>Out: full CRDT implementation library, network infrastructure design.</li>
+            <li>Stretch: design a conflict audit log and manual resolution workflow for non-mergeable conflicts.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>write(region, key, value, hlc_ts)</strong>
+              <p>Writes locally and enqueues for async replication.</p>
+            </div>
+            <div>
+              <strong>read(region, key, causal_token?)</strong>
+              <p>Reads locally, optionally waiting for causal consistency.</p>
+            </div>
+            <div>
+              <strong>resolve_conflict(local, remote)</strong>
+              <p>Deterministic merge — LWW, CRDT merge, or app-level function.</p>
+            </div>
+            <div>
+              <strong>replicate(source_region, target_region, changelog)</strong>
+              <p>Async changelog shipping between regions.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Write latency</strong>
+              <p>p99 &lt; 10 ms local (no cross-region round trip on write path).</p>
+            </div>
+            <div>
+              <strong>Replication lag</strong>
+              <p>p99 &lt; 200 ms between any two regions; alert on &gt; 500 ms.</p>
+            </div>
+            <div>
+              <strong>Convergence</strong>
+              <p>All replicas converge to identical state within lag SLO after conflicts.</p>
+            </div>
+            <div>
+              <strong>Read-your-writes</strong>
+              <p>Guaranteed within the same session using causal tokens.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Regions</strong>
+              <p>2 active regions (US-East, EU-West), RTT ~80 ms.</p>
+            </div>
+            <div>
+              <strong>Write volume</strong>
+              <p>5 000 writes/s per region, 10 000 total.</p>
+            </div>
+            <div>
+              <strong>Conflict rate</strong>
+              <p>&lt; 0.1% of writes — ~10 conflicts/s, resolved by LWW or CRDT.</p>
+            </div>
+            <div>
+              <strong>Replication bandwidth</strong>
+              <p>~50 MB/s changelog stream per direction (5k writes × 10 KB avg).</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Write API
+PUT /store/{key}
+  Header: X-Region: us-east
+  Body: {&quot;value&quot;: {...}, &quot;hlc_ts&quot;: &quot;(1690000000000, 3, us-east)&quot;}
+  Response: 200 {&quot;causal_token&quot;: &quot;us-east:42:1690000000000&quot;}
+
+# Read API
+GET /store/{key}
+  Header: X-Causal-Token: us-east:42:1690000000000  (optional)
+  Response: 200 {&quot;value&quot;: {...}, &quot;hlc_ts&quot;: &quot;...&quot;, &quot;region&quot;: &quot;eu-west&quot;}
+
+# Replication stream (internal)
+gRPC ReplicateChangelog(stream ChangeEntry) → stream Ack
+  ChangeEntry: {key, value, hlc_ts, source_region, sequence_number}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql"># Per-region data store
+CREATE TABLE kv_store (
+  key           VARCHAR PRIMARY KEY,
+  value         JSONB,
+  hlc_physical  BIGINT NOT NULL,
+  hlc_logical   INT NOT NULL,
+  source_region VARCHAR(32) NOT NULL,
+  version       BIGINT NOT NULL DEFAULT 0
+);
+
+# Changelog for replication
+CREATE TABLE changelog (
+  seq           BIGSERIAL PRIMARY KEY,
+  key           VARCHAR NOT NULL,
+  value         JSONB,
+  hlc_physical  BIGINT NOT NULL,
+  hlc_logical   INT NOT NULL,
+  source_region VARCHAR(32) NOT NULL
+);
+CREATE INDEX idx_changelog_seq ON changelog(seq);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Active-active replication: each region has a full copy of the data. Writes go to the local region&#x27;s store and are appended to a changelog. A replication service continuously ships changelog entries to remote regions. On the receiving end, each entry is applied with conflict resolution.</p>
+          <p>Last-writer-wins (LWW): on conflict (same key modified in both regions within the lag window), compare HLC timestamps. The higher timestamp wins. The loser is silently discarded. This is simple and deterministic but can lose data. It works for data where the latest value is genuinely the correct one (user profile updates, settings).</p>
+          <p>CRDTs: for counters (likes, inventory decrements), use a G-Counter (grow-only) or PN-Counter (positive-negative). Each region maintains its own count; the merged value is the sum. For sets, use an OR-Set (observed-remove set). These resolve automatically with mathematical guarantees: commutativity, associativity, idempotency. The trade-off is that not all data models fit CRDTs — a free-form JSON document doesn&#x27;t have a natural merge function.</p>
+          <p>Read-your-writes with causal tokens: the write response includes a token encoding (region, sequence_number, hlc_ts). On subsequent reads, the client sends this token. If the local replica hasn&#x27;t reached that sequence number yet, it either waits (up to a timeout) or routes the read to the origin region. This guarantees the user sees their own writes without requiring strong consistency for all reads.</p>
+          <p>Lag SLO monitoring: track replication_lag_ms = current_time − last_applied_changelog_entry_time. Alert at p99 &gt; 500 ms. If lag grows unbounded, the replication stream may be falling behind — common causes: changelog consumer is slow, network partition, or receiving region is overloaded.</p>
+<figure class="diagram dark" aria-label="Multi-region active-active replication">
+  <div class="flow-row">
+    <div class="node">US-East (writes + reads)</div>
+    <div class="node">← changelog stream →</div>
+    <div class="node">EU-West (writes + reads)</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Conflict on key X</div>
+    <div class="node accent">Resolve: LWW / CRDT / merge fn</div>
+    <div class="node">Both converge to same value</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Read-your-writes with causal token">
+  <div class="flow-row">
+    <div class="node">User writes in US-East → token: us-east:42</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">User reads from EU-West with token us-east:42</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">EU-West at seq 40 → wait for replication to reach 42</div>
+    <div class="node accent">Seq 42 arrives → serve read</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Conflict trace: User A in US-East updates profile.name = &#x27;Alice&#x27; at HLC (1000, 0, us-east). User B in EU-West updates profile.name = &#x27;Alicia&#x27; at HLC (1000, 2, eu-west) — B&#x27;s clock is slightly ahead. The changelog entries ship asynchronously. US-East receives EU-West&#x27;s entry and compares: (1000, 2, eu-west) &gt; (1000, 0, us-east), so LWW picks &#x27;Alicia&#x27;. EU-West receives US-East&#x27;s entry and also sees (1000, 2, eu-west) &gt; (1000, 0, us-east) — same winner. Both regions converge to &#x27;Alicia&#x27;. But Alice&#x27;s update was lost — she doesn&#x27;t know.</p>
+          <p>CRDT counter trace: a product has stock_count tracked as a PN-Counter. US-East decrements by 1 (local delta: -1). EU-West decrements by 2 (local delta: -2). Replication ships both deltas. Each region merges: total delta = -1 + -2 = -3. Both converge to the same stock count without conflicts. The key insight: commutative operations don&#x27;t conflict.</p>
+          <p>Read-your-writes failure without causal tokens: User writes order in US-East (seq 42), gets a 200 OK. DNS routes their next request to EU-West, which is at seq 40. The user sees no order — they think the system lost it. With causal tokens: the write returns token &#x27;us-east:42&#x27;. The read includes this token. EU-West sees it needs seq 42 but only has 40. It waits up to 200 ms for replication. At seq 41... 42 — arrived. Serve the read with the user&#x27;s order visible.</p>
+          <p>Operational concern — replication lag during region failover: if US-East goes down with unreplicated changelog entries (seq 42–45), those writes are lost until US-East recovers. Mitigation: synchronous replication for critical writes (e.g., payments) — the write doesn&#x27;t acknowledge until at least one remote region confirms. This adds cross-region RTT (~80 ms) to write latency but prevents data loss on region failure.</p>
+        </section>
+        <section class="problem-section">
+          <h2>LWW conflict resolver and PN-Counter CRDT</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class HLCTimestamp:
+    physical: int
+    logical: int
+    region: str
+
+    def __gt__(self, other: &#x27;HLCTimestamp&#x27;) -&gt; bool:
+        return (self.physical, self.logical, self.region) &gt; \
+               (other.physical, other.logical, other.region)
+
+
+@dataclass
+class VersionedValue:
+    value: Any
+    ts: HLCTimestamp
+
+
+def lww_resolve(local: VersionedValue, remote: VersionedValue) -&gt; VersionedValue:
+    return remote if remote.ts &gt; local.ts else local
+
+
+@dataclass
+class PNCounter:
+    &quot;&quot;&quot;Positive-Negative CRDT counter — merges without conflicts.&quot;&quot;&quot;
+    increments: dict = field(default_factory=dict)  # region -&gt; count
+    decrements: dict = field(default_factory=dict)  # region -&gt; count
+
+    def increment(self, region: str, amount: int = 1):
+        self.increments[region] = self.increments.get(region, 0) + amount
+
+    def decrement(self, region: str, amount: int = 1):
+        self.decrements[region] = self.decrements.get(region, 0) + amount
+
+    @property
+    def value(self) -&gt; int:
+        return sum(self.increments.values()) - sum(self.decrements.values())
+
+    def merge(self, other: &#x27;PNCounter&#x27;) -&gt; &#x27;PNCounter&#x27;:
+        merged = PNCounter()
+        all_regions = set(self.increments) | set(other.increments)
+        for r in all_regions:
+            merged.increments[r] = max(self.increments.get(r, 0),
+                                       other.increments.get(r, 0))
+        all_regions = set(self.decrements) | set(other.decrements)
+        for r in all_regions:
+            merged.decrements[r] = max(self.decrements.get(r, 0),
+                                       other.decrements.get(r, 0))
+        return merged</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::Ordering;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HLCTimestamp {
+    pub physical: u64,
+    pub logical: u64,
+    pub region: String,
+}
+
+impl PartialOrd for HLCTimestamp {
+    fn partial_cmp(&amp;self, other: &amp;Self) -&gt; Option&lt;Ordering&gt; { Some(self.cmp(other)) }
+}
+impl Ord for HLCTimestamp {
+    fn cmp(&amp;self, other: &amp;Self) -&gt; Ordering {
+        (self.physical, self.logical, &amp;self.region)
+            .cmp(&amp;(other.physical, other.logical, &amp;other.region))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VersionedValue&lt;T&gt; {
+    pub value: T,
+    pub ts: HLCTimestamp,
+}
+
+/// Last-Writer-Wins: keep the value with the greater timestamp.
+pub fn lww_resolve&lt;T: Clone&gt;(
+    local: &amp;VersionedValue&lt;T&gt;,
+    remote: &amp;VersionedValue&lt;T&gt;,
+) -&gt; VersionedValue&lt;T&gt; {
+    if remote.ts &gt; local.ts { remote.clone() } else { local.clone() }
+}
+
+/// Positive-Negative CRDT counter — merges without conflicts.
+#[derive(Debug, Clone, Default)]
+pub struct PNCounter {
+    pub increments: HashMap&lt;String, i64&gt;,
+    pub decrements: HashMap&lt;String, i64&gt;,
+}
+
+impl PNCounter {
+    pub fn increment(&amp;mut self, region: &amp;str, amount: i64) {
+        *self.increments.entry(region.into()).or_insert(0) += amount;
+    }
+
+    pub fn decrement(&amp;mut self, region: &amp;str, amount: i64) {
+        *self.decrements.entry(region.into()).or_insert(0) += amount;
+    }
+
+    pub fn value(&amp;self) -&gt; i64 {
+        let inc: i64 = self.increments.values().sum();
+        let dec: i64 = self.decrements.values().sum();
+        inc - dec
+    }
+
+    pub fn merge(&amp;self, other: &amp;PNCounter) -&gt; PNCounter {
+        let mut merged = PNCounter::default();
+        for key in self.increments.keys().chain(other.increments.keys()) {
+            let a = self.increments.get(key).copied().unwrap_or(0);
+            let b = other.increments.get(key).copied().unwrap_or(0);
+            merged.increments.insert(key.clone(), a.max(b));
+        }
+        for key in self.decrements.keys().chain(other.decrements.keys()) {
+            let a = self.decrements.get(key).copied().unwrap_or(0);
+            let b = other.decrements.get(key).copied().unwrap_or(0);
+            merged.decrements.insert(key.clone(), a.max(b));
+        }
+        merged
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;map&gt;
+#include &lt;algorithm&gt;
+
+struct HLCTimestamp {
+    uint64_t physical;
+    uint64_t logical;
+    std::string region;
+
+    bool operator&gt;(const HLCTimestamp &amp;o) const {
+        return std::tie(physical, logical, region)
+             &gt; std::tie(o.physical, o.logical, o.region);
+    }
+};
+
+template &lt;typename T&gt;
+struct VersionedValue {
+    T value;
+    HLCTimestamp ts;
+};
+
+/// Last-Writer-Wins: keep the value with the greater timestamp.
+template &lt;typename T&gt;
+VersionedValue&lt;T&gt; lwwResolve(const VersionedValue&lt;T&gt; &amp;local,
+                             const VersionedValue&lt;T&gt; &amp;remote) {
+    return (remote.ts &gt; local.ts) ? remote : local;
+}
+
+/// Positive-Negative CRDT counter — merges without conflicts.
+@interface PNCounter : NSObject {
+    std::map&lt;std::string, int64_t&gt; _increments;
+    std::map&lt;std::string, int64_t&gt; _decrements;
+}
+- (void)increment:(const std::string &amp;)region amount:(int64_t)amount;
+- (void)decrement:(const std::string &amp;)region amount:(int64_t)amount;
+- (int64_t)value;
+- (PNCounter *)mergeWith:(PNCounter *)other;
+@end
+
+@implementation PNCounter
+
+- (void)increment:(const std::string &amp;)region amount:(int64_t)amount {
+    _increments[region] += amount;
+}
+
+- (void)decrement:(const std::string &amp;)region amount:(int64_t)amount {
+    _decrements[region] += amount;
+}
+
+- (int64_t)value {
+    int64_t inc = 0, dec = 0;
+    for (auto &amp;[_, v] : _increments) inc += v;
+    for (auto &amp;[_, v] : _decrements) dec += v;
+    return inc - dec;
+}
+
+- (PNCounter *)mergeWith:(PNCounter *)other {
+    PNCounter *merged = [[PNCounter alloc] init];
+    // Take per-region max for increments
+    for (auto &amp;[r, v] : _increments)
+        merged-&gt;_increments[r] = std::max(v, other-&gt;_increments[r]);
+    for (auto &amp;[r, v] : other-&gt;_increments)
+        merged-&gt;_increments[r] = std::max(v, _increments[r]);
+    // Same for decrements
+    for (auto &amp;[r, v] : _decrements)
+        merged-&gt;_decrements[r] = std::max(v, other-&gt;_decrements[r]);
+    for (auto &amp;[r, v] : other-&gt;_decrements)
+        merged-&gt;_decrements[r] = std::max(v, _decrements[r]);
+    return merged;
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Conflict resolution sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">US-East</span><p>Write key=profile, value="Alice", hlc=(1000,0,us-east)</p></div>
+    <div class="seq-row"><span class="actor">EU-West</span><p>Write key=profile, value="Alicia", hlc=(1000,2,eu-west)</p></div>
+    <div class="seq-row"><span class="actor">Replicator</span><p>Ships US-East entry to EU-West, EU-West entry to US-East</p></div>
+    <div class="seq-row"><span class="actor">US-East</span><p>Conflict: (1000,2,eu-west) &gt; (1000,0,us-east) → adopt "Alicia"</p></div>
+    <div class="seq-row"><span class="actor">EU-West</span><p>Conflict: same comparison → keep "Alicia"</p></div>
+    <div class="seq-row"><span class="actor">Both</span><p>Converged: profile = "Alicia"</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Active-active vs active-passive</strong>
+              <p>Active-active gives lower latency and better availability but introduces conflict resolution complexity.</p>
+            </div>
+            <div>
+              <strong>LWW vs CRDTs</strong>
+              <p>LWW is simple but loses data; CRDTs preserve all updates but only work for commutative data models.</p>
+            </div>
+            <div>
+              <strong>Async vs sync replication</strong>
+              <p>Async gives low write latency but risks data loss on region failure; sync adds cross-region RTT.</p>
+            </div>
+            <div>
+              <strong>Causal tokens vs sticky sessions</strong>
+              <p>Tokens are more flexible but add complexity; sticky sessions are simple but break on failover.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>LWW with wall-clock timestamps instead of HLC — clock skew causes wrong winner.</li>
+            <li>No read-your-writes guarantee — users see stale data after writes.</li>
+            <li>Replication lag growing unbounded — regions diverge for minutes.</li>
+            <li>Failing over to a region with unreplicated changelog entries — data loss.</li>
+            <li>CRDT counter going negative due to decrements exceeding increments — needs business-logic guard.</li>
+            <li>Circular replication (A→B→A) without deduplication — changelog entries loop forever.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Add a conflict audit log that records both sides of every LWW conflict for manual review.</li>
+            <li>Design a region failover runbook with DNS cutover, lag verification, and changelog reconciliation.</li>
+            <li>Implement an OR-Set CRDT for a collaborative shopping cart that handles concurrent adds and removes.</li>
+            <li>Build a replication lag dashboard with per-key breakdowns and alerting.</li>
+            <li>Compare with DynamoDB Global Tables and CockroachDB&#x27;s multi-region approach.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Clearly distinguish active-active from active-passive and when each is appropriate. Walk through conflict resolution with a concrete example (two concurrent writes to the same key). Implement LWW and at least one CRDT. Address read-your-writes with causal tokens. Mention the sync replication trade-off for critical data. The candidate who asks &#x27;do we actually need active-active?&#x27; before diving in shows strong judgment.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../clock_skew/">← Reconcile clocks across regions</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../safe_deploy_drain/">Detect and drain a bad deploy safely →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

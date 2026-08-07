@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-account strategy for prod/stage/dev | Cloud | Engineering Notes</title>
+  <meta name="description" content="Separate accounts beat IAM spaghetti — blast radius and billing clarity show up immediately.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Multi-account strategy for prod/stage/dev</p>
+      <p class="eyebrow">Cloud · Medium · ~60 min</p>
+      <h1>Multi-account strategy for prod/stage/dev</h1>
+      <p class="problem-deck">Separate accounts beat IAM spaghetti — blast radius and billing clarity show up immediately.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Current structure, team count, compliance needs, shared service requirements</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>OU structure</strong><p>Root → workloads (prod/staging/dev) + shared-services + security</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>SCP design</strong><p>Deny policies per OU: region restrictions, instance type limits, public access prevention</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Cross-account access</strong><p>SSO → assume role in target account; no IAM users in member accounts</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Shared networking</strong><p>Transit Gateway hub-and-spoke; shared VPC for common services</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Centralized logging</strong><p>CloudTrail org trail → security account S3; centralized SIEM</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Account vending</strong><p>Terraform/CloudFormation for new account baseline: VPC, roles, tags, budget alerts</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>A single AWS account for everything — dev, staging, and production — works until it does not. The problems are predictable: an engineer accidentally deletes a production resource from a dev session, billing is impossible to attribute per team or environment, and IAM policies become an unmaintainable web of conditions trying to isolate resources within a flat namespace.</p>
+          <p>Separate accounts solve these problems structurally. A dev account has no access to production resources — not because of IAM policy, but because the resources physically do not exist in that account. Billing is automatic: each account&#x27;s cost is its own line item. Blast radius is limited: a misconfigured security group in dev cannot expose a production database.</p>
+          <p>AWS Organizations provides the structure: an organization with organizational units (OUs) for prod, staging, dev, shared-services, and security. Service control policies (SCPs) on each OU enforce guardrails that no IAM policy can override. Shared services (networking, CI/CD, logging) live in a dedicated account that all environments access via cross-account roles.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many environments: dev, staging, prod? Any others (sandbox, QA)?</li>
+            <li>How many teams and do they need separate dev accounts?</li>
+            <li>Existing account structure or greenfield?</li>
+            <li>Shared services needed: networking hub, CI/CD, centralized logging?</li>
+            <li>Compliance requirements — are there services that must be denied in certain OUs?</li>
+            <li>DNS and domain management — Route 53 in one account or distributed?</li>
+            <li>SSO provider for cross-account access?</li>
+            <li>Budget — is per-account billing attribution needed?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Organization structure, OUs, SCPs, cross-account access, shared networking</li>
+            <li>In scope — Account vending (automated new account creation), centralized logging</li>
+            <li>Out of scope — Per-application architecture within each account</li>
+            <li>Defer — AWS Control Tower adoption, automated compliance remediation</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Organization</strong>
+              <p>Root → OUs for prod, staging, dev, shared-services, security</p>
+            </div>
+            <div>
+              <strong>SCPs</strong>
+              <p>Deny dangerous actions per OU: no public S3 in prod, no expensive instances in dev</p>
+            </div>
+            <div>
+              <strong>Cross-account access</strong>
+              <p>SSO roles assume environment-specific roles; no static credentials</p>
+            </div>
+            <div>
+              <strong>Shared networking</strong>
+              <p>Transit Gateway in shared-services account; spoke VPCs in environment accounts</p>
+            </div>
+            <div>
+              <strong>Centralized logging</strong>
+              <p>CloudTrail, VPC flow logs, and application logs aggregate in security account</p>
+            </div>
+            <div>
+              <strong>Account vending</strong>
+              <p>Automated new account creation with baseline config (VPC, roles, SCPs)</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Isolation</strong>
+              <p>Production resources inaccessible from dev account — structural, not policy-based</p>
+            </div>
+            <div>
+              <strong>Billing clarity</strong>
+              <p>Per-account cost visible in consolidated billing; per-team attribution via tags</p>
+            </div>
+            <div>
+              <strong>Governance</strong>
+              <p>SCPs enforce organization-wide guardrails that individual accounts cannot bypass</p>
+            </div>
+            <div>
+              <strong>Scalability</strong>
+              <p>Support 50+ accounts without manual per-account configuration</p>
+            </div>
+            <div>
+              <strong>Velocity</strong>
+              <p>New account provisioned and ready in &lt; 1 hour</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Accounts</strong>
+              <p>~15-20: 3 prod, 3 staging, 5 dev (per team), 2 shared-services, 2 security</p>
+            </div>
+            <div>
+              <strong>SCPs</strong>
+              <p>~8 policies: region deny, instance type limits, public S3 deny, encryption enforcement</p>
+            </div>
+            <div>
+              <strong>Transit Gateway</strong>
+              <p>1 hub in shared-services; 15-20 VPC attachments at $0.05/hr each = ~$550/month</p>
+            </div>
+            <div>
+              <strong>CloudTrail org trail</strong>
+              <p>~2TB/month of trail data across all accounts → $46/month S3 storage</p>
+            </div>
+            <div>
+              <strong>Billing</strong>
+              <p>Consolidated billing with per-account breakdown; org-level Savings Plans shared</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Account vending baseline configuration
+# ──────────────────────────────────────────
+
+account_baseline:
+  vpc:
+    cidr: auto-assigned from org IPAM pool
+    subnets: 3 AZs × 3 tiers
+    transit_gateway_attachment: true
+  iam:
+    sso_permission_sets: [dev, prod-read, prod-deploy]
+    service_roles: [cicd-deploy, monitoring-agent]
+  logging:
+    cloudtrail: org trail (sent to log-archive account)
+    vpc_flow_logs: enabled → log-archive S3 bucket
+  security:
+    guardduty: member of org GuardDuty
+    security_hub: enabled with AWS Foundational benchmark
+  budget:
+    monthly_budget: varies by OU (dev=$2K, staging=$5K, prod=$50K)
+    alert_threshold: 80% and 100%
+  tags:
+    required: [environment, team, cost-center]</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The multi-account strategy has five components: structure, guardrails, networking, logging, and automation.</p>
+          <p>Structure: the organization has five OU categories. Workload OUs (prod, staging, dev) hold application accounts. Shared-services holds networking and CI/CD. Security holds log archive and audit tools. Each production service gets its own account for maximum isolation. Staging is one shared account (lower blast radius concern). Dev has per-team accounts for independence.</p>
+          <p>Guardrails (SCPs): SCPs are deny-only policies on OUs that no IAM policy can override. On the dev OU: deny large instance types (only t3, t4g, m5.large allowed), deny public S3 bucket creation, deny CloudTrail deletion. On the prod OU: deny resource creation outside approved regions (us-east-1, us-west-2), deny S3 public access, require encryption on all EBS volumes and S3 objects. SCPs are the first line of defense against misconfiguration.</p>
+          <p>Networking: Transit Gateway in the shared-services account acts as a hub. Each environment account creates a VPC and attaches it to the Transit Gateway. Route tables control traffic: prod VPCs cannot route to dev VPCs. Shared services (ECR, internal APIs) are accessible from all environments via the Transit Gateway. DNS is centralized in Route 53 in the networking account with cross-account hosted zone associations.</p>
+          <p>Logging: an organization-level CloudTrail sends all API events from all accounts to an S3 bucket in the log-archive account. VPC flow logs from all accounts go to the same bucket with a different prefix. GuardDuty runs as an organization feature with the security account as the delegated administrator. Security Hub aggregates findings across all accounts.</p>
+          <p>Automation (account vending): when a new team needs a dev account, a Terraform pipeline creates the account, moves it to the correct OU, deploys the baseline VPC, attaches it to Transit Gateway, configures SSO roles, enables CloudTrail and GuardDuty, and sets budget alerts. The new account is ready in under 1 hour.</p>
+<figure class="diagram dark">
+  <figcaption>Organization Structure</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">Prod OU</span><p>orders, payments, platform</p></div>
+    <div class="node"><span class="label">Staging OU</span><p>shared staging account</p></div>
+    <div class="node"><span class="label">Dev OU</span><p>per-team accounts</p></div>
+    <div class="node accent"><span class="label">Shared Services</span><p>networking, CI/CD</p></div>
+    <div class="node"><span class="label">Security</span><p>logs, audit, GuardDuty</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Transit Gateway Networking</figcaption>
+  <div class="flow-row">
+    <div class="node">Prod VPC</div>
+    <div class="node accent">Transit GW<br><small>shared-services</small></div>
+    <div class="node">Staging VPC</div>
+    <div class="node">Dev VPC</div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>SCP Guardrails per OU</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Dev OU</span><p>Small instances only<br>No public S3<br>Budget: $2K/mo</p></div>
+    <div class="node accent"><span class="label">Prod OU</span><p>Approved regions only<br>Encryption required<br>No CloudTrail deletion</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>SCP design principles: SCPs should be deny-lists, not allow-lists. An allow-list SCP that only permits specific services breaks every time AWS launches a new service your team needs. A deny-list approach: deny specific dangerous actions (delete CloudTrail, create IAM users, launch expensive instances) and allow everything else. This is easier to maintain and does not block engineers from using new services.</p>
+          <p>Cross-account database access: production databases should not be accessible from dev accounts. For debugging, engineers query a read replica in staging (which has anonymized data) or use a secure bastion in the prod account with break-glass access. Direct VPC peering between dev and prod is explicitly blocked via Transit Gateway route tables.</p>
+          <p>Consolidated billing with Savings Plans: Savings Plans purchased at the organization level apply across all member accounts. This means: if the prod account commits to $10K/month Compute Savings Plan, unused capacity in prod flows to staging, then dev. This maximizes utilization of the commitment. RIs, however, are account-specific unless sharing is enabled.</p>
+          <p>Account vending automation: I use Terraform with the AWS provider&#x27;s aws_organizations_account resource. The pipeline: (1) create account, (2) move to target OU, (3) assume a bootstrap role in the new account, (4) deploy baseline stack (VPC, SSO roles, CloudTrail, GuardDuty membership, budget alarm), (5) attach VPC to Transit Gateway. The bootstrap role is created automatically by AWS Organizations (OrganizationAccountAccessRole) and can be assumed from the management account.</p>
+          <p>Account sprawl management: with automated vending, it is easy to create too many accounts. Guardrails: (1) require Jira ticket for account creation, (2) quarterly review of account utilization — accounts with &lt; $100/month spend are candidates for consolidation, (3) naming convention enforcement (env-team-purpose), (4) auto-tag with creation date and owner.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Account vending with organization and baseline setup</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+
+def create_member_account(name: str, email: str, ou_id: str):
+    org = boto3.client(&#x27;organizations&#x27;)
+    result = org.create_account(
+        Email=email,
+        AccountName=name,
+        RoleName=&#x27;OrganizationAccountAccessRole&#x27;,
+        IamUserAccessToBilling=&#x27;DENY&#x27;
+    )
+    account_id = result[&#x27;CreateAccountStatus&#x27;][&#x27;AccountId&#x27;]
+
+    # Wait for account creation
+    waiter = org.get_waiter(&#x27;account_created&#x27;)
+    # Move to target OU
+    roots = org.list_roots()[&#x27;Roots&#x27;]
+    org.move_account(
+        AccountId=account_id,
+        SourceParentId=roots[0][&#x27;Id&#x27;],
+        DestinationParentId=ou_id
+    )
+
+    # Apply baseline via cross-account assume role
+    sts = boto3.client(&#x27;sts&#x27;)
+    creds = sts.assume_role(
+        RoleArn=f&#x27;arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole&#x27;,
+        RoleSessionName=&#x27;baseline-setup&#x27;
+    )[&#x27;Credentials&#x27;]
+
+    # Use creds to deploy baseline resources in new account
+    deploy_baseline(creds, account_id, name)
+    return account_id</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_organizations as org;
+use aws_sdk_sts as sts;
+
+pub async fn create_member_account(
+    name: &amp;str, email: &amp;str, ou_id: &amp;str,
+) -&gt; String {
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let org_client = org::Client::new(&amp;config);
+    let sts_client = sts::Client::new(&amp;config);
+
+    let result = org_client
+        .create_account()
+        .email(email)
+        .account_name(name)
+        .role_name(&quot;OrganizationAccountAccessRole&quot;)
+        .iam_user_access_to_billing(org::types::IamUserAccessToBilling::Deny)
+        .send()
+        .await
+        .unwrap();
+
+    let account_id = result
+        .create_account_status()
+        .unwrap()
+        .account_id()
+        .unwrap()
+        .to_string();
+
+    // Move to target OU
+    let roots = org_client.list_roots().send().await.unwrap();
+    let root_id = roots.roots().first().unwrap().id().unwrap();
+
+    org_client
+        .move_account()
+        .account_id(&amp;account_id)
+        .source_parent_id(root_id)
+        .destination_parent_id(ou_id)
+        .send()
+        .await
+        .unwrap();
+
+    // Cross-account assume role for baseline setup
+    let role_arn = format!(
+        &quot;arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole&quot;
+    );
+    let creds = sts_client
+        .assume_role()
+        .role_arn(&amp;role_arn)
+        .role_session_name(&quot;baseline-setup&quot;)
+        .send()
+        .await
+        .unwrap();
+
+    deploy_baseline(&amp;creds, &amp;account_id, name).await;
+    account_id
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+
+@protocol AWSOrganizations &lt;NSObject&gt;
+- (NSString *)createAccountWithName:(NSString *)name
+                              email:(NSString *)email
+                           roleName:(NSString *)role;
+- (NSString *)rootId;
+- (void)moveAccount:(NSString *)accountId from:(NSString *)src to:(NSString *)dst;
+@end
+
+@protocol AWSSTS &lt;NSObject&gt;
+- (NSDictionary *)assumeRole:(NSString *)roleArn session:(NSString *)session;
+@end
+
+static NSString *createMemberAccount(id&lt;AWSOrganizations&gt; org,
+                                     id&lt;AWSSTS&gt; sts,
+                                     NSString *name,
+                                     NSString *email,
+                                     NSString *ouId) {
+    // Create account in the organization
+    NSString *accountId = [org createAccountWithName:name
+                                               email:email
+                                            roleName:@&quot;OrganizationAccountAccessRole&quot;];
+
+    // Move from root OU to target OU
+    NSString *rootId = [org rootId];
+    [org moveAccount:accountId from:rootId to:ouId];
+
+    // Cross-account assume role to deploy baseline
+    NSString *roleArn = [NSString stringWithFormat:
+        @&quot;arn:aws:iam::%@:role/OrganizationAccountAccessRole&quot;, accountId];
+    NSDictionary *creds = [sts assumeRole:roleArn session:@&quot;baseline-setup&quot;];
+
+    // deployBaseline(creds, accountId, name) — application-specific setup
+    NSLog(@&quot;Baseline deployed for account %@&quot;, accountId);
+    return accountId;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Request</span><p>Team "inventory" requests a dev account via Jira ticket</p></div>
+    <div class="seq-row"><span class="actor">Terraform</span><p>Create account dev-inventory (ID: 131313131313), move to Dev OU</p></div>
+    <div class="seq-row"><span class="actor">Baseline</span><p>Deploy VPC (10.5.0.0/16), SSO roles, CloudTrail, GuardDuty → attach to Transit GW</p></div>
+    <div class="seq-row"><span class="actor">SCP</span><p>Dev OU SCP applies: t3/t4g instances only, no public S3, no CloudTrail deletion</p></div>
+    <div class="seq-row"><span class="actor">SSO</span><p>Okta group "inventory-dev" mapped to team-inventory-dev permission set in new account</p></div>
+    <div class="seq-row"><span class="actor">Budget</span><p>$2K/month budget alarm configured; alerts at 80% and 100%</p></div>
+    <div class="seq-row"><span class="actor">Ready</span><p>Account available to team within 45 minutes of request approval</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Per-service prod accounts vs shared prod</strong>
+              <p>Per-service gives maximum isolation but multiplies accounts. Shared prod is simpler but increases blast radius</p>
+            </div>
+            <div>
+              <strong>Transit Gateway vs VPC peering</strong>
+              <p>TGW scales to 50+ VPCs with centralized routing. Peering is free but creates N² relationships; unmanageable past 5 VPCs</p>
+            </div>
+            <div>
+              <strong>SCP deny-list vs allow-list</strong>
+              <p>Deny-list is easier to maintain and does not block new services. Allow-list is more secure but requires constant updates</p>
+            </div>
+            <div>
+              <strong>Shared staging vs per-team staging</strong>
+              <p>Shared is cheaper and simpler. Per-team gives isolation but doubles account count and networking complexity</p>
+            </div>
+            <div>
+              <strong>Org-level Savings Plan vs per-account</strong>
+              <p>Org-level maximizes utilization across accounts. Per-account gives clearer cost attribution but wastes unused commitment</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>SCP blocks a legitimate action in production — emergency fix: temporarily move the account out of the OU (requires org admin); post-fix: update the SCP</li>
+            <li>Transit Gateway route allows dev-to-prod traffic — quarterly route table audit; use network firewall for inspection between environments</li>
+            <li>New account has no VPC — account vending automation failed silently; add verification step that checks baseline resources</li>
+            <li>Consolidated billing obscures per-team costs — enforce tagging; use Cost Allocation Tags for team-level attribution within each account</li>
+            <li>Account sprawl: 50 accounts after 2 years, 20 are barely used — quarterly utilization review; consolidate or close unused accounts</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle a multi-cloud strategy (AWS + GCP) with shared identity?</li>
+            <li>How do you manage DNS across 20+ accounts with private hosted zones?</li>
+            <li>How would you implement automated compliance remediation (auto-fix non-compliant resources)?</li>
+            <li>When would you consider AWS Control Tower vs building your own landing zone?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: OU structure with environment separation, SCPs as guardrails (with specific examples), Transit Gateway for shared networking, centralized logging in a security account, and automated account vending. Explain why per-account isolation beats IAM-policy isolation.</p>
+          <p>You do not need to design the full Control Tower setup or automated compliance remediation. The interviewer wants to see: understanding of blast radius reduction via account boundaries, practical SCP examples, and networking between accounts without over-complexity.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../lambda_sqs_safe/">← Make a Lambda + SQS pipeline production-safe</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../observe_foreign_service/">Observe a service you did not write →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

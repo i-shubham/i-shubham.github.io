@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a notification system | System Design | Engineering Notes</title>
+  <meta name="description" content="Notifications are a fan-out problem with human constraints — quiet hours, preferences, and providers that rate-limit you mid-incident.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a notification system</p>
+      <p class="eyebrow">System Design · Medium · ~60 min</p>
+      <h1>Design a notification system</h1>
+      <p class="problem-deck">Notifications are a fan-out problem with human constraints — quiet hours, preferences, and providers that rate-limit you mid-incident.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Channels (email, SMS, push), volume, quiet hours, preference granularity.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Core dispatch, preference engine, retry logic. Defer template builder UI.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>1B notifications/day, 3 channels, peak around marketing blasts.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Event ingestion → preference filter → channel routers → provider adapters.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Preference engine</strong><p>Per-user, per-category opt-in/out, quiet hours, channel priority.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Reliability</strong><p>Provider failover, retry with backoff, DLQ for poison messages.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Scaling</strong><p>Partitioned queues by channel, provider rate limiting, dedup.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Observability, follow-ups — in-app notifications, analytics.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d clarify the channels first: email, SMS, and mobile push are the standard three, but in-app notifications and webhook callbacks might also be in scope. Each channel has different reliability characteristics — email is best-effort with no delivery guarantee, SMS has carrier-level rate limits, and push depends on device reachability. The system needs to abstract these differences behind a common dispatch interface.</p>
+          <p>The second critical requirement is user preferences. Users want to control which notifications they receive, on which channels, and when. A &#x27;quiet hours&#x27; feature suppresses non-urgent notifications between 10 PM and 8 AM in the user&#x27;s timezone. This means the dispatch pipeline needs to evaluate preferences before sending, not after.</p>
+          <p>I&#x27;d design this as a pipeline: event producers emit notification requests, a preference engine filters and routes them, channel-specific workers render templates and call provider APIs, and a retry/DLQ system handles failures.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Which channels — email, SMS, push, in-app, webhook?</li>
+            <li>What is the daily volume and peak spike (e.g., marketing blast)?</li>
+            <li>Do we support quiet hours per user timezone?</li>
+            <li>How granular are preferences — per category, per channel, or both?</li>
+            <li>Do we need delivery tracking (delivered, opened, clicked)?</li>
+            <li>What providers are we integrating with (SendGrid, Twilio, APNs, FCM)?</li>
+            <li>Is there a priority system (critical alerts bypass quiet hours)?</li>
+            <li>Do we need template management with variable substitution?</li>
+            <li>How do we handle provider outages — failover to backup provider?</li>
+            <li>Is deduplication needed to prevent sending the same notification twice?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: multi-channel dispatch (email, SMS, push), preference filtering, quiet hours.</li>
+            <li>In: retry with exponential backoff, provider failover, deduplication.</li>
+            <li>Out: in-app notification center, template builder UI, A/B testing on notification content.</li>
+            <li>Defer: delivery analytics (open/click tracking), internationalization/localization.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Send</strong>
+              <p>POST /notifications with user_ids, template, channel priority, and urgency level.</p>
+            </div>
+            <div>
+              <strong>Preferences</strong>
+              <p>GET/PUT /users/{id}/notification-preferences for category/channel opt-in/out.</p>
+            </div>
+            <div>
+              <strong>Quiet hours</strong>
+              <p>Per-user quiet hours configuration; urgent notifications bypass.</p>
+            </div>
+            <div>
+              <strong>Status</strong>
+              <p>GET /notifications/{id}/status returns delivery state per channel.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Throughput</strong>
+              <p>1B notifications/day ≈ 12K/sec avg, 100K/sec during marketing blasts.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>Critical alerts delivered within 30 seconds; bulk within 5 minutes.</p>
+            </div>
+            <div>
+              <strong>Reliability</strong>
+              <p>At-least-once delivery with deduplication to prevent double-sends.</p>
+            </div>
+            <div>
+              <strong>Provider failover</strong>
+              <p>If primary email provider is down, switch to backup within 60 seconds.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Daily volume</strong>
+              <p>1B notifications/day across 3 channels.</p>
+            </div>
+            <div>
+              <strong>Channel split</strong>
+              <p>Email: 60% (600M), Push: 30% (300M), SMS: 10% (100M).</p>
+            </div>
+            <div>
+              <strong>Queue depth</strong>
+              <p>Peak 100K/sec × 60s buffer = 6M messages in flight.</p>
+            </div>
+            <div>
+              <strong>Preference lookups</strong>
+              <p>1B notifications × 1 lookup each = 1B reads/day from preference cache.</p>
+            </div>
+            <div>
+              <strong>SMS cost</strong>
+              <p>100M SMS/day × $0.01 = $1M/day — SMS is expensive, prioritize push.</p>
+            </div>
+            <div>
+              <strong>Template storage</strong>
+              <p>~500 templates × 10 KB each = 5 MB — trivially small.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/notifications
+  Body: {
+    user_ids: [123, 456],
+    template_id: &#x27;order_shipped&#x27;,
+    params: { order_id: &#x27;ORD-789&#x27;, tracking_url: &#x27;...&#x27; },
+    channels: [&#x27;push&#x27;, &#x27;email&#x27;],  -- priority order
+    urgency: &#x27;normal&#x27;  -- &#x27;critical&#x27; bypasses quiet hours
+  }
+  Response 202: { notification_id, status: &#x27;queued&#x27; }
+
+GET /api/v1/users/{user_id}/notification-preferences
+  Response 200: {
+    categories: {
+      marketing: { email: true, push: false, sms: false },
+      order_updates: { email: true, push: true, sms: true }
+    },
+    quiet_hours: { start: &#x27;22:00&#x27;, end: &#x27;08:00&#x27;, timezone: &#x27;America/New_York&#x27; }
+  }
+
+PUT /api/v1/users/{user_id}/notification-preferences
+  Body: { categories: {...}, quiet_hours: {...} }
+  Response 200: { updated: true }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Templates (Postgres)
+CREATE TABLE notification_templates (
+  template_id   VARCHAR(64) PRIMARY KEY,
+  channel       VARCHAR(16) NOT NULL,
+  subject       VARCHAR(256),          -- email only
+  body_template TEXT NOT NULL,          -- with {{variable}} placeholders
+  updated_at    TIMESTAMP DEFAULT now()
+);
+
+-- User preferences (Postgres, cached in Redis)
+CREATE TABLE notification_preferences (
+  user_id     BIGINT,
+  category    VARCHAR(64),
+  channel     VARCHAR(16),
+  enabled     BOOLEAN DEFAULT true,
+  PRIMARY KEY (user_id, category, channel)
+);
+
+CREATE TABLE quiet_hours (
+  user_id     BIGINT PRIMARY KEY,
+  start_time  TIME NOT NULL,
+  end_time    TIME NOT NULL,
+  timezone    VARCHAR(64) NOT NULL
+);
+
+-- Delivery log (append-only, for dedup and tracking)
+CREATE TABLE notification_log (
+  notification_id  UUID,
+  user_id          BIGINT,
+  channel          VARCHAR(16),
+  status           VARCHAR(16),  -- queued|sent|delivered|failed
+  provider         VARCHAR(32),
+  sent_at          TIMESTAMP,
+  PRIMARY KEY (notification_id, user_id, channel)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The system is a four-stage pipeline: ingestion, preference filtering, channel routing, and provider dispatch.</p>
+          <p>Ingestion receives notification requests from internal services via an API or message queue. Each request specifies a list of user_ids, a template_id, template parameters, channel priority, and urgency. The ingestion service validates the request, generates a notification_id for tracking, and publishes individual per-user messages to a Kafka topic partitioned by user_id. This ensures all notifications for the same user are processed in order, preventing interleaving issues.</p>
+          <p>The preference engine consumes from Kafka, looks up each user&#x27;s preferences from a Redis cache (backed by Postgres), and decides which channels to use. If the user has disabled push for marketing but enabled email, the message routes to email only. If quiet hours are active and the notification is not urgent, it is re-enqueued with a delay until quiet hours end. Critical alerts (like security incidents) always bypass quiet hours.</p>
+          <p>Channel routers are separate consumer groups per channel (email, SMS, push). Each router renders the template with the provided parameters, constructs the channel-specific payload (email subject + HTML body, SMS text, push title + body + deep link), and calls the provider adapter. Provider adapters wrap the API of each third-party service (SendGrid for email, Twilio for SMS, FCM/APNs for push) behind a common interface.</p>
+          <p>The retry system uses exponential backoff with jitter: 1s, 2s, 4s, 8s, up to 5 retries. If the primary provider fails after 2 retries, the system fails over to a backup provider (e.g., SES instead of SendGrid). After all retries are exhausted, the message goes to a dead-letter queue for manual investigation. Deduplication uses the notification_id + user_id + channel composite key in the delivery log — if a record exists, the duplicate is dropped.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Event Producer</span><b>&rarr;</b><span class="node accent">Preference Engine</span><b>&rarr;</b><span class="node">Channel Router</span><b>&rarr;</b><span class="node accent">Provider (SendGrid/Twilio/FCM)</span></div><figcaption>Notification pipeline: filter → route → dispatch</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Notification request for user 123, category: marketing</span><span class="node accent">Preference check: push=OFF, email=ON, sms=OFF</span><span class="node">Quiet hours check: 10PM-8AM ET, current=9PM → within quiet hours</span><span class="node accent">Urgency=normal → delay until 8AM. If critical → send now.</span></div><figcaption>Preference engine decision flow</figcaption></figure>
+<figure class="diagram dark"><div class="compare"><div><span class="label">Primary: SendGrid</span><p>Default email provider. Failover after 2 consecutive failures.</p></div><div><span class="label">Backup: SES</span><p>Activated on primary failure. Health check every 60s to switch back.</p></div></div><figcaption>Provider failover strategy</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Quiet hours are more complex than they appear. Each user has a timezone, so the preference engine must convert the current UTC time to the user&#x27;s local time before checking the window. If quiet hours span midnight (e.g., 22:00 to 08:00), the check is: current_local &lt; 08:00 OR current_local &gt;= 22:00. Delayed notifications must be scheduled to fire at 08:00 in the user&#x27;s timezone — which means different delivery times for users in different zones. I&#x27;d use a delayed queue (SQS with message timers, or a scheduled-delivery Kafka topic) with the computed delivery timestamp.</p>
+          <p>Provider rate limiting is the operational headache. Twilio has per-account sending limits; SendGrid has hourly throughput caps. During a marketing blast (100K emails in one batch), we can easily hit these limits. The channel router needs a token-bucket rate limiter per provider that throttles dispatch to stay within the provider&#x27;s limits. If we hit the limit, messages queue up rather than being rejected. The rate limiter parameters are configured per provider and adjusted based on the provider&#x27;s response headers (e.g., X-RateLimit-Remaining).</p>
+          <p>Deduplication has two layers. The first is idempotency at the notification_id level — if the ingestion service crashes and retries, it publishes the same notification_id, and the preference engine checks the delivery log before processing. The second is content-based dedup: if two separate notification requests would produce the same message to the same user within 5 minutes (e.g., duplicate webhook triggers), we suppress the second one. This requires hashing the (user_id, template_id, params_hash) and checking a short-lived Redis key.</p>
+          <p>Observability is critical for a notification system because failures are often silent — the user just never receives the message. I&#x27;d track metrics at every pipeline stage: ingestion rate, preference-filtered-out rate, per-channel dispatch rate, provider success/failure rate, and end-to-end latency (from request to provider acceptance). Alerts fire when the failure rate exceeds 1% or the queue depth grows beyond 5 minutes of backlog.</p>
+          <p>Template rendering needs to be sandboxed. Templates contain user-provided variables (e.g., {{order_id}}) that must be escaped to prevent injection — especially in email where HTML injection is a real risk. I&#x27;d use a safe templating engine (like Jinja2 with autoescape) and never allow raw HTML in template variables.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Preference engine and multi-channel dispatcher with retry</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from enum import Enum
+from dataclasses import dataclass, field
+from datetime import datetime, time as dtime
+import pytz
+
+
+class Urgency(Enum):
+    NORMAL = &quot;normal&quot;
+    CRITICAL = &quot;critical&quot;
+
+
+@dataclass
+class NotificationRequest:
+    notification_id: str
+    user_id: int
+    template_id: str
+    params: dict
+    channels: list[str]       # e.g. [&quot;email&quot;, &quot;push&quot;, &quot;sms&quot;]
+    urgency: Urgency = Urgency.NORMAL
+
+
+class PreferenceEngine:
+    &quot;&quot;&quot;Filters channels based on user prefs and quiet-hours schedule.&quot;&quot;&quot;
+
+    def __init__(self, pref_cache, quiet_cache):
+        self.pref_cache = pref_cache   # user_id → {category → {channel → bool}}
+        self.quiet_cache = quiet_cache  # user_id → {timezone, start, end}
+
+    def filter_channels(
+        self, req: NotificationRequest, category: str
+    ) -&gt; list[str]:
+        prefs = self.pref_cache.get(req.user_id)
+        allowed = [
+            ch for ch in req.channels
+            if prefs.get(category, {}).get(ch, True)
+        ]
+        if not allowed:
+            return []
+        # Suppress non-critical notifications during quiet hours
+        if self._in_quiet_hours(req.user_id) and req.urgency != Urgency.CRITICAL:
+            return []
+        return allowed
+
+    def _in_quiet_hours(self, user_id: int) -&gt; bool:
+        qh = self.quiet_cache.get(user_id)
+        if not qh:
+            return False
+        tz = pytz.timezone(qh[&quot;timezone&quot;])
+        local_now = datetime.now(tz).time()
+        start = dtime.fromisoformat(qh[&quot;start&quot;])
+        end = dtime.fromisoformat(qh[&quot;end&quot;])
+        # Handle ranges that cross midnight (e.g. 22:00 → 07:00)
+        if start &lt;= end:
+            return start &lt;= local_now &lt;= end
+        return local_now &gt;= start or local_now &lt;= end
+
+
+class Dispatcher:
+    &quot;&quot;&quot;Sends notifications with dedup, retry, and provider failover.&quot;&quot;&quot;
+
+    def __init__(self, providers: dict, dedup_store, log_store):
+        self.providers = providers
+        self.dedup = dedup_store
+        self.log = log_store
+
+    def dispatch(self, req: NotificationRequest, channel: str):
+        dedup_key = f&quot;{req.notification_id}:{req.user_id}:{channel}&quot;
+        if self.dedup.exists(dedup_key):
+            return  # already sent — idempotent skip
+        provider = self.providers[channel]
+        for attempt in range(5):
+            try:
+                provider.send(req.user_id, req.template_id, req.params)
+                self.dedup.set(dedup_key, ttl=86400)
+                self.log.record(req.notification_id, req.user_id, channel, &quot;sent&quot;)
+                return
+            except provider.RateLimited:
+                import time; time.sleep(2 ** attempt)  # exponential back-off
+            except provider.Unavailable:
+                # Fail over to backup provider if available
+                provider = self.providers.get(f&quot;{channel}_backup&quot;, provider)
+        self.log.record(req.notification_id, req.user_id, channel, &quot;failed&quot;)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Clone, PartialEq)]
+enum Urgency { Normal, Critical }
+
+struct NotificationRequest {
+    notification_id: String,
+    user_id: u64,
+    template_id: String,
+    params: HashMap&lt;String, String&gt;,
+    channels: Vec&lt;String&gt;,
+    urgency: Urgency,
+}
+
+/// Filters channels based on user preferences and quiet-hours schedule.
+struct PreferenceEngine {
+    prefs: HashMap&lt;u64, HashMap&lt;String, HashMap&lt;String, bool&gt;&gt;&gt;,
+    quiet: HashMap&lt;u64, (u32, u32)&gt;, // user → (start_min, end_min) in local time
+}
+impl PreferenceEngine {
+    fn filter_channels(&amp;self, req: &amp;NotificationRequest, category: &amp;str) -&gt; Vec&lt;String&gt; {
+        let allowed: Vec&lt;String&gt; = req.channels.iter().filter(|ch| {
+            self.prefs.get(&amp;req.user_id)
+                .and_then(|c| c.get(category))
+                .and_then(|m| m.get(*ch))
+                .copied()
+                .unwrap_or(true) // default: channel enabled
+        }).cloned().collect();
+        if allowed.is_empty() { return allowed; }
+        // Suppress non-critical during quiet hours
+        if req.urgency != Urgency::Critical &amp;&amp; self.in_quiet_hours(req.user_id) {
+            return Vec::new();
+        }
+        allowed
+    }
+    fn in_quiet_hours(&amp;self, user_id: u64) -&gt; bool {
+        // Simplified: compare current minute-of-day against quiet window
+        self.quiet.contains_key(&amp;user_id)
+    }
+}
+
+/// Sends notifications with dedup guard and exponential retry.
+struct Dispatcher {
+    sent: HashSet&lt;String&gt;, // dedup set: &quot;notif_id:user:channel&quot;
+}
+impl Dispatcher {
+    fn new() -&gt; Self { Self { sent: HashSet::new() } }
+
+    fn dispatch(&amp;mut self, req: &amp;NotificationRequest, channel: &amp;str)
+        -&gt; Result&lt;(), &amp;&#x27;static str&gt;
+    {
+        let key = format!(&quot;{}:{}:{}&quot;, req.notification_id, req.user_id, channel);
+        if self.sent.contains(&amp;key) { return Ok(()); } // idempotent skip
+        for attempt in 0..5u32 {
+            // In production: call provider.send(), handle rate-limit/unavailable
+            // On transient failure: sleep 2^attempt ms then retry
+            self.sent.insert(key.clone());
+            return Ok(());
+        }
+        Err(&quot;all retry attempts exhausted&quot;)
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;unordered_map&gt;
+#include &lt;unordered_set&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;cmath&gt;
+
+typedef NS_ENUM(NSInteger, Urgency) {
+    UrgencyNormal,
+    UrgencyCritical,
+};
+
+// Filters channels by user prefs and quiet-hours schedule
+@interface PreferenceEngine : NSObject
+- (NSArray&lt;NSString *&gt; *)filterChannels:(NSArray&lt;NSString *&gt; *)channels
+                                 userId:(uint64_t)uid
+                               category:(NSString *)cat
+                                urgency:(Urgency)urg;
+@end
+
+@implementation PreferenceEngine {
+    // user → {category → {channel → enabled}}
+    std::unordered_map&lt;uint64_t,
+        std::unordered_map&lt;std::string,
+            std::unordered_map&lt;std::string, bool&gt;&gt;&gt; _prefs;
+    std::unordered_set&lt;uint64_t&gt; _quietUsers; // simplified quiet-hours set
+}
+- (NSArray&lt;NSString *&gt; *)filterChannels:(NSArray&lt;NSString *&gt; *)channels
+                                 userId:(uint64_t)uid
+                               category:(NSString *)cat
+                                urgency:(Urgency)urg {
+    NSMutableArray *allowed = [NSMutableArray new];
+    std::string catKey = cat.UTF8String;
+    for (NSString *ch in channels) {
+        bool enabled = true;
+        auto uit = _prefs.find(uid);
+        if (uit != _prefs.end()) {
+            auto cit = uit-&gt;second.find(catKey);
+            if (cit != uit-&gt;second.end()) {
+                auto chit = cit-&gt;second.find(ch.UTF8String);
+                if (chit != cit-&gt;second.end()) enabled = chit-&gt;second;
+            }
+        }
+        if (enabled) [allowed addObject:ch];
+    }
+    // Suppress non-critical during quiet hours
+    if (urg != UrgencyCritical &amp;&amp; _quietUsers.count(uid))
+        return @[];
+    return allowed;
+}
+@end
+
+// Dispatcher: dedup + retry with exponential back-off
+@interface Dispatcher : NSObject
+- (BOOL)dispatch:(NSString *)notifID userId:(uint64_t)uid channel:(NSString *)ch;
+@end
+
+@implementation Dispatcher {
+    std::unordered_set&lt;std::string&gt; _sent; // dedup keys
+}
+- (BOOL)dispatch:(NSString *)notifID userId:(uint64_t)uid channel:(NSString *)ch {
+    std::string key = std::string(notifID.UTF8String) + &quot;:&quot;
+                    + std::to_string(uid) + &quot;:&quot; + ch.UTF8String;
+    if (_sent.count(key)) return YES; // already sent
+    for (int attempt = 0; attempt &lt; 5; attempt++) {
+        // Production: call provider, handle rate-limit with sleep(pow(2, attempt))
+        _sent.insert(key);
+        return YES;
+    }
+    return NO;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Order Service</span><p>POST /notifications {user_ids: [123], template: "order_shipped", urgency: "normal"}</p></div><div class="seq-row"><span class="actor">Ingestion</span><p>Generates notification_id, publishes to Kafka partition(user_id=123)</p></div><div class="seq-row"><span class="actor">Preference Engine</span><p>User 123: order_updates push=ON, email=ON. Not in quiet hours. Routes to both channels.</p></div><div class="seq-row"><span class="actor">Push Router</span><p>Renders push template, calls FCM with device token. FCM returns 200 OK.</p></div><div class="seq-row"><span class="actor">Email Router</span><p>Renders email template, calls SendGrid. SendGrid returns 202 Accepted.</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Push-first vs email-first</strong>
+              <p>Push is cheaper and faster; email has higher deliverability for inactive users.</p>
+            </div>
+            <div>
+              <strong>Strict quiet hours vs soft</strong>
+              <p>Strict blocks all non-critical; soft delays but might miss time-sensitive updates.</p>
+            </div>
+            <div>
+              <strong>Single provider vs multi-provider</strong>
+              <p>Single is simpler; multi gives failover but doubles integration work.</p>
+            </div>
+            <div>
+              <strong>At-least-once vs exactly-once</strong>
+              <p>At-least-once with dedup is practical; exactly-once requires distributed transactions.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Provider rate limit during marketing blast — thousands of notifications delayed in queue.</li>
+            <li>Quiet hours timezone miscalculation — users in DST-transitioning zones get woken up.</li>
+            <li>Template variable missing — renders &#x27;{{order_id}}&#x27; literally in the email body.</li>
+            <li>Dedup key collision — two genuinely different notifications suppressed as duplicates.</li>
+            <li>Kafka consumer lag — notifications arrive hours late, order confirmation sent after delivery.</li>
+            <li>FCM token stale — push sent to old device, user never sees it, no feedback.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add in-app notification center with read/unread tracking?</li>
+            <li>Design delivery analytics: open rates for email, click-through for push.</li>
+            <li>How would you handle notification batching (digest emails instead of individual)?</li>
+            <li>Add support for user-defined notification rules (e.g., &#x27;only notify me if order &gt; $100&#x27;).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Sketch the four-stage pipeline (ingest, preference filter, channel route, provider dispatch). Explain quiet hours with timezone handling and how critical alerts bypass them. Show retry with exponential backoff and provider failover. Dedup using composite key in the delivery log is the detail that shows production experience.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../file_storage/">← Design a file storage service</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../ecommerce_checkout/">Design an e-commerce checkout →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a VPC for a multi-tier app | Cloud | Engineering Notes</title>
+  <meta name="description" content="A VPC diagram is easy; NAT bills and overly wide security groups are where the design meets production.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Design a VPC for a multi-tier app</p>
+      <p class="eyebrow">Cloud · Medium · ~60 min</p>
+      <h1>Design a VPC for a multi-tier app</h1>
+      <p class="problem-deck">A VPC diagram is easy; NAT bills and overly wide security groups are where the design meets production.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Cloud provider, compliance requirements, peering needs, service count</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>CIDR planning</strong><p>/16 VPC, carve /24s per tier per AZ with room to spare</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Subnet layout</strong><p>2-3 AZs × 3 tiers = 6-9 subnets; route tables per tier</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Security groups</strong><p>ALB-SG → App-SG → DB-SG chain; no wide-open rules</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>NAT + endpoints</strong><p>NAT per AZ for HA; VPC endpoints for S3, DynamoDB, ECR to reduce NAT cost</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Access + logging</strong><p>SSM Session Manager replaces bastion; VPC flow logs to S3/CloudWatch</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Failure modes</strong><p>AZ failure, NAT bottleneck, CIDR exhaustion, SG misconfiguration</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Every multi-tier app VPC starts the same way: public subnets for the load balancer, private subnets for the application tier, and more private subnets for databases. The diagram is trivial — but production surprises hide in NAT gateway bills, overly permissive security groups, CIDR exhaustion when you need to peer, and the IPv6 question nobody answered upfront.</p>
+          <p>I sketch public subnets for ALB/NLB only — no EC2 instances with public IPs. Private subnets for app (ECS/EKS tasks, ASGs) and a separate private tier for data (RDS, ElastiCache). Tiers talk through security groups referencing each other: the ALB SG allows 443 inbound from the internet, the app SG allows traffic only from the ALB SG, and the DB SG allows 5432 only from the app SG. This is layered defense: even if someone compromises the ALB, they cannot reach the database directly.</p>
+          <p>Then the real questions: NAT gateway per AZ is $32/month each plus $0.045/GB processed. For a service pulling 500GB/month of egress through NAT, that is $22.50 on top of the gateway fee. VPC endpoints for S3, DynamoDB, and ECR eliminate that NAT traffic for AWS services. CIDR planning matters once you peer or connect on-prem — overlapping CIDRs are unfixable without rebuilding the VPC.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>AWS, GCP, or Azure — or multi-cloud?</li>
+            <li>Do we need VPN or Direct Connect to on-prem?</li>
+            <li>IPv6 dual-stack required?</li>
+            <li>How many environments share a VPC vs separate VPCs?</li>
+            <li>Egress inspection or firewall requirements (compliance)?</li>
+            <li>Expected service count — 5 services or 200 microservices?</li>
+            <li>Will we peer with other VPCs or accounts?</li>
+            <li>What compliance framework — SOC2, PCI, HIPAA?</li>
+            <li>Expected egress volume through NAT?</li>
+            <li>Bastion host or SSM Session Manager for SSH access?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — VPC layout for web/app/data tiers, security groups, NAT strategy, CIDR planning</li>
+            <li>In scope — Multi-AZ high availability, VPC endpoints for cost optimization</li>
+            <li>Out of scope — Full org landing zone, multi-account strategy (separate topic)</li>
+            <li>Defer — Service mesh, egress firewall appliance, IPv6 migration</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Public tier</strong>
+              <p>ALB/NLB in public subnets across ≥2 AZs; internet-facing</p>
+            </div>
+            <div>
+              <strong>App tier</strong>
+              <p>ECS/EKS/ASG tasks in private subnets; no public IPs</p>
+            </div>
+            <div>
+              <strong>Data tier</strong>
+              <p>RDS, ElastiCache in isolated private subnets; SG allows only app tier</p>
+            </div>
+            <div>
+              <strong>NAT egress</strong>
+              <p>Private subnets reach internet via NAT gateway for outbound-only traffic</p>
+            </div>
+            <div>
+              <strong>VPC endpoints</strong>
+              <p>Gateway endpoints for S3/DynamoDB; interface endpoints for ECR, STS</p>
+            </div>
+            <div>
+              <strong>Bastion access</strong>
+              <p>SSM Session Manager — no SSH bastion, no port 22 open anywhere</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Availability</strong>
+              <p>Multi-AZ: survive single AZ failure with zero downtime</p>
+            </div>
+            <div>
+              <strong>Least privilege</strong>
+              <p>Security groups allow only necessary ports between tiers; no 0.0.0.0/0 on internal SGs</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>NAT gateway costs called out; VPC endpoints reduce egress by 60%+</p>
+            </div>
+            <div>
+              <strong>Scalability</strong>
+              <p>CIDR space supports 250+ hosts per subnet with room to grow</p>
+            </div>
+            <div>
+              <strong>Compliance</strong>
+              <p>NACLs as defense-in-depth; flow logs enabled for audit</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>VPC CIDR</strong>
+              <p>10.1.0.0/16 — 65,536 addresses; enough for years of growth</p>
+            </div>
+            <div>
+              <strong>Subnets per AZ</strong>
+              <p>3 tiers × 3 AZs = 9 subnets; each /24 = 251 usable IPs</p>
+            </div>
+            <div>
+              <strong>NAT cost</strong>
+              <p>2 NAT gateways (2 AZs) × $32/month = $64 base + $0.045/GB processed</p>
+            </div>
+            <div>
+              <strong>Egress volume</strong>
+              <p>500GB/month through NAT → $22.50; VPC endpoints for S3 save ~300GB → save $13.50</p>
+            </div>
+            <div>
+              <strong>VPC endpoints</strong>
+              <p>S3 gateway endpoint: free. ECR interface endpoint: $7.20/month per AZ</p>
+            </div>
+            <div>
+              <strong>Flow logs</strong>
+              <p>~500GB/month of log data at $0.50/GB ingestion → $250/month for CloudWatch</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># VPC CIDR Allocation Plan
+# ────────────────────────────────────────────────
+# VPC: 10.1.0.0/16
+#
+# Public subnets (ALB/NLB):
+#   10.1.0.0/24   us-east-1a   (251 IPs)
+#   10.1.1.0/24   us-east-1b   (251 IPs)
+#   10.1.2.0/24   us-east-1c   (251 IPs)
+#
+# App subnets (ECS/EKS):
+#   10.1.10.0/24  us-east-1a   (251 IPs)
+#   10.1.11.0/24  us-east-1b   (251 IPs)
+#   10.1.12.0/24  us-east-1c   (251 IPs)
+#
+# Data subnets (RDS/ElastiCache):
+#   10.1.20.0/24  us-east-1a   (251 IPs)
+#   10.1.21.0/24  us-east-1b   (251 IPs)
+#   10.1.22.0/24  us-east-1c   (251 IPs)
+#
+# Reserved for future:
+#   10.1.30.0/24 - 10.1.255.0/24  (226 subnets available)
+#
+# Route tables:
+#   public-rt:  0.0.0.0/0 → IGW
+#   app-rt:     0.0.0.0/0 → NAT-GW (per AZ)
+#   data-rt:    no internet route (isolated)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The VPC design follows three principles: defense in depth, cost awareness, and growth planning.</p>
+          <p>Defense in depth: three tiers with escalating isolation. The public tier only contains load balancers — no EC2 instances, no containers. The app tier runs in private subnets with NAT for outbound access (package updates, API calls). The data tier has no internet route at all — RDS and ElastiCache are accessible only from the app tier&#x27;s security group. NACLs are kept mostly default (allow all) because security groups are the primary control plane, but I add explicit NACL deny rules for any known-bad CIDR ranges if compliance requires it.</p>
+          <p>Security groups reference each other by SG ID, not by CIDR. This is critical: if the app tier autoscales from 5 to 50 instances, the DB security group does not need updating — it allows traffic from the app SG regardless of how many instances are in it. This also means CIDR changes in the app subnet do not break database access.</p>
+          <p>Cost awareness: NAT gateways are a hidden cost center. Each gateway costs $32/month base plus $0.045/GB processed. With 3 AZs, that is $96/month before any data flows. I add VPC gateway endpoints for S3 and DynamoDB (free) and interface endpoints for ECR, STS, and CloudWatch Logs (~$7.20/month each per AZ). For a service pulling Docker images from ECR, the interface endpoint eliminates ~50GB/month of NAT traffic, saving $2.25/month per endpoint — it pays for itself at moderate traffic.</p>
+          <p>Growth planning: the /16 VPC gives 65,536 addresses. With /24 subnets (251 usable each), I have room for 256 subnets — enough for dozens of additional tiers, new AZs, or peered VPCs. The first octet of the third byte indicates the tier (0=public, 10=app, 20=data), leaving 30-255 for future use. When peering with another VPC, the non-overlapping CIDR ensures clean routing. If the office network is 10.0.0.0/8, I would choose 172.16.0.0/16 to avoid conflicts.</p>
+<figure class="diagram dark">
+  <figcaption>VPC Tier Layout</figcaption>
+  <div class="flow-row">
+    <div class="node">Internet<br><small>0.0.0.0/0</small></div>
+    <div class="node accent">ALB<br><small>public subnet</small></div>
+    <div class="node">App Tier<br><small>private subnet</small></div>
+    <div class="node accent">DB Tier<br><small>isolated subnet</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Security Group Chain</figcaption>
+  <div class="flow-row">
+    <div class="node">ALB-SG<br><small>443 from 0.0.0.0/0</small></div>
+    <div class="node accent">App-SG<br><small>8080 from ALB-SG</small></div>
+    <div class="node">DB-SG<br><small>5432 from App-SG</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>NAT + VPC Endpoints</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Without endpoints</span><p>500GB/mo through NAT<br>$32 + $22.50 = $54.50/AZ</p></div>
+    <div class="node accent"><span class="label">With endpoints</span><p>200GB/mo through NAT<br>$32 + $9 + $7.20 = $48.20/AZ</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>CIDR planning for peering: when two VPCs peer, their CIDRs must not overlap. If VPC-A is 10.1.0.0/16 and VPC-B is 10.2.0.0/16, peering works perfectly. But if VPC-B was also 10.1.0.0/16, you cannot peer them — full stop. This is why I allocate from a pre-planned address scheme at the organization level: dev=10.1.0.0/16, staging=10.2.0.0/16, prod=10.3.0.0/16. If Direct Connect to on-prem is needed, avoid 10.0.0.0/8 entirely if that is the office range — use 172.16.0.0/12 for cloud.</p>
+          <p>NAT gateway HA: I deploy one NAT gateway per AZ with AZ-specific route tables. If AZ-A&#x27;s NAT gateway fails, only AZ-A&#x27;s private subnets lose outbound internet — AZ-B and AZ-C continue normally. The alternative — a single NAT gateway in one AZ — saves money but creates cross-AZ traffic charges ($0.01/GB) and a single point of failure.</p>
+          <p>Security group rules count: AWS limits each SG to 60 inbound + 60 outbound rules. With microservices, a single app SG allowing traffic from 50 different source SGs approaches this limit. The solution: group services into logical SG tiers rather than one SG per service. For example, all internal microservices share a &#x27;svc-internal&#x27; SG that allows traffic from itself (self-referencing rule). This means any service in the SG can talk to any other.</p>
+          <p>Flow logs for incident response: VPC flow logs capture source/destination IP, port, protocol, and accept/reject status. I send them to S3 (cheaper) for long-term storage and to CloudWatch for real-time alerting. A metric filter on REJECT logs with alert threshold catches port scans or misconfigured services trying to reach the wrong tier.</p>
+          <p>SSM Session Manager vs bastion: bastion hosts require a public IP, SSH key management, OS patching, and port 22 open in a security group. SSM Session Manager uses IAM for authentication, logs all sessions to CloudWatch, requires no open inbound ports, and costs nothing beyond CloudWatch log storage. The only downside: it requires the SSM agent on instances and a VPC endpoint for SSM in private subnets (or NAT access to the SSM API).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Security group audit for wide-open rules</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+
+def audit_security_groups(vpc_id: str) -&gt; list:
+    ec2 = boto3.client(&#x27;ec2&#x27;)
+    sgs = ec2.describe_security_groups(
+        Filters=[{&#x27;Name&#x27;: &#x27;vpc-id&#x27;, &#x27;Values&#x27;: [vpc_id]}]
+    )[&#x27;SecurityGroups&#x27;]
+
+    issues = []
+    for sg in sgs:
+        for rule in sg.get(&#x27;IpPermissions&#x27;, []):
+            for ip_range in rule.get(&#x27;IpRanges&#x27;, []):
+                cidr = ip_range.get(&#x27;CidrIp&#x27;, &#x27;&#x27;)
+                if cidr == &#x27;0.0.0.0/0&#x27; and rule.get(&#x27;FromPort&#x27;) != 443:
+                    issues.append({
+                        &#x27;sg_id&#x27;: sg[&#x27;GroupId&#x27;],
+                        &#x27;sg_name&#x27;: sg[&#x27;GroupName&#x27;],
+                        &#x27;port&#x27;: rule.get(&#x27;FromPort&#x27;),
+                        &#x27;issue&#x27;: f&#x27;Wide-open inbound on port {rule.get(&quot;FromPort&quot;)}&#x27;
+                    })
+                if cidr == &#x27;0.0.0.0/0&#x27; and sg[&#x27;GroupName&#x27;].startswith(&#x27;db-&#x27;):
+                    issues.append({
+                        &#x27;sg_id&#x27;: sg[&#x27;GroupId&#x27;],
+                        &#x27;sg_name&#x27;: sg[&#x27;GroupName&#x27;],
+                        &#x27;issue&#x27;: &#x27;Database SG open to internet — critical&#x27;
+                    })
+    return issues</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_ec2 as ec2;
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub struct SgIssue {
+    pub sg_id: String,
+    pub sg_name: String,
+    pub port: Option&lt;i32&gt;,
+    pub issue: String,
+}
+
+pub async fn audit_security_groups(vpc_id: &amp;str) -&gt; Vec&lt;SgIssue&gt; {
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let client = ec2::Client::new(&amp;config);
+
+    let resp = client
+        .describe_security_groups()
+        .filters(
+            ec2::types::Filter::builder()
+                .name(&quot;vpc-id&quot;)
+                .values(vpc_id)
+                .build(),
+        )
+        .send()
+        .await
+        .expect(&quot;Failed to describe security groups&quot;);
+
+    let mut issues = Vec::new();
+
+    for sg in resp.security_groups() {
+        let sg_id = sg.group_id().unwrap_or_default();
+        let sg_name = sg.group_name().unwrap_or_default();
+
+        for rule in sg.ip_permissions() {
+            let from_port = rule.from_port();
+
+            for ip_range in rule.ip_ranges() {
+                let cidr = ip_range.cidr_ip().unwrap_or_default();
+
+                if cidr == &quot;0.0.0.0/0&quot; &amp;&amp; from_port != Some(443) {
+                    issues.push(SgIssue {
+                        sg_id: sg_id.into(),
+                        sg_name: sg_name.into(),
+                        port: from_port,
+                        issue: format!(&quot;Wide-open inbound on port {:?}&quot;, from_port),
+                    });
+                }
+                if cidr == &quot;0.0.0.0/0&quot; &amp;&amp; sg_name.starts_with(&quot;db-&quot;) {
+                    issues.push(SgIssue {
+                        sg_id: sg_id.into(),
+                        sg_name: sg_name.into(),
+                        port: from_port,
+                        issue: &quot;Database SG open to internet — critical&quot;.into(),
+                    });
+                }
+            }
+        }
+    }
+    issues
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+struct SgIssue {
+    std::string sgId;
+    std::string sgName;
+    int         port;
+    std::string issue;
+};
+
+// Uses a conceptual AWS EC2 client; production would call the REST API
+// or a C++ SDK wrapper.  The audit logic mirrors the Python version.
+
+@protocol AWSEC2Client &lt;NSObject&gt;
+- (NSArray&lt;NSDictionary *&gt; *)describeSecurityGroupsInVPC:(NSString *)vpcId;
+@end
+
+static std::vector&lt;SgIssue&gt; auditSecurityGroups(id&lt;AWSEC2Client&gt; ec2,
+                                                NSString *vpcId) {
+    NSArray&lt;NSDictionary *&gt; *sgs = [ec2 describeSecurityGroupsInVPC:vpcId];
+    std::vector&lt;SgIssue&gt; issues;
+
+    for (NSDictionary *sg in sgs) {
+        NSString *sgId   = sg[@&quot;GroupId&quot;];
+        NSString *sgName = sg[@&quot;GroupName&quot;];
+
+        for (NSDictionary *rule in sg[@&quot;IpPermissions&quot;]) {
+            int fromPort = [rule[@&quot;FromPort&quot;] intValue];
+
+            for (NSDictionary *ipRange in rule[@&quot;IpRanges&quot;]) {
+                NSString *cidr = ipRange[@&quot;CidrIp&quot;];
+                if (![cidr isEqualToString:@&quot;0.0.0.0/0&quot;]) continue;
+
+                if (fromPort != 443) {
+                    issues.push_back({
+                        sgId.UTF8String, sgName.UTF8String, fromPort,
+                        &quot;Wide-open inbound on port &quot;
+                            + std::to_string(fromPort)
+                    });
+                }
+                if ([sgName hasPrefix:@&quot;db-&quot;]) {
+                    issues.push_back({
+                        sgId.UTF8String, sgName.UTF8String, fromPort,
+                        &quot;Database SG open to internet — critical&quot;
+                    });
+                }
+            }
+        }
+    }
+    return issues;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">User</span><p>HTTPS request → Route 53 → ALB in public subnet (10.1.0.0/24, AZ-A)</p></div>
+    <div class="seq-row"><span class="actor">ALB</span><p>TLS termination → forward to app target group on port 8080</p></div>
+    <div class="seq-row"><span class="actor">App-SG</span><p>Allow: source=ALB-SG, port=8080 ✓ → ECS task in private subnet (10.1.10.0/24)</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Query Postgres → DB-SG allows source=App-SG, port=5432 ✓ → RDS in data subnet (10.1.20.0/24)</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Fetch config from S3 → VPC gateway endpoint → no NAT traffic</p></div>
+    <div class="seq-row"><span class="actor">App</span><p>Call external API → route table → NAT gateway → internet gateway → response back</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>NAT per AZ vs single NAT</strong>
+              <p>Per-AZ is HA but costs $32/month × N AZs. Single NAT saves money but creates a SPOF and cross-AZ data charges</p>
+            </div>
+            <div>
+              <strong>SG per service vs shared tier SGs</strong>
+              <p>Per-service SGs give fine-grained control but hit rule count limits with many microservices. Tier SGs are simpler but coarser</p>
+            </div>
+            <div>
+              <strong>SSM vs bastion</strong>
+              <p>SSM requires no open ports and uses IAM auth. Bastion is simpler to understand but requires patching, key rotation, and port 22</p>
+            </div>
+            <div>
+              <strong>VPC endpoints cost</strong>
+              <p>Interface endpoints cost $7.20/month/AZ but save NAT processing fees. Worth it when monthly traffic exceeds ~160GB per service</p>
+            </div>
+            <div>
+              <strong>/24 vs /20 subnets</strong>
+              <p>/24 gives 251 hosts — enough for most tiers. /20 gives 4,091 hosts for large EKS clusters but consumes CIDR space quickly</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>CIDR overlap with on-prem network — discovered during Direct Connect setup; VPC must be recreated with new CIDR</li>
+            <li>NAT gateway in one AZ goes down — all private subnets in that AZ lose outbound; deploy NAT per AZ for HA</li>
+            <li>Security group accidentally allows 0.0.0.0/0 on RDS port — database exposed to internet; audit SGs regularly</li>
+            <li>Subnet runs out of IPs: /24 with 251 hosts fills up when EKS pods consume IPs — use /20 for pod subnets or enable prefix delegation</li>
+            <li>VPC endpoint DNS resolution fails — app cannot reach S3 via endpoint; falls back to NAT (silent cost increase)</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you extend this VPC for a service mesh (Istio/App Mesh)?</li>
+            <li>How does the design change for a multi-region active-active deployment?</li>
+            <li>How would you handle IPv6 dual-stack requirements?</li>
+            <li>How do you manage VPC peering at scale with 50+ accounts?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: three-tier subnet layout with CIDR planning, security group chain referencing SG IDs (not CIDRs), NAT gateway HA strategy with cost awareness, VPC endpoints for S3/DynamoDB, and SSM over bastion. Draw the subnet diagram with AZ layout.</p>
+          <p>You do not need to design the full Terraform module or explain NACLs in detail. The interviewer wants to see: understanding of defense in depth, awareness of NAT as a cost center, CIDR planning for future peering, and practical security group design.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../monolith_to_containers/">Move a monolith to ECS/EKS without a big bang →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

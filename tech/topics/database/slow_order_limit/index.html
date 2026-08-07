@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix a slow ORDER BY + LIMIT query | Database | Engineering Notes</title>
+  <meta name="description" content="ORDER BY … LIMIT 20 looks cheap until the planner sorts two million rows to throw away 1,999,980 of them.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Fix a slow ORDER BY + LIMIT query</p>
+      <p class="eyebrow">Database · Medium · ~60 min</p>
+      <h1>Fix a slow ORDER BY + LIMIT query</h1>
+      <p class="problem-deck">ORDER BY … LIMIT 20 looks cheap until the planner sorts two million rows to throw away 1,999,980 of them.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Reproduce the problem</strong><p>Show the slow query and its EXPLAIN output.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Analyze EXPLAIN plan</strong><p>Identify filesort, row estimates, missing index.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Design the right index</strong><p>Composite index matching WHERE + ORDER BY + LIMIT.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Covering index</strong><p>Add selected columns to avoid heap lookups.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Edge cases</strong><p>Pagination with keyset, ties in ORDER BY, NULL ordering.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>When filesort wins</strong><p>Low selectivity, small result set, wide rows.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Wrap-up</strong><p>Summarize index design heuristic and monitoring.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;ve debugged this exact issue in production more times than I can count. The pattern is always the same: SELECT * FROM orders WHERE status = &#x27;active&#x27; ORDER BY created_at DESC LIMIT 20. It looks innocent — 20 rows, how hard can it be? But without the right index, the database fetches every active row, sorts them all, and then discards all but 20.</p>
+          <p>The fix is usually a composite index that matches the WHERE clause and the ORDER BY direction: (status, created_at DESC). With that index, the planner walks the B-tree in order and stops after 20 rows — no sort needed. But there are subtleties: NULL handling, covering index width, and cases where the optimizer legitimately prefers a filesort.</p>
+          <p>I&#x27;d walk through the EXPLAIN output first to show the candidate where the time is going, then build the solution step by step.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What database engine — Postgres, MySQL, SQL Server?</li>
+            <li>How many rows in the table and what percentage match the WHERE filter?</li>
+            <li>Is the ORDER BY column always the same, or does the app support multiple sort orders?</li>
+            <li>Are NULLs present in the ORDER BY column?</li>
+            <li>Is this a paginated query — do we need OFFSET or keyset pagination?</li>
+            <li>How wide are the rows (number of columns, average row size)?</li>
+            <li>Is the table partitioned?</li>
+            <li>What is the current index set on this table?</li>
+            <li>Is this an OLTP query or a reporting query?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: diagnosing the slow query, index design, covering index, keyset pagination.</li>
+            <li>Out: full query optimizer internals, partitioning strategy.</li>
+            <li>Out: application-level caching (separate concern).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Query</strong>
+              <p>Return top N rows matching a filter, ordered by a column.</p>
+            </div>
+            <div>
+              <strong>Pagination</strong>
+              <p>Support efficient next-page retrieval without OFFSET.</p>
+            </div>
+            <div>
+              <strong>Consistency</strong>
+              <p>Results must reflect committed data (no stale reads).</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency</strong>
+              <p>p99 &lt; 5 ms for LIMIT 20 on a 10M-row table.</p>
+            </div>
+            <div>
+              <strong>Index size</strong>
+              <p>Composite index should fit in shared_buffers (&lt; 2 GB).</p>
+            </div>
+            <div>
+              <strong>Write impact</strong>
+              <p>Additional index adds &lt; 10% overhead on INSERT throughput.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Table size</strong>
+              <p>10M rows × 500 bytes avg = 5 GB heap.</p>
+            </div>
+            <div>
+              <strong>Active rows</strong>
+              <p>30% match status=&#x27;active&#x27; = 3M rows to sort without index.</p>
+            </div>
+            <div>
+              <strong>Index size</strong>
+              <p>(status, created_at DESC) on 10M rows ≈ 250 MB.</p>
+            </div>
+            <div>
+              <strong>Sort cost</strong>
+              <p>Sorting 3M rows in memory needs ~150 MB work_mem; may spill to disk.</p>
+            </div>
+            <div>
+              <strong>With index</strong>
+              <p>Walk B-tree → 20 leaf pages → 20 heap fetches → &lt; 1 ms.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Slow query (before fix)
+SELECT * FROM orders
+WHERE status = &#x27;active&#x27;
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- After adding composite index
+CREATE INDEX idx_orders_status_created
+ON orders (status, created_at DESC);
+
+-- Keyset pagination (page 2+)
+SELECT * FROM orders
+WHERE status = &#x27;active&#x27;
+  AND created_at &lt; &#x27;2026-08-01T12:00:00Z&#x27;
+ORDER BY created_at DESC
+LIMIT 20;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE orders (
+    id          BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    status      TEXT NOT NULL DEFAULT &#x27;pending&#x27;,
+    total_cents BIGINT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The fix: composite index matching WHERE + ORDER BY
+CREATE INDEX idx_orders_status_created
+ON orders (status, created_at DESC);
+
+-- Covering variant to avoid heap lookups
+CREATE INDEX idx_orders_status_created_covering
+ON orders (status, created_at DESC)
+INCLUDE (id, customer_id, total_cents);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Start with EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) on the slow query. Look for &#x27;Sort Method: external merge&#x27; or &#x27;Sort Method: top-N heapsort&#x27; with a high &#x27;Rows Removed by Filter&#x27;. If you see a Seq Scan followed by a Sort node, the database is doing exactly what we fear: scanning millions of rows, sorting them, and returning 20.</p>
+          <p>The fix is a composite index where the equality columns come first and the ORDER BY column comes last, with the sort direction baked in. For WHERE status = &#x27;active&#x27; ORDER BY created_at DESC LIMIT 20, the ideal index is (status, created_at DESC). The planner walks the B-tree to the first leaf matching status=&#x27;active&#x27; and reads 20 entries in order — no sort node at all.</p>
+          <p>A covering index adds frequently selected columns via INCLUDE, turning the plan into an Index Only Scan. This avoids heap fetches entirely, which matters when the table is larger than shared_buffers and heap pages are on disk. The trade-off is index size: each INCLUDEd column widens the leaf pages.</p>
+          <p>For pagination, replace OFFSET with keyset (cursor) pagination. Instead of OFFSET 1000, the app sends the last created_at from the previous page: WHERE status = &#x27;active&#x27; AND created_at &lt; :last_seen ORDER BY created_at DESC LIMIT 20. This uses the same index and costs O(LIMIT) regardless of page depth, whereas OFFSET N costs O(N + LIMIT).</p>
+          <p>When does filesort win? If the WHERE clause is very selective (returns &lt; 1% of rows) and the ORDER BY column has no useful index, the planner may correctly choose an index scan on the filter column plus an in-memory top-N heapsort. For 200 rows, sorting is trivial. Don&#x27;t add an index you&#x27;ll never need.</p>
+<figure class="diagram dark" aria-label="Query plan before and after index">
+  <div class="flow-row">
+    <div class="node">Seq Scan<br>3M rows</div>
+    <div class="node">Sort<br>150 MB work_mem</div>
+    <div class="node">Limit<br>20 rows</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">Index Scan<br>(status, created_at DESC)</div>
+    <div class="node accent">Limit<br>20 rows, no sort</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Keyset vs OFFSET pagination">
+  <div class="flow-row">
+    <div class="node">OFFSET 1000<br>scans 1020 rows<br>slow on deep pages</div>
+    <div class="node accent">Keyset cursor<br>scans 20 rows<br>constant cost</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s trace through the planner&#x27;s decision on a 10M-row orders table with 30% active rows. Without the composite index, Postgres has two choices: a Seq Scan with filter (visit all 10M rows, keep 3M, sort, limit) or use the primary key index (useless here since we&#x27;re not filtering on id). It picks Seq Scan. The Sort node allocates work_mem (default 4 MB in Postgres); if the sort exceeds work_mem, it spills to disk via external merge sort. Sorting 3M rows typically needs ~150 MB, so with default settings you get multiple merge passes — that&#x27;s your 2-second query.</p>
+          <p>Now add CREATE INDEX idx_orders_status_created ON orders (status, created_at DESC). The B-tree stores entries in (status, created_at) order. For status = &#x27;active&#x27;, the planner seeks to the first matching leaf and reads forward (which is backward in created_at, i.e., newest first) — exactly what we want. After 20 entries, it stops. Total I/O: ~3 leaf pages + 20 heap fetches = sub-millisecond.</p>
+          <p>The DESC in the index definition matters on Postgres. Without it, the index stores created_at ascending. The planner can do a Backward Index Scan, but this prevents using the index for an Index Only Scan with visibility-map optimization. Explicit DESC avoids this edge case.</p>
+          <p>Covering index deep dive: INCLUDE (id, customer_id, total_cents) stores those values in the leaf pages but not in the B-tree&#x27;s internal nodes. This means the index doesn&#x27;t grow as fast as a full composite index, but the planner can serve the query without touching the heap at all. The trade-off: each INSERT now updates both the heap and the wider index leaf — expect ~8-12% write overhead.</p>
+          <p>NULL behavior: by default Postgres sorts NULLs last in ASC and first in DESC. If created_at can be NULL (bad schema, but it happens), the index should specify NULLS LAST to match the query&#x27;s expected order. Otherwise the planner cannot use the index to satisfy ORDER BY.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Query execution with composite index">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Client</span><p>SELECT * FROM orders WHERE status='active' ORDER BY created_at DESC LIMIT 20</p></div>
+    <div class="seq-row"><span class="actor">Planner</span><p>Choose idx_orders_status_created — no sort needed</p></div>
+    <div class="seq-row"><span class="actor">Executor</span><p>Seek to first leaf where status='active', walk 20 entries</p></div>
+    <div class="seq-row"><span class="actor">Buffer Mgr</span><p>Fetch 20 heap pages (or 0 with covering index)</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>Receive 20 rows in < 1 ms</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Composite index vs single-column indexes</strong>
+              <p>Composite eliminates sort; single-column may need a merge or sort step.</p>
+            </div>
+            <div>
+              <strong>Covering index vs standard index</strong>
+              <p>Covering avoids heap I/O but widens leaf pages and slows writes.</p>
+            </div>
+            <div>
+              <strong>Keyset vs OFFSET pagination</strong>
+              <p>Keyset is O(LIMIT) at any depth; OFFSET is O(N+LIMIT) and gets worse.</p>
+            </div>
+            <div>
+              <strong>Index on every sort order vs runtime sort</strong>
+              <p>Each additional index costs write throughput; filesort is fine for rare queries.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Index column order wrong — (created_at, status) cannot seek by status first.</li>
+            <li>Forgetting DESC in the index — Postgres cannot do Index Only Scan with backward scan.</li>
+            <li>Using OFFSET for deep pagination — page 5,000 scans 100,000 rows.</li>
+            <li>Covering index too wide — exceeds maximum index tuple size (8 KB on Postgres).</li>
+            <li>Not using CONCURRENTLY for CREATE INDEX — locks the table during build.</li>
+            <li>Assuming the planner always uses the index — low selectivity may prefer Seq Scan.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle multiple sort orders (created_at, total, name)?</li>
+            <li>What if the table is partitioned by date — does the index strategy change?</li>
+            <li>How do you monitor index usage and drop unused indexes?</li>
+            <li>What about partial indexes for queries that always filter on status=&#x27;active&#x27;?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Show you can read an EXPLAIN plan, identify the sort as the bottleneck, and design a composite index that eliminates it. Discuss covering indexes and keyset pagination as follow-ups. Mention when filesort is acceptable. That&#x27;s the full picture — most candidates stop at &#x27;add an index&#x27; without explaining why the column order matters.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../multi_tenant_schema/">← Design a schema for multi-tenant SaaS</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../idempotent_payments/">Implement idempotent payment writes →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

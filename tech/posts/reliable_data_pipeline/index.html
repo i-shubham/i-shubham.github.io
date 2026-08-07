@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What actually makes a data pipeline reliable? | Engineering Notes</title>
+  <meta name="description" content="Retries are not reliability. A practical look at idempotency, late data, schema drift, backfills, and the operational signals that matter after launch day.">
+  <link rel="icon" href="../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../css/tech.css" rel="stylesheet">
+  <script src="../../../assets/js/navigation.js"></script>
+</head>
+<body>
+  <main>
+    <article class="post">
+      <header class="post-hero">
+        <div class="container post-hero-inner">
+          <p class="breadcrumbs"><a href="../../tech-index.html">Engineering Notes</a> / Data Engineering</p>
+          <p class="eyebrow">Field note 01</p>
+          <h1>What actually makes a data pipeline reliable?</h1>
+          <p class="post-deck">A green Airflow run is not the same thing as correct data. This is the checklist I wish someone had handed me after the third “pipeline succeeded, dashboard is wrong” incident.</p>
+          <div class="post-meta">
+            <span>Shubham Mallick</span>
+            <span>Data Engineering</span>
+            <span>~12 min read</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="container post-layout">
+        <div class="post-body">
+          <p class="lede">The first pipeline I thought was “done” finished every night at 02:14, wrote Parquet to S3, and updated a dashboard by morning. Ops loved it. Finance did not. On the third consecutive Monday, revenue was off by roughly 8%. The job had succeeded. The data had not.</p>
+
+          <p>That gap — between <em>ran</em> and <em>can be trusted</em> — is where most reliability work actually lives. Retries, bigger clusters, and prettier DAGs help. They are not the core.</p>
+
+          <h2 id="happy-path">The pipeline people draw vs the one that breaks</h2>
+          <p>On a whiteboard, every pipeline looks like this:</p>
+
+          <figure class="diagram" aria-label="Naive pipeline diagram">
+            <div class="flow-row">
+              <span class="node">Source</span>
+              <b>→</b>
+              <span class="node">Ingest</span>
+              <b>→</b>
+              <span class="node">Transform</span>
+              <b>→</b>
+              <span class="node accent">Dashboard</span>
+            </div>
+            <figcaption>The happy path. Useful for onboarding. Incomplete for production.</figcaption>
+          </figure>
+
+          <p>In production, the interesting questions sit on the edges: What if yesterday’s file arrives at 10am today? What if the same event is published twice? What if a column changes type without warning? What if Tuesday’s job overwrites Monday’s partition with a partial run?</p>
+
+          <figure class="diagram dark" aria-label="Reliable pipeline concerns">
+            <div class="concern-grid">
+              <div>
+                <strong>Arrival</strong>
+                <p>late files, missing slices, out-of-order events</p>
+              </div>
+              <div>
+                <strong>Identity</strong>
+                <p>duplicates, replays, partial overwrites</p>
+              </div>
+              <div>
+                <strong>Shape</strong>
+                <p>schema drift, null explosions, silent casts</p>
+              </div>
+              <div>
+                <strong>Recovery</strong>
+                <p>backfills, recomputes, known-good checkpoints</p>
+              </div>
+            </div>
+            <figcaption>Reliability is mostly about these four, not about whether Spark started.</figcaption>
+          </figure>
+
+          <h2 id="idempotency">1. Idempotency beats “retry until green”</h2>
+          <p>If a task can run twice and leave the warehouse wrong, retries are a liability. I treat every write path as something that must survive an accidental re-run on the same day.</p>
+
+          <p>A pattern that has held up for me:</p>
+          <ul>
+            <li>Stage into a dated run folder / temp table first.</li>
+            <li>Validate row counts, key uniqueness, and null rates.</li>
+            <li>Only then swap / merge into the published partition.</li>
+          </ul>
+
+          <figure class="diagram" aria-label="Idempotent write pattern">
+            <div class="stack-flow">
+              <div class="stack-step">
+                <span>01</span>
+                <div>
+                  <strong>Write to staging</strong>
+                  <code>s3://lake/stg/orders/dt=2026-08-06/run_id=...</code>
+                </div>
+              </div>
+              <div class="stack-step">
+                <span>02</span>
+                <div>
+                  <strong>Validate</strong>
+                  <code>count · pk unique · null% · schema hash</code>
+                </div>
+              </div>
+              <div class="stack-step">
+                <span>03</span>
+                <div>
+                  <strong>Publish</strong>
+                  <code>atomic swap / MERGE into curated.orders</code>
+                </div>
+              </div>
+            </div>
+            <figcaption>Re-running step 01 should replace staging, not append junk into curated.</figcaption>
+          </figure>
+
+          <p>Natural keys matter here. If your only unique key is “whatever Spark generated this run,” you will invent duplicates the first time a task retries after a partial write.</p>
+
+          <h2 id="late-data">2. Late data is normal. Pretending otherwise is not.</h2>
+          <p>Batch windows lie. Mobile apps go offline. Partner SFTP drops land late. CDC lags. If your job assumes “all of yesterday is present at 01:00,” you will eventually publish a confident wrong number.</p>
+
+          <p>Two practical habits:</p>
+          <ul>
+            <li><strong>Watermarks, not vibes.</strong> Decide how late you wait (say 6 hours), then explicitly reopen / correct earlier partitions when stragglers arrive.</li>
+            <li><strong>Separate freshness from completeness.</strong> A dashboard can show “data through 06:00, 97% complete” instead of silently looking finished.</li>
+          </ul>
+
+          <figure class="diagram" aria-label="Late data timeline">
+            <svg viewBox="0 0 760 180" role="img" aria-label="Timeline showing events arriving after the batch window">
+              <rect width="760" height="180" fill="#142521" rx="10"></rect>
+              <text x="28" y="36" fill="#8ce0bd" font-family="JetBrains Mono, monospace" font-size="12">event_time vs processing_time</text>
+              <line x1="40" y1="110" x2="720" y2="110" stroke="#3d534c" stroke-width="2"></line>
+              <rect x="120" y="88" width="220" height="44" fill="#1f3a32" stroke="#8ce0bd"></rect>
+              <text x="140" y="115" fill="#f4f5ee" font-family="DM Sans, sans-serif" font-size="13">declared batch window</text>
+              <circle cx="170" cy="70" r="7" fill="#d1d82f"></circle>
+              <circle cx="250" cy="70" r="7" fill="#d1d82f"></circle>
+              <circle cx="410" cy="70" r="7" fill="#ff7a45"></circle>
+              <circle cx="510" cy="70" r="7" fill="#ff7a45"></circle>
+              <text x="390" y="58" fill="#ff7a45" font-family="JetBrains Mono, monospace" font-size="11">late arrivals</text>
+              <text x="40" y="155" fill="#9aa8a2" font-family="DM Sans, sans-serif" font-size="13">If you close the partition at the green dots only, the orange ones never make the report.</text>
+            </svg>
+          </figure>
+
+          <h2 id="schema-drift">3. Schema drift fails quietly before it fails loudly</h2>
+          <p>The worst schema changes are not the ones that crash the job. Those are annoying and obvious. The dangerous ones cast <code>amount</code> to string, drop a nested field, or start sending <code>null</code> for a previously required attribute while every task still exits 0.</p>
+
+          <p>I keep a cheap contract check at the boundary:</p>
+          <pre><code>expected:
+  order_id: string, required
+  amount:   decimal, required, &gt; 0
+  currency: enum[USD, EUR, INR]
+
+reject or quarantine when:
+  - required field missing
+  - type no longer parses
+  - new field appears in a critical path without an owner</code></pre>
+
+          <p>You do not need a perfect governance platform on day one. You need a gate that stops bad shape from becoming “truth” in curated tables.</p>
+
+          <h2 id="backfills">4. Backfills are part of the product</h2>
+          <p>If fixing last month means manually editing five notebooks and praying about partition order, the pipeline is not reliable. It is fragile with good intentions.</p>
+
+          <p>Design for recomputation early:</p>
+          <ul>
+            <li>Partition by a stable business date, not “whatever day the job ran.”</li>
+            <li>Keep transforms pure enough that re-running <code>dt=2026-07-01..2026-07-31</code> produces the same curated result.</li>
+            <li>Record which code version / job run produced each published partition.</li>
+          </ul>
+
+          <figure class="diagram dark" aria-label="Backfill compared to forward run">
+            <div class="compare">
+              <div>
+                <p class="label">Forward run</p>
+                <code>process(dt=today)</code>
+                <p>Normal nightly path</p>
+              </div>
+              <div>
+                <p class="label">Backfill</p>
+                <code>process(dt=start..end)</code>
+                <p>Same code path, bounded range, explicit publish</p>
+              </div>
+            </div>
+            <figcaption>If backfill needs a different codebase, correctness becomes tribal knowledge.</figcaption>
+          </figure>
+
+          <h2 id="observability">5. Watch the data, not only the DAG</h2>
+          <p>Airflow saying success answers one question: did the scheduler believe the operators finished? Useful. Insufficient.</p>
+
+          <p>The signals that have caught real issues for me:</p>
+          <ul>
+            <li>Row count vs 7-day baseline for each critical table</li>
+            <li>Distinct primary keys vs total rows (duplicate detector)</li>
+            <li>Null rate on money / status / foreign-key columns</li>
+            <li>Freshness: max event time or max load time</li>
+            <li>Downstream reconcile: warehouse total vs source-system control total</li>
+          </ul>
+
+          <p>When those stay green, I sleep better than when the DAG UI is merely decorative and green.</p>
+
+          <h2 id="checklist">A boring reliability checklist</h2>
+          <p>Before calling a pipeline production-ready, I want honest answers to:</p>
+          <ol class="check-list">
+            <li>Can I re-run yesterday without creating duplicates?</li>
+            <li>Do I know what “complete for date D” means in writing?</li>
+            <li>What happens when 5% of events arrive tomorrow?</li>
+            <li>Who gets paged when volume drops 40% but the job succeeds?</li>
+            <li>Can a new engineer backfill one week without a Slack archaeology session?</li>
+          </ol>
+
+          <p>If those answers are fuzzy, the architecture diagram does not matter yet.</p>
+
+          <h2>Closing</h2>
+          <p>Reliable pipelines are less about clever frameworks and more about unglamorous guarantees: idempotent writes, explicit lateness rules, schema gates, recomputable history, and checks on the data itself.</p>
+          <p>Get those right and the stack choice becomes a detail. Skip them and every new tool just fails with better branding.</p>
+
+          <div class="post-end">
+            <a href="../../tech-index.html">← Back to Engineering Notes</a>
+          </div>
+        </div>
+
+        <aside class="post-aside" aria-label="Article outline">
+          <h2>In this note</h2>
+          <a href="#happy-path">Happy path vs reality</a>
+          <a href="#idempotency">Idempotency</a>
+          <a href="#late-data">Late data</a>
+          <a href="#schema-drift">Schema drift</a>
+          <a href="#backfills">Backfills</a>
+          <a href="#observability">Observability</a>
+          <a href="#checklist">Checklist</a>
+        </aside>
+      </div>
+    </article>
+  </main>
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../tech-index.html">All notes</a>
+        <a href="../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

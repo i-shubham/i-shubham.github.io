@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Find median from data stream | DSA | Engineering Notes</title>
+  <meta name="description" content="Running median is the two-heap invariant problem — once the sizes and tops are right, the rest is bookkeeping.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Find median from data stream</p>
+      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <h1>Find median from data stream</h1>
+      <p class="problem-deck">Running median is the two-heap invariant problem — once the sizes and tops are right, the rest is bookkeeping.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Value type, stream size, precision.</p></div></div>
+            <div class="stack-step"><strong>5–15 min</strong><div><strong>Why two heaps</strong><p>Compare sorted array, BST, and two-heap approaches.</p></div></div>
+            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code the solution</strong><p>Max-heap (negated) for lower, min-heap for upper; rebalance logic.</p></div></div>
+            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through stream</strong><p>Insert [5, 2, 8, 1, 9, 3] one by one, show heaps and median.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Edge cases</strong><p>Single element, two elements, all same values, negative numbers.</p></div></div>
+            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>Sliding window median, distributed median, approximate quantiles.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d frame this as: we need O(log n) insertion and O(1) median retrieval. A sorted list gives O(1) median but O(n) insertion (shifting elements). A balanced BST works but is annoying to implement. The elegant solution is two heaps: a max-heap for the lower half and a min-heap for the upper half.</p>
+          <p>The invariant is simple: max-heap size is always equal to or one more than min-heap size. The median is either the top of the max-heap (odd count) or the average of both tops (even count). Every insertion either goes to the correct heap directly or requires a rebalance — pop from the overfull heap and push to the other. I&#x27;d draw the invariant before writing a single line of code.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Integer or floating-point values?</li>
+            <li>Can the stream be empty when median is queried?</li>
+            <li>How many insertions — thousands or billions?</li>
+            <li>Do we need to support removal or just insertion?</li>
+            <li>Is the stream finite or truly unbounded?</li>
+            <li>Precision requirements for the average of two numbers?</li>
+            <li>Thread-safe access needed?</li>
+            <li>Do we need percentiles beyond median (p99, p50)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: addNum(int) + findMedian() with two-heap invariant.</li>
+            <li>Out: removal, percentiles, distributed median unless follow-up.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <ul class="ask-list">
+            <li>addNum(num): insert a number into the data structure.</li>
+            <li>findMedian(): return the median of all numbers added so far.</li>
+            <li>Median of even count is average of two middle values.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>addNum</strong>
+              <p>O(log n) — heap push + possible rebalance.</p>
+            </div>
+            <div>
+              <strong>findMedian</strong>
+              <p>O(1) — peek at heap tops.</p>
+            </div>
+            <div>
+              <strong>Space</strong>
+              <p>O(n) — storing all elements across both heaps.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>n limit</strong>
+              <p>up to 5×10^4 calls to addNum in LeetCode constraints</p>
+            </div>
+            <div>
+              <strong>Heap ops</strong>
+              <p>each addNum does ≤ 3 heap operations → ~3 × log(5×10^4) ≈ 48 comparisons max</p>
+            </div>
+            <div>
+              <strong>Memory</strong>
+              <p>two heaps hold all n elements — at n=5×10^4 ints that&#x27;s ~400 KB</p>
+            </div>
+            <div>
+              <strong>Billion scale</strong>
+              <p>at 10^9 inserts, heaps use ~8 GB; approximate with t-digest at that point</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>class MedianFinder:
+    def addNum(self, num: int) -&gt; None: ...
+    def findMedian(self) -&gt; float: ...</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>lower: List[int]   # max-heap (values negated for Python heapq)
+upper: List[int]   # min-heap
+Invariant: len(lower) == len(upper) or len(lower) == len(upper) + 1
+Invariant: -lower[0] &lt;= upper[0]  (max of lower half ≤ min of upper half)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Use a max-heap (lower) and a min-heap (upper). In Python, simulate max-heap by negating values.</p>
+          <p>addNum(num): if lower is empty or num &lt;= -lower[0] (top of max-heap), push to lower. Else push to upper. Then rebalance: if len(lower) &gt; len(upper) + 1, pop from lower and push to upper. If len(upper) &gt; len(lower), pop from upper and push to lower. This maintains the invariant that len(lower) == len(upper) or len(lower) == len(upper) + 1.</p>
+          <p>findMedian(): if sizes are equal, return (-lower[0] + upper[0]) / 2. If lower is bigger, return -lower[0].</p>
+          <p>Why this works: lower&#x27;s max &lt;= upper&#x27;s min, always. The median sits at the boundary between the halves. Rebalancing ensures neither heap gets more than one element ahead, so the tops are always the middle elements.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Max-heap (lower half)</span><b>→</b><span class="node accent">Median = top(lower) or avg(tops)</span><b>→</b><span class="node">Min-heap (upper half)</span></div><figcaption>Two-heap invariant: lower.max ≤ upper.min, sizes differ by at most 1</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">|lower| > |upper|+1</span><b>→ pop lower, push upper</b><span class="node accent">balanced</span><b>← pop upper, push lower ←</b><span class="node">|upper| > |lower|</span></div><figcaption>Rebalance rules keep the two heaps within 1 element of each other</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Stream: [5, 2, 8, 1, 9, 3]. Walk through each insertion.</p>
+          <p>Add 5: lower empty, push to lower. lower=[-5], upper=[]. Median = 5.</p>
+          <p>Add 2: 2 &lt;= 5 (top of lower), push to lower. lower=[-5,-2], upper=[]. |lower|=2 &gt; |upper|+1=1, rebalance: pop 5 from lower, push to upper. lower=[-2], upper=[5]. Median = (2+5)/2 = 3.5.</p>
+          <p>Add 8: 8 &gt; 2 (top of lower), push to upper. lower=[-2], upper=[5,8]. |upper|=2 &gt; |lower|=1, rebalance: pop 5, push to lower. lower=[-5,-2], upper=[8]. Median = 5.</p>
+          <p>Add 1: 1 &lt;= 5 (top of lower), push to lower. lower=[-5,-2,-1], upper=[8]. |lower|=3 &gt; |upper|+1=2, rebalance: pop 5, push to upper. lower=[-2,-1], upper=[5,8]. Median = (2+5)/2 = 3.5.</p>
+          <p>Add 9: 9 &gt; 2, push to upper. lower=[-2,-1], upper=[5,8,9]. |upper|=3 &gt; |lower|=2, rebalance: pop 5, push to lower. lower=[-5,-2,-1], upper=[8,9]. Median = 5.</p>
+          <p>Add 3: 3 &lt;= 5, push to lower. lower=[-5,-3,-2,-1], upper=[8,9]. |lower|=4 &gt; |upper|+1=3, rebalance: pop 5, push to upper. lower=[-3,-2,-1], upper=[5,8,9]. Median = (3+5)/2 = 4.0.</p>
+          <p>Sorted stream: [1,2,3,5,8,9]. Actual median = (3+5)/2 = 4.0. Correct.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Two-heap MedianFinder with rebalance</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import heapq
+
+
+class MedianFinder:
+    &quot;&quot;&quot;Two-heap approach:
+    - lower: max-heap (via negation) holds the smaller half
+    - upper: min-heap holds the larger half
+    Invariant: len(lower) == len(upper) or len(lower) == len(upper) + 1.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.lower = []  # max-heap (store negated values)
+        self.upper = []  # min-heap
+
+    def add_num(self, num: int) -&gt; None:
+        if not self.lower or num &lt;= -self.lower[0]:
+            heapq.heappush(self.lower, -num)
+        else:
+            heapq.heappush(self.upper, num)
+        # Rebalance so lower always has equal or one more element
+        if len(self.lower) &gt; len(self.upper) + 1:
+            heapq.heappush(self.upper, -heapq.heappop(self.lower))
+        elif len(self.upper) &gt; len(self.lower):
+            heapq.heappush(self.lower, -heapq.heappop(self.upper))
+
+    def find_median(self) -&gt; float:
+        if len(self.lower) &gt; len(self.upper):
+            return float(-self.lower[0])
+        return (-self.lower[0] + self.upper[0]) / 2.0</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::BinaryHeap;
+use std::cmp::Reverse;
+
+/// Two-heap MedianFinder:
+/// - lower: max-heap (BinaryHeap default) for the smaller half
+/// - upper: min-heap (via Reverse) for the larger half
+struct MedianFinder {
+    lower: BinaryHeap&lt;i32&gt;,          // max-heap
+    upper: BinaryHeap&lt;Reverse&lt;i32&gt;&gt;, // min-heap via Reverse wrapper
+}
+
+impl MedianFinder {
+    fn new() -&gt; Self {
+        Self { lower: BinaryHeap::new(), upper: BinaryHeap::new() }
+    }
+
+    fn add_num(&amp;mut self, num: i32) {
+        if self.lower.is_empty() || num &lt;= *self.lower.peek().unwrap() {
+            self.lower.push(num);
+        } else {
+            self.upper.push(Reverse(num));
+        }
+        // Rebalance: lower always has equal or one more element
+        if self.lower.len() &gt; self.upper.len() + 1 {
+            self.upper.push(Reverse(self.lower.pop().unwrap()));
+        } else if self.upper.len() &gt; self.lower.len() {
+            self.lower.push(self.upper.pop().unwrap().0);
+        }
+    }
+
+    fn find_median(&amp;self) -&gt; f64 {
+        if self.lower.len() &gt; self.upper.len() {
+            *self.lower.peek().unwrap() as f64
+        } else {
+            (*self.lower.peek().unwrap() + self.upper.peek().unwrap().0) as f64 / 2.0
+        }
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;queue&gt;
+#include &lt;functional&gt;
+
+// Two-heap median finder:
+// lower (max-heap) holds smaller half, upper (min-heap) holds larger half
+@interface MedianFinder : NSObject
+- (void)addNum:(int)num;
+- (double)findMedian;
+@end
+
+@implementation MedianFinder {
+    std::priority_queue&lt;int&gt; _lower;                              // max-heap
+    std::priority_queue&lt;int, std::vector&lt;int&gt;, std::greater&lt;&gt;&gt; _upper; // min-heap
+}
+
+- (void)addNum:(int)num {
+    if (_lower.empty() || num &lt;= _lower.top()) {
+        _lower.push(num);
+    } else {
+        _upper.push(num);
+    }
+    // Rebalance: lower always has equal or one more element
+    if (_lower.size() &gt; _upper.size() + 1) {
+        _upper.push(_lower.top()); _lower.pop();
+    } else if (_upper.size() &gt; _lower.size()) {
+        _lower.push(_upper.top()); _upper.pop();
+    }
+}
+
+- (double)findMedian {
+    if (_lower.size() &gt; _upper.size())
+        return (double)_lower.top();
+    return (_lower.top() + _upper.top()) / 2.0;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Add 5</span><p>lower=[-5], upper=[] → median=5</p></div><div class="seq-row"><span class="actor">Add 2</span><p>push lower, rebalance → lower=[-2], upper=[5] → median=3.5</p></div><div class="seq-row"><span class="actor">Add 8</span><p>push upper, rebalance → lower=[-5,-2], upper=[8] → median=5</p></div><div class="seq-row"><span class="actor">Add 1</span><p>push lower, rebalance → lower=[-2,-1], upper=[5,8] → median=3.5</p></div><div class="seq-row"><span class="actor">Add 9</span><p>push upper, rebalance → lower=[-5,-2,-1], upper=[8,9] → median=5</p></div><div class="seq-row"><span class="actor">Add 3</span><p>push lower, rebalance → lower=[-3,-2,-1], upper=[5,8,9] → median=4.0</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Two heaps vs sorted list</strong>
+              <p>O(log n) insert vs O(n) insert; heaps win for large streams.</p>
+            </div>
+            <div>
+              <strong>Max-heap negation</strong>
+              <p>Python lacks a native max-heap; negating values is the standard hack.</p>
+            </div>
+            <div>
+              <strong>Exact vs approximate</strong>
+              <p>For billions of values, t-digest or count-min sketch gives approximate percentiles in O(1) space.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Forgetting to negate values for the max-heap — lower half returns wrong top.</li>
+            <li>Rebalance in wrong direction — upper grows larger than lower.</li>
+            <li>Integer division instead of float for even-count median.</li>
+            <li>Not handling single-element stream (findMedian before any add).</li>
+            <li>Comparing heap sizes with wrong inequality — off-by-one on the rebalance trigger.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Sliding window median — add + remove with lazy deletion from heaps.</li>
+            <li>Distributed median — each node has a local sketch; merge sketches for global percentile.</li>
+            <li>Weighted median — elements have weights; adjust heap sizes by weight sum.</li>
+            <li>Find k-th largest in a stream — single min-heap of size k.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Clearly state the two-heap invariant and why it gives O(1) median access. Write clean code with correct negation and rebalancing. Walk through 5–6 insertions showing both heaps after each step. Mention the approximate percentile approach for truly massive streams — that shows production awareness.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../serialize_tree/">← Serialize and deserialize a binary tree</a>
+          <a class="problem-nav-link back" href="../">All DSA problems</a>
+          <a class="problem-nav-link next" href="../word_ladder/">Word ladder →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

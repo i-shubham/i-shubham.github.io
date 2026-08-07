@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a search autocomplete | System Design | Engineering Notes</title>
+  <meta name="description" content="Autocomplete is a latency race: users notice 150ms. Prefix indexes and careful ranking matter more than a general search cluster.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a search autocomplete</p>
+      <p class="eyebrow">System Design · Medium · ~60 min</p>
+      <h1>Design a search autocomplete</h1>
+      <p class="problem-deck">Autocomplete is a latency race: users notice 150ms. Prefix indexes and careful ranking matter more than a general search cluster.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Query volume, suggestion count, personalization, data freshness.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Prefix suggestions from popular queries, basic ranking. Defer NLP corrections.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>10K QPS, 5M unique queries, p99 &lt; 100 ms, top-10 suggestions.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Trie index in memory, aggregation pipeline, serving layer.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Trie design</strong><p>Compressed trie, top-K at each node, update strategy.</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Data pipeline</strong><p>Query log → aggregate → build trie → swap. Hourly refresh.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Personalization</strong><p>Per-user recent queries overlay, blending personal + global.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Degradation, filtering offensive content, follow-ups.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Autocomplete is fundamentally a latency problem. Users type a character, and if suggestions take more than 100-150 ms to appear, the experience feels sluggish. That latency budget rules out hitting a general-purpose search cluster on every keystroke — we need a purpose-built index that can serve prefix lookups in single-digit milliseconds.</p>
+          <p>The classic approach is a trie where each node stores the top-K suggestions for that prefix. When the user types &#x27;how t&#x27;, we traverse to the &#x27;how t&#x27; node and return its pre-computed top-10 suggestions, ranked by frequency. The trie is built offline from aggregated query logs and loaded into memory on serving nodes.</p>
+          <p>I&#x27;d walk through the trie structure, the offline aggregation pipeline that feeds it, and then discuss how to add personalization (blending the user&#x27;s own recent queries with the global suggestions) without blowing the latency budget.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many suggestions should we return per keystroke — top 5 or top 10?</li>
+            <li>Do we need personalized suggestions based on user history?</li>
+            <li>What is the acceptable suggestion latency — p99 &lt; 100 ms?</li>
+            <li>How fresh should suggestions be — real-time trending or hourly?</li>
+            <li>Do we need to handle typo correction or just prefix matching?</li>
+            <li>Should we filter offensive or NSFW suggestions?</li>
+            <li>Is the query language English-only or multi-language?</li>
+            <li>Do we need to support suggestion categories (products, queries, brands)?</li>
+            <li>What is the total query vocabulary size?</li>
+            <li>Do suggestions need to reflect real-time trending topics?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: prefix-based suggestions from popular queries, frequency-ranked top-10.</li>
+            <li>In: trie index with offline build, personalization overlay.</li>
+            <li>Out: full-text search, typo correction / fuzzy matching, multi-language.</li>
+            <li>Defer: real-time trending injection, category-based suggestions.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Suggest</strong>
+              <p>GET /suggest?q=prefix&amp;limit=10 returns ranked suggestions within 100 ms.</p>
+            </div>
+            <div>
+              <strong>Log query</strong>
+              <p>POST /queries/log records completed searches for aggregation.</p>
+            </div>
+            <div>
+              <strong>Refresh</strong>
+              <p>Offline pipeline rebuilds trie hourly from aggregated query logs.</p>
+            </div>
+            <div>
+              <strong>Personalize</strong>
+              <p>Blend user&#x27;s recent query history with global suggestions.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency</strong>
+              <p>p99 &lt; 100 ms for suggestion responses — users perceive delay above 150 ms.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>10K QPS sustained, 50K QPS peak (during live events).</p>
+            </div>
+            <div>
+              <strong>Freshness</strong>
+              <p>Global suggestions update hourly; personal history is real-time.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.9% — autocomplete can degrade to no suggestions without breaking search.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Unique queries</strong>
+              <p>5M unique queries in the vocabulary.</p>
+            </div>
+            <div>
+              <strong>Trie size</strong>
+              <p>5M queries × avg 20 chars × overhead ≈ 500 MB in-memory per node.</p>
+            </div>
+            <div>
+              <strong>Query log volume</strong>
+              <p>100M searches/day → 100M log entries/day.</p>
+            </div>
+            <div>
+              <strong>Aggregation output</strong>
+              <p>5M queries × (query + count) × 100B = 500 MB aggregated data.</p>
+            </div>
+            <div>
+              <strong>Serving nodes</strong>
+              <p>10K QPS / 5K QPS per node = 2 nodes minimum (+ replicas for HA).</p>
+            </div>
+            <div>
+              <strong>Personal history</strong>
+              <p>100M users × 20 recent queries × 40B = 80 GB in Redis.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>GET /api/v1/suggest?q=&lt;prefix&gt;&amp;limit=10&amp;user_id=&lt;optional&gt;
+  Response 200: {
+    suggestions: [
+      { text: &#x27;how to tie a tie&#x27;, score: 0.95, source: &#x27;global&#x27; },
+      { text: &#x27;how to cook rice&#x27;, score: 0.87, source: &#x27;personal&#x27; },
+      ...
+    ]
+  }
+
+POST /api/v1/queries/log
+  Body: { user_id, query, timestamp }
+  Response 202: { logged: true }
+
+-- Internal admin:
+POST /internal/trie/rebuild
+  Response 202: { job_id, status: &#x27;building&#x27; }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Query aggregation (data warehouse / batch table)
+CREATE TABLE query_aggregates (
+  query_text    VARCHAR(256) PRIMARY KEY,
+  frequency     BIGINT,
+  last_seen     TIMESTAMP,
+  is_blocked    BOOLEAN DEFAULT false
+);
+
+-- Personal query history in Redis:
+-- Key: user_queries:{user_id}
+-- Value: sorted set of query strings scored by timestamp
+-- ZREVRANGE user_queries:123 0 19 → last 20 queries
+
+-- Trie is an in-memory data structure, not stored in DB.
+-- Serialized to a binary file for fast loading:
+-- /data/trie/trie_2024_01_15_12.bin (timestamped, ~500 MB)
+-- Serving nodes load the latest file on startup or hot-swap.</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The serving layer is a fleet of stateless nodes, each holding the full trie in memory. A load balancer distributes prefix queries across nodes. Each node loads the latest trie snapshot from object storage (S3) at startup and hot-swaps to a new version when notified by the build pipeline.</p>
+          <p>The trie is a compressed (Patricia) trie where each node stores the top-K (K=15) suggestions for that prefix, pre-ranked by a blended score of frequency, recency, and editorial boost. When a query arrives for prefix &#x27;how t&#x27;, the serving node traverses to that node in O(len(prefix)) time and returns the pre-computed list. No sorting or filtering happens at query time — it is pure lookup, which keeps latency in the 1-5 ms range on the server side.</p>
+          <p>The offline build pipeline runs hourly. It reads from the query log aggregation table, filters out blocked/offensive queries, computes frequency scores with a time decay (recent queries count more), and builds a new trie. At each trie node, it inserts all queries that pass through that prefix and keeps only the top-K by score. The resulting trie is serialized to a binary file and uploaded to S3. A notification triggers serving nodes to download and hot-swap.</p>
+          <p>Personalization adds a real-time overlay. Each user&#x27;s last 20 queries are stored in a Redis sorted set (scored by timestamp). When a suggestion request includes a user_id, the serving node fetches the user&#x27;s recent queries from Redis, filters to those matching the current prefix, and blends them with the global suggestions. The blending formula gives 70% weight to global and 30% to personal, with dedup so the same suggestion does not appear twice. If Redis is slow (&gt; 20 ms), the personal overlay is skipped and only global suggestions are returned — graceful degradation.</p>
+          <p>For trending queries, I&#x27;d add a sliding-window counter (last 1 hour) in Redis for queries that spike above their historical baseline. These trending queries get an editorial boost in the next trie build. For truly real-time trending (breaking news), a small sidecar index holds the top 100 trending queries and is merged at query time.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node accent">LB</span><b>&rarr;</b><span class="node">Trie Server (in-memory)</span></div><div class="flow-row"><span class="node">Query Logs</span><b>&rarr;</b><span class="node accent">Aggregation (hourly)</span><b>&rarr;</b><span class="node">Build Trie → S3</span></div><figcaption>Serving path (top) and offline build pipeline (bottom)</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Root</span><span class="node accent">"how" → top-10: [how to tie a tie, how to cook rice, ...]</span><span class="node">"how t" → top-10: [how to tie a tie, how to train a dog, ...]</span><span class="node accent">"how to" → top-10: [how to tie a tie, ...]</span></div><figcaption>Compressed trie with pre-computed top-K at each node</figcaption></figure>
+<figure class="diagram dark"><div class="compare"><div><span class="label">Global (70%)</span><p>Pre-computed in trie. Fast O(prefix) lookup. Updated hourly.</p></div><div><span class="label">Personal (30%)</span><p>From Redis sorted set. User's last 20 queries. Real-time.</p></div></div><figcaption>Blending global and personal suggestions</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>The compressed trie (Patricia trie) is critical for memory efficiency. A naive trie for 5M queries with an average of 20 characters would have ~100M nodes — each with a character, children map, and top-K list. A Patricia trie compresses chains of single-child nodes into single edges labeled with the entire substring. This reduces node count by 60-80%, bringing the trie from ~2 GB to ~500 MB. Each node stores 15 pre-ranked suggestions (just string references, not copies) and a frequency score.</p>
+          <p>The top-K pre-computation is what makes query-time performance possible. During the build phase, we insert each query into the trie with its score. At each node along the path, we maintain a min-heap of size K. If the query&#x27;s score is higher than the heap&#x27;s minimum, we replace it. After all queries are inserted, each node&#x27;s heap contains the K highest-scoring queries that pass through that prefix. At query time, we just return this pre-computed list — no sorting needed.</p>
+          <p>Client-side debouncing is essential to avoid overwhelming the server. The client waits 50-100 ms after the last keystroke before sending the request. If the user types quickly, intermediate characters are never queried. This reduces QPS by 3-5× compared to querying on every keystroke. The client also cancels in-flight requests when a new keystroke arrives — there is no point showing suggestions for &#x27;ho&#x27; when the user has already typed &#x27;how&#x27;.</p>
+          <p>Offensive content filtering has two layers. The first is a blocklist checked during trie build — queries matching known offensive patterns are excluded. The second is a classifier that flags borderline content for human review. Newly popular queries (appearing in top-K for the first time) are quarantined and reviewed before being promoted to the trie. This prevents trending offensive content from appearing in suggestions.</p>
+          <p>Graceful degradation is designed in layers. If the trie server is overloaded, we return cached results from a CDN edge (suggestions for the top 1,000 prefixes are pre-cached with a 5-minute TTL). If Redis is slow, we skip personalization. If the build pipeline fails, serving nodes continue using the last successful trie — stale suggestions are better than no suggestions. The worst-case fallback is returning an empty list, which degrades the experience but does not break the search flow.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Trie with pre-computed top-K and personal blending</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from __future__ import annotations
+import heapq
+from dataclasses import dataclass, field
+
+TOP_K = 15  # max suggestions stored at each trie node
+
+
+@dataclass
+class TrieNode:
+    children: dict[str, TrieNode] = field(default_factory=dict)
+    top_k: list[tuple[float, str]] = field(default_factory=list)
+
+
+class AutocompleteTrie:
+    &quot;&quot;&quot;Prefix trie with pre-computed top-K suggestions at every node.
+    Insertions update the min-heap at each node along the path.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.root = TrieNode()
+
+    def insert(self, query: str, score: float):
+        node = self.root
+        for ch in query:
+            if ch not in node.children:
+                node.children[ch] = TrieNode()
+            node = node.children[ch]
+            self._update_top_k(node, score, query)
+
+    def _update_top_k(self, node: TrieNode, score: float, query: str):
+        if len(node.top_k) &lt; TOP_K:
+            heapq.heappush(node.top_k, (score, query))
+        elif score &gt; node.top_k[0][0]:
+            # Replace the lowest-scored entry if the new one is better
+            heapq.heapreplace(node.top_k, (score, query))
+
+    def suggest(self, prefix: str, limit: int = 10) -&gt; list[str]:
+        node = self.root
+        for ch in prefix:
+            if ch not in node.children:
+                return []
+            node = node.children[ch]
+        ranked = sorted(node.top_k, key=lambda x: -x[0])
+        return [q for _, q in ranked[:limit]]
+
+
+class SuggestionService:
+    &quot;&quot;&quot;Blends global trie results with user&#x27;s recent personal queries.&quot;&quot;&quot;
+
+    def __init__(self, trie: AutocompleteTrie, redis_client):
+        self.trie = trie
+        self.redis = redis_client
+
+    def get_suggestions(
+        self, prefix: str, user_id: int | None = None, limit: int = 10
+    ) -&gt; list[dict]:
+        global_results = self.trie.suggest(prefix, limit=limit)
+        if not user_id:
+            return [{&quot;text&quot;: q, &quot;source&quot;: &quot;global&quot;} for q in global_results]
+        # Fetch user&#x27;s recent queries matching the prefix
+        try:
+            recent = self.redis.zrevrange(f&quot;user_queries:{user_id}&quot;, 0, 19)
+            personal = [q.decode() for q in recent
+                        if q.decode().lower().startswith(prefix.lower())]
+        except Exception:
+            personal = []
+        # Merge: personal results first (up to 3), then global
+        seen = set()
+        merged = []
+        for q in personal[:3]:
+            if q not in seen:
+                merged.append({&quot;text&quot;: q, &quot;source&quot;: &quot;personal&quot;})
+                seen.add(q)
+        for q in global_results:
+            if q not in seen and len(merged) &lt; limit:
+                merged.append({&quot;text&quot;: q, &quot;source&quot;: &quot;global&quot;})
+                seen.add(q)
+        return merged[:limit]</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{BinaryHeap, HashMap};
+use std::cmp::Reverse;
+
+const TOP_K: usize = 15;
+
+struct TrieNode {
+    children: HashMap&lt;char, Box&lt;TrieNode&gt;&gt;,
+    // Min-heap of (score, query) — keeps the K highest-scored suggestions
+    top_k: BinaryHeap&lt;Reverse&lt;(i64, String)&gt;&gt;,
+}
+impl TrieNode {
+    fn new() -&gt; Self {
+        Self { children: HashMap::new(), top_k: BinaryHeap::new() }
+    }
+}
+
+/// Prefix trie with pre-computed top-K at every node.
+/// Lookups are O(prefix_len) — no subtree traversal needed at query time.
+struct AutocompleteTrie { root: TrieNode }
+
+impl AutocompleteTrie {
+    fn new() -&gt; Self { Self { root: TrieNode::new() } }
+
+    fn insert(&amp;mut self, query: &amp;str, score: i64) {
+        let mut node = &amp;mut self.root;
+        for ch in query.chars() {
+            // Ownership: entry API avoids double-borrow on the node
+            node = node.children.entry(ch)
+                .or_insert_with(|| Box::new(TrieNode::new()));
+            Self::update_top_k(&amp;mut node.top_k, score, query);
+        }
+    }
+
+    fn update_top_k(heap: &amp;mut BinaryHeap&lt;Reverse&lt;(i64, String)&gt;&gt;,
+                    score: i64, query: &amp;str) {
+        if heap.len() &lt; TOP_K {
+            heap.push(Reverse((score, query.to_string())));
+        } else if let Some(&amp;Reverse((min_score, _))) = heap.peek() {
+            if score &gt; min_score {
+                heap.pop();
+                heap.push(Reverse((score, query.to_string())));
+            }
+        }
+    }
+
+    fn suggest(&amp;self, prefix: &amp;str, limit: usize) -&gt; Vec&lt;String&gt; {
+        let mut node = &amp;self.root;
+        for ch in prefix.chars() {
+            match node.children.get(&amp;ch) {
+                Some(child) =&gt; node = child,
+                None =&gt; return Vec::new(),
+            }
+        }
+        let mut items: Vec&lt;_&gt; = node.top_k.iter()
+            .map(|Reverse((s, q))| (*s, q.clone())).collect();
+        items.sort_by(|a, b| b.0.cmp(&amp;a.0)); // descending score
+        items.into_iter().take(limit).map(|(_, q)| q).collect()
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;unordered_map&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+static const int kTopK = 15;
+
+struct TrieNode {
+    std::unordered_map&lt;char, TrieNode *&gt; children;
+    // Min-heap keeps the K highest-scored suggestions
+    std::priority_queue&lt;std::pair&lt;double, std::string&gt;,
+        std::vector&lt;std::pair&lt;double, std::string&gt;&gt;,
+        std::greater&lt;&gt;&gt; topK;  // greater&lt;&gt; → min at top
+};
+
+// Prefix trie with pre-computed top-K at every node
+@interface AutocompleteTrie : NSObject
+- (void)insert:(NSString *)query score:(double)score;
+- (NSArray&lt;NSString *&gt; *)suggest:(NSString *)prefix limit:(int)limit;
+@end
+
+@implementation AutocompleteTrie {
+    TrieNode *_root;
+}
+- (instancetype)init {
+    if (self = [super init]) _root = new TrieNode();
+    return self;
+}
+
+- (void)_updateTopK:(TrieNode *)node score:(double)s query:(const std::string &amp;)q {
+    if ((int)node-&gt;topK.size() &lt; kTopK) {
+        node-&gt;topK.push({s, q});
+    } else if (s &gt; node-&gt;topK.top().first) {
+        node-&gt;topK.pop();
+        node-&gt;topK.push({s, q});
+    }
+}
+
+- (void)insert:(NSString *)query score:(double)score {
+    const char *cstr = query.UTF8String;
+    std::string q(cstr);
+    TrieNode *node = _root;
+    for (char ch : q) {
+        if (!node-&gt;children.count(ch))
+            node-&gt;children[ch] = new TrieNode();
+        node = node-&gt;children[ch];
+        [self _updateTopK:node score:score query:q];
+    }
+}
+
+- (NSArray&lt;NSString *&gt; *)suggest:(NSString *)prefix limit:(int)limit {
+    TrieNode *node = _root;
+    for (int i = 0; i &lt; (int)prefix.length; i++) {
+        char ch = [prefix characterAtIndex:i];
+        auto it = node-&gt;children.find(ch);
+        if (it == node-&gt;children.end()) return @[];
+        node = it-&gt;second;
+    }
+    // Drain heap copy into sorted results
+    auto heap = node-&gt;topK;
+    std::vector&lt;std::pair&lt;double, std::string&gt;&gt; items;
+    while (!heap.empty()) { items.push_back(heap.top()); heap.pop(); }
+    std::sort(items.begin(), items.end(),
+              [](auto &amp;a, auto &amp;b){ return a.first &gt; b.first; });
+    NSMutableArray *result = [NSMutableArray new];
+    for (int i = 0; i &lt; std::min((int)items.size(), limit); i++)
+        [result addObject:@(items[i].second.c_str())];
+    return result;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>User types "how t" — debounce 100ms — GET /suggest?q=how+t&amp;limit=10&amp;user_id=123</p></div><div class="seq-row"><span class="actor">LB</span><p>Routes to Trie Server #2</p></div><div class="seq-row"><span class="actor">Trie Server</span><p>Traverses trie to "how t" node — returns pre-computed top-10 (2ms)</p></div><div class="seq-row"><span class="actor">Trie Server</span><p>Fetches user_queries:123 from Redis — filters by prefix "how t" (8ms)</p></div><div class="seq-row"><span class="actor">Trie Server</span><p>Blends 70% global + 30% personal, deduplicates, returns top-10 (total: 12ms)</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Trie vs inverted index</strong>
+              <p>Trie gives O(prefix) lookup with pre-computed top-K; inverted index is flexible but slower for prefix queries.</p>
+            </div>
+            <div>
+              <strong>In-memory vs disk-based</strong>
+              <p>In-memory is ultra-fast but limits vocabulary size; disk-based scales but adds latency.</p>
+            </div>
+            <div>
+              <strong>Hourly vs real-time updates</strong>
+              <p>Hourly is simpler and sufficient for most queries; real-time catches trending topics but adds complexity.</p>
+            </div>
+            <div>
+              <strong>Global-only vs personalized</strong>
+              <p>Global is simpler and cacheable; personalized is more relevant but adds Redis dependency.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Trie build pipeline fails — serving nodes stuck on stale suggestions for hours.</li>
+            <li>Redis latency spike — personal suggestions add 200ms, exceeding the p99 budget.</li>
+            <li>Offensive query goes viral — appears in top-K before the hourly blocklist refresh.</li>
+            <li>Hot prefix (&#x27;how to&#x27;) overloads a single trie node&#x27;s top-K — but this is pre-computed so actually fine.</li>
+            <li>Client sends requests on every keystroke without debounce — QPS spikes 5×.</li>
+            <li>Trie memory exceeds node RAM after vocabulary growth — OOM kills serving process.</li>
+            <li>CDN caches stale suggestions — users see outdated results for 5+ minutes.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add typo correction (e.g., &#x27;how too&#x27; → &#x27;how to&#x27;)?</li>
+            <li>Design real-time trending injection into suggestions.</li>
+            <li>How would you support multi-language autocomplete with different tokenization?</li>
+            <li>Add category-aware suggestions (products, brands, queries in separate sections).</li>
+            <li>How would you A/B test different ranking formulas in the suggestion pipeline?</li>
+            <li>Design a feedback loop where selected suggestions boost future ranking.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the trie with pre-computed top-K at each node for O(prefix) lookup. Sketch the offline build pipeline from query logs to serialized trie. Discuss client-side debouncing and the 100ms latency budget. Personalization via Redis overlay and graceful degradation (skip personal if slow) shows depth. You do not need to implement typo correction or real-time trending in 60 minutes.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../ecommerce_checkout/">← Design an e-commerce checkout</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

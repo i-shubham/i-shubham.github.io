@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cut a surprising cloud bill in half | Cloud | Engineering Notes</title>
+  <meta name="description" content="Surprise bills usually hide in egress, idle, orphaned disks, and &#x27;temporary&#x27; resources from last quarter.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Cut a surprising cloud bill in half</p>
+      <p class="eyebrow">Cloud · Hard · ~60 min</p>
+      <h1>Cut a surprising cloud bill in half</h1>
+      <p class="problem-deck">Surprise bills usually hide in egress, idle, orphaned disks, and &#x27;temporary&#x27; resources from last quarter.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Bill amount, timeline of increase, tagging state, existing cost tools</p></div></div>
+            <div class="stack-step"><strong>5-15m</strong><div><strong>Forensics</strong><p>CUR analysis: top services, usage types, month-over-month changes</p></div></div>
+            <div class="stack-step"><strong>15-25m</strong><div><strong>Quick wins</strong><p>Orphan cleanup, idle instances, unattached volumes — immediate $10K+</p></div></div>
+            <div class="stack-step"><strong>25-35m</strong><div><strong>Right-sizing</strong><p>EC2, RDS, ElastiCache based on CloudWatch CPU/memory utilization</p></div></div>
+            <div class="stack-step"><strong>35-42m</strong><div><strong>Reserved/Savings Plans</strong><p>Compute Savings Plan for stable baseline; 30-40% savings</p></div></div>
+            <div class="stack-step"><strong>42-48m</strong><div><strong>Egress + storage</strong><p>VPC endpoints, CDN, S3 lifecycle rules, storage class optimization</p></div></div>
+            <div class="stack-step"><strong>48-55m</strong><div><strong>Governance</strong><p>Tagging policy, budget alerts, recurring cost review cadence</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>The cloud bill jumped from $40K to $85K in two months and nobody can explain why. This is a forensics problem first and an optimization problem second. Before cutting anything, I need to understand where the money goes and what changed.</p>
+          <p>The usual suspects: (1) egress charges — cross-AZ, cross-region, or internet egress that nobody budgeted for, (2) idle compute — EC2 instances, RDS instances, and Kubernetes nodes running 24/7 with 5% CPU utilization, (3) orphaned resources — EBS volumes from terminated instances, old snapshots, unused Elastic IPs, abandoned load balancers, (4) storage — S3 buckets with no lifecycle rules accumulating terabytes, and (5) over-provisioned databases — db.r5.4xlarge for a database that could run on db.r5.large.</p>
+          <p>I start with the AWS Cost Explorer or the Cost and Usage Report (CUR). Group by service, then by resource tag, then by usage type. The CUR gives line-item detail: which resources, what usage type (DataTransfer-Out-Bytes, EBS:VolumeUsage.gp3), and the unblended cost. Within 30 minutes, I can identify the top 10 cost drivers and which changed the most month-over-month.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the current monthly bill and what was it 3 months ago?</li>
+            <li>Are resources tagged with owner and cost center?</li>
+            <li>Which AWS services are the top cost drivers?</li>
+            <li>Is there a Cost and Usage Report (CUR) configured?</li>
+            <li>Are Reserved Instances or Savings Plans in place?</li>
+            <li>Multi-account — org-level billing or per-account?</li>
+            <li>Who has permission to create resources — anyone or gated?</li>
+            <li>Is there a FinOps team or owner for cloud costs?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Identify top cost drivers, eliminate waste, right-size, implement Savings Plans</li>
+            <li>In scope — Tagging enforcement, budget alerts, cost monitoring dashboard</li>
+            <li>Out of scope — Cloud migration to a different provider</li>
+            <li>Defer — Full FinOps program with chargeback, automated governance</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cost forensics</strong>
+              <p>Identify top 10 cost drivers with month-over-month change</p>
+            </div>
+            <div>
+              <strong>Orphan cleanup</strong>
+              <p>Find and delete unattached EBS volumes, unused EIPs, old snapshots</p>
+            </div>
+            <div>
+              <strong>Right-sizing</strong>
+              <p>Downsize compute and database instances based on utilization</p>
+            </div>
+            <div>
+              <strong>Reserved capacity</strong>
+              <p>Compute Savings Plan or RI coverage for stable workloads</p>
+            </div>
+            <div>
+              <strong>Egress reduction</strong>
+              <p>VPC endpoints, CDN for static assets, cross-AZ traffic optimization</p>
+            </div>
+            <div>
+              <strong>Budget alerts</strong>
+              <p>Per-team and per-service budget with alert at 80% and 100%</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cost target</strong>
+              <p>Reduce from $85K to $42K within 8 weeks</p>
+            </div>
+            <div>
+              <strong>No degradation</strong>
+              <p>Performance SLAs must not regress</p>
+            </div>
+            <div>
+              <strong>Visibility</strong>
+              <p>Weekly cost report by team and service</p>
+            </div>
+            <div>
+              <strong>Sustainability</strong>
+              <p>Savings must persist — not one-time cleanup</p>
+            </div>
+            <div>
+              <strong>Governance</strong>
+              <p>Tagging policy enforced; untagged resources flagged and escalated</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Current bill</strong>
+              <p>$85K/month; was $40K three months ago</p>
+            </div>
+            <div>
+              <strong>EC2 compute</strong>
+              <p>$32K/month — 40% of bill; 12 instances at &lt;10% CPU avg</p>
+            </div>
+            <div>
+              <strong>RDS</strong>
+              <p>$15K/month — db.r5.4xlarge for 3 databases; avg CPU 8%</p>
+            </div>
+            <div>
+              <strong>S3 storage</strong>
+              <p>$8K/month — 350TB with no lifecycle rules</p>
+            </div>
+            <div>
+              <strong>Data transfer</strong>
+              <p>$12K/month — 60% is cross-AZ, 25% is internet egress</p>
+            </div>
+            <div>
+              <strong>Orphaned resources</strong>
+              <p>$5K/month — 200 unattached EBS volumes, 50 old snapshots, 15 unused EIPs</p>
+            </div>
+            <div>
+              <strong>EKS/Fargate</strong>
+              <p>$8K/month — over-provisioned node groups</p>
+            </div>
+            <div>
+              <strong>Other</strong>
+              <p>$5K/month — CloudWatch, NAT gateways, KMS, misc</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Cost analysis queries (on AWS CUR data in Athena)
+-- ────────────────────────────────────────────────────
+
+-- Top 10 cost drivers by service
+SELECT
+  line_item_product_code AS service,
+  SUM(line_item_unblended_cost) AS monthly_cost
+FROM cur_database.cur_table
+WHERE month = &#x27;6&#x27; AND year = &#x27;2024&#x27;
+GROUP BY line_item_product_code
+ORDER BY monthly_cost DESC
+LIMIT 10;
+
+-- Orphaned EBS volumes (unattached)
+SELECT
+  line_item_resource_id,
+  SUM(line_item_unblended_cost) AS monthly_cost,
+  MAX(line_item_usage_type) AS usage_type
+FROM cur_database.cur_table
+WHERE line_item_product_code = &#x27;AmazonEC2&#x27;
+  AND line_item_usage_type LIKE &#x27;%EBS:VolumeUsage%&#x27;
+  AND line_item_resource_id NOT IN (
+    SELECT DISTINCT line_item_resource_id
+    FROM cur_database.cur_table
+    WHERE line_item_operation = &#x27;AttachVolume&#x27;
+  )
+GROUP BY line_item_resource_id
+ORDER BY monthly_cost DESC;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The cost reduction follows a standard playbook: forensics, quick wins, right-sizing, commitments, and governance.</p>
+          <p>Forensics (Day 1-3): pull the CUR into Athena and run the queries: top 10 services by cost, top 10 resources by cost, and month-over-month delta by service. In this scenario, the $45K increase came from: (1) 8 new dev instances left running 24/7 ($8K), (2) S3 storage growing unchecked without lifecycle ($5K cumulative), (3) a new data pipeline creating massive cross-AZ transfers ($7K), (4) RDS instances upsized for a one-time migration and never downsized ($6K), and (5) natural growth without Savings Plans ($19K of on-demand at full price).</p>
+          <p>Quick wins (Week 1-2): delete orphaned resources ($5K), schedule dev instances to stop overnight ($8K), add S3 lifecycle rules ($5K). Total: $18K/month saved with minimal risk.</p>
+          <p>Right-sizing (Week 3-4): use CloudWatch metrics (CPU, memory, network) over 30 days to identify over-provisioned instances. Right-size in staging first, then production. For RDS, use Performance Insights to validate that the smaller instance handles peak load. Total: $12K saved.</p>
+          <p>Commitments (Week 5-6): with a stable baseline of $45K/month (after quick wins and right-sizing), commit $20K/month to a Compute Savings Plan (1-year, no upfront). This gives ~30% discount on the committed portion: saves ~$8.5K/month. Additionally, optimize egress: VPC endpoints for S3 ($2K saved), CloudFront for static assets ($1K saved). Total: $11.5K saved.</p>
+          <p>Total savings: $18K + $12K + $11.5K = $41.5K. New bill: ~$43.5K (49% reduction).</p>
+<figure class="diagram dark">
+  <figcaption>Cost Breakdown ($85K/month)</figcaption>
+  <div class="concern-grid">
+    <div class="node accent"><span class="label">EC2 ($32K)</span><p>12 instances, 8 idle dev boxes</p></div>
+    <div class="node"><span class="label">RDS ($15K)</span><p>3 over-provisioned databases</p></div>
+    <div class="node"><span class="label">S3 ($8K)</span><p>350TB, no lifecycle rules</p></div>
+    <div class="node accent"><span class="label">Data Transfer ($12K)</span><p>60% cross-AZ</p></div>
+    <div class="node"><span class="label">Orphans ($5K)</span><p>EBS, snapshots, EIPs</p></div>
+    <div class="node"><span class="label">Other ($13K)</span><p>EKS, CloudWatch, NAT</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Savings Timeline</figcaption>
+  <div class="flow-row">
+    <div class="node accent">Week 1-2<br><small>Quick wins: -$18K</small></div>
+    <div class="node">Week 3-4<br><small>Right-size: -$12K</small></div>
+    <div class="node accent">Week 5-6<br><small>Commitments: -$11.5K</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Before vs After</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Before</span><p>$85K/month<br>No tagging, no lifecycle, no Savings Plan</p></div>
+    <div class="node accent"><span class="label">After</span><p>$43.5K/month<br>Tagged, tiered, committed, monitored</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>CUR vs Cost Explorer: Cost Explorer is good for high-level trends but lacks resource-level detail. The CUR (Cost and Usage Report) is a line-item export to S3, queryable via Athena. For cost forensics, CUR is essential — it tells you exactly which EBS volume costs $X/month, which S3 bucket, which data transfer path. I set up CUR on day 1 if it is not already enabled.</p>
+          <p>Reserved Instances vs Savings Plans: RIs are resource-specific (this instance type in this region). Savings Plans are spend-based (commit $X/hour of compute, apply anywhere). For most organizations, Compute Savings Plans are better because they survive right-sizing: if you downsize from r5.4xlarge to r5.xlarge, the Savings Plan still applies. An RI for the old instance type would become unused.</p>
+          <p>Cross-AZ transfer: AWS charges $0.01/GB for cross-AZ traffic. An application with 3 AZs, services talking to databases in different AZs, and microservice-to-microservice calls can easily generate 500GB/month of cross-AZ traffic = $5,000/month. Mitigation: use AZ-aware routing (prefer same-AZ replicas for database reads), deploy replicated caches (ElastiCache with replicas in each AZ), and consolidate chatty services into the same AZ when HA allows.</p>
+          <p>EBS snapshot cost: old snapshots accumulate silently. A 500GB snapshot costs $0.05/GB/month = $25/month. If a team creates daily snapshots with 30-day retention but the lifecycle policy is not configured, after a year you have 365 snapshots × $25 = $9,125/month. I audit snapshots by age and add automated lifecycle: keep 7 daily, 4 weekly, 12 monthly.</p>
+          <p>Sustained cost governance: savings erode without ongoing discipline. I establish: (1) weekly cost review meeting with engineering leads, (2) budget alerts at 80% and 100% per team, (3) Slack bot that posts daily cost delta, (4) quarterly Savings Plan review to adjust commitments. The Slack bot is the most effective — daily visibility prevents gradual drift.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Orphaned EBS and idle instance detector</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+from datetime import datetime, timedelta
+
+def find_orphaned_ebs_volumes(region=&#x27;us-east-1&#x27;):
+    ec2 = boto3.client(&#x27;ec2&#x27;, region_name=region)
+    volumes = ec2.describe_volumes(
+        Filters=[{&#x27;Name&#x27;: &#x27;status&#x27;, &#x27;Values&#x27;: [&#x27;available&#x27;]}]
+    )[&#x27;Volumes&#x27;]
+
+    orphans = []
+    for v in volumes:
+        age_days = (datetime.now(v[&#x27;CreateTime&#x27;].tzinfo) - v[&#x27;CreateTime&#x27;]).days
+        monthly_cost = v[&#x27;Size&#x27;] * 0.10  # gp3 at $0.08/GB, estimate
+        tags = {t[&#x27;Key&#x27;]: t[&#x27;Value&#x27;] for t in v.get(&#x27;Tags&#x27;, [])}
+        orphans.append({
+            &#x27;volume_id&#x27;: v[&#x27;VolumeId&#x27;],
+            &#x27;size_gb&#x27;: v[&#x27;Size&#x27;],
+            &#x27;age_days&#x27;: age_days,
+            &#x27;monthly_cost&#x27;: round(monthly_cost, 2),
+            &#x27;owner&#x27;: tags.get(&#x27;owner&#x27;, &#x27;UNTAGGED&#x27;),
+            &#x27;name&#x27;: tags.get(&#x27;Name&#x27;, &#x27;unnamed&#x27;)
+        })
+    return sorted(orphans, key=lambda x: x[&#x27;monthly_cost&#x27;], reverse=True)
+
+def find_idle_instances(region=&#x27;us-east-1&#x27;, cpu_threshold=5.0):
+    ec2 = boto3.client(&#x27;ec2&#x27;, region_name=region)
+    cw = boto3.client(&#x27;cloudwatch&#x27;, region_name=region)
+    instances = ec2.describe_instances(
+        Filters=[{&#x27;Name&#x27;: &#x27;instance-state-name&#x27;, &#x27;Values&#x27;: [&#x27;running&#x27;]}]
+    )
+    idle = []
+    for r in instances[&#x27;Reservations&#x27;]:
+        for i in r[&#x27;Instances&#x27;]:
+            avg_cpu = cw.get_metric_statistics(
+                Namespace=&#x27;AWS/EC2&#x27;, MetricName=&#x27;CPUUtilization&#x27;,
+                Dimensions=[{&#x27;Name&#x27;: &#x27;InstanceId&#x27;, &#x27;Value&#x27;: i[&#x27;InstanceId&#x27;]}],
+                StartTime=datetime.utcnow() - timedelta(days=14),
+                EndTime=datetime.utcnow(), Period=86400,
+                Statistics=[&#x27;Average&#x27;]
+            )[&#x27;Datapoints&#x27;]
+            avg = sum(d[&#x27;Average&#x27;] for d in avg_cpu) / len(avg_cpu) if avg_cpu else 0
+            if avg &lt; cpu_threshold:
+                idle.append({&#x27;id&#x27;: i[&#x27;InstanceId&#x27;], &#x27;type&#x27;: i[&#x27;InstanceType&#x27;],
+                             &#x27;avg_cpu&#x27;: round(avg, 1)})
+    return idle</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_ec2 as ec2;
+use aws_sdk_cloudwatch as cw;
+use chrono::{Duration, Utc};
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub struct OrphanVolume {
+    pub volume_id: String,
+    pub size_gb: i32,
+    pub age_days: i64,
+    pub monthly_cost: f64,
+    pub owner: String,
+    pub name: String,
+}
+
+pub async fn find_orphaned_ebs_volumes(region: &amp;str) -&gt; Vec&lt;OrphanVolume&gt; {
+    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(region.to_string()))
+        .load().await;
+    let client = ec2::Client::new(&amp;config);
+
+    let resp = client
+        .describe_volumes()
+        .filters(ec2::types::Filter::builder().name(&quot;status&quot;).values(&quot;available&quot;).build())
+        .send().await.unwrap();
+
+    let now = Utc::now();
+    let mut orphans: Vec&lt;OrphanVolume&gt; = resp.volumes().iter().map(|v| {
+        let created = v.create_time().unwrap();
+        let age_days = (now - *created).num_days();
+        let size = v.size().unwrap_or(0);
+        let monthly_cost = (size as f64) * 0.10;
+        let tags: std::collections::HashMap&lt;&amp;str, &amp;str&gt; = v.tags().iter()
+            .map(|t| (t.key().unwrap_or(&quot;&quot;), t.value().unwrap_or(&quot;&quot;)))
+            .collect();
+        OrphanVolume {
+            volume_id: v.volume_id().unwrap_or_default().into(),
+            size_gb: size,
+            age_days,
+            monthly_cost: (monthly_cost * 100.0).round() / 100.0,
+            owner: tags.get(&quot;owner&quot;).unwrap_or(&amp;&quot;UNTAGGED&quot;).to_string(),
+            name: tags.get(&quot;Name&quot;).unwrap_or(&amp;&quot;unnamed&quot;).to_string(),
+        }
+    }).collect();
+
+    orphans.sort_by(|a, b| b.monthly_cost.partial_cmp(&amp;a.monthly_cost).unwrap());
+    orphans
+}
+
+#[derive(Debug, Serialize)]
+pub struct IdleInstance {
+    pub id: String,
+    pub instance_type: String,
+    pub avg_cpu: f64,
+}
+
+pub async fn find_idle_instances(region: &amp;str, cpu_threshold: f64) -&gt; Vec&lt;IdleInstance&gt; {
+    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(region.to_string()))
+        .load().await;
+    let ec2_client = ec2::Client::new(&amp;config);
+    let cw_client = cw::Client::new(&amp;config);
+
+    let resp = ec2_client
+        .describe_instances()
+        .filters(ec2::types::Filter::builder()
+            .name(&quot;instance-state-name&quot;).values(&quot;running&quot;).build())
+        .send().await.unwrap();
+
+    let mut idle = Vec::new();
+    let now = Utc::now();
+
+    for reservation in resp.reservations() {
+        for inst in reservation.instances() {
+            let iid = inst.instance_id().unwrap_or_default();
+            let stats = cw_client
+                .get_metric_statistics()
+                .namespace(&quot;AWS/EC2&quot;)
+                .metric_name(&quot;CPUUtilization&quot;)
+                .dimensions(cw::types::Dimension::builder()
+                    .name(&quot;InstanceId&quot;).value(iid).build())
+                .start_time((now - Duration::days(14)).into())
+                .end_time(now.into())
+                .period(86400)
+                .statistics(cw::types::Statistic::Average)
+                .send().await.unwrap();
+
+            let pts = stats.datapoints();
+            let avg = if pts.is_empty() { 0.0 } else {
+                pts.iter().map(|d| d.average().unwrap_or(0.0)).sum::&lt;f64&gt;() / pts.len() as f64
+            };
+            if avg &lt; cpu_threshold {
+                idle.push(IdleInstance {
+                    id: iid.into(),
+                    instance_type: inst.instance_type()
+                        .map(|t| t.as_str().to_string())
+                        .unwrap_or_default(),
+                    avg_cpu: (avg * 10.0).round() / 10.0,
+                });
+            }
+        }
+    }
+    idle
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+
+struct OrphanVolume {
+    std::string volumeId;
+    int         sizeGb;
+    int         ageDays;
+    double      monthlyCost;
+    std::string owner;
+    std::string name;
+};
+
+struct IdleInstance {
+    std::string instanceId;
+    std::string instanceType;
+    double      avgCpu;
+};
+
+// Conceptual AWS client protocols — production uses signed REST or C++ SDK.
+@protocol AWSEC2Client &lt;NSObject&gt;
+- (NSArray&lt;NSDictionary *&gt; *)describeVolumesAvailable;
+- (NSArray&lt;NSDictionary *&gt; *)describeRunningInstances;
+@end
+
+@protocol AWSCloudWatchClient &lt;NSObject&gt;
+- (NSArray&lt;NSNumber *&gt; *)avgCPUForInstance:(NSString *)iid days:(int)days;
+@end
+
+static std::vector&lt;OrphanVolume&gt; findOrphanedEBSVolumes(id&lt;AWSEC2Client&gt; ec2) {
+    NSArray *volumes = [ec2 describeVolumesAvailable];
+    std::vector&lt;OrphanVolume&gt; orphans;
+
+    for (NSDictionary *v in volumes) {
+        int sizeGb = [v[@&quot;Size&quot;] intValue];
+        int ageDays = [v[@&quot;AgeDays&quot;] intValue];
+        double cost = sizeGb * 0.10;
+        NSDictionary *tags = v[@&quot;Tags&quot;] ?: @{};
+
+        orphans.push_back({
+            [v[@&quot;VolumeId&quot;] UTF8String],
+            sizeGb, ageDays,
+            round(cost * 100.0) / 100.0,
+            [tags[@&quot;owner&quot;] UTF8String] ?: &quot;UNTAGGED&quot;,
+            [tags[@&quot;Name&quot;] UTF8String] ?: &quot;unnamed&quot;,
+        });
+    }
+    std::sort(orphans.begin(), orphans.end(),
+              [](auto &amp;a, auto &amp;b) { return a.monthlyCost &gt; b.monthlyCost; });
+    return orphans;
+}
+
+static std::vector&lt;IdleInstance&gt; findIdleInstances(id&lt;AWSEC2Client&gt; ec2,
+                                                   id&lt;AWSCloudWatchClient&gt; cw,
+                                                   double cpuThreshold) {
+    NSArray *instances = [ec2 describeRunningInstances];
+    std::vector&lt;IdleInstance&gt; idle;
+
+    for (NSDictionary *inst in instances) {
+        NSString *iid = inst[@&quot;InstanceId&quot;];
+        NSArray&lt;NSNumber *&gt; *points = [cw avgCPUForInstance:iid days:14];
+
+        double avg = 0;
+        if (points.count &gt; 0) {
+            double sum = 0;
+            for (NSNumber *pt in points) sum += pt.doubleValue;
+            avg = sum / points.count;
+        }
+        if (avg &lt; cpuThreshold) {
+            idle.push_back({
+                iid.UTF8String,
+                [inst[@&quot;InstanceType&quot;] UTF8String],
+                round(avg * 10.0) / 10.0,
+            });
+        }
+    }
+    return idle;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Day 1</span><p>Pull CUR into Athena. Top drivers: EC2 $32K, RDS $15K, Data Transfer $12K, S3 $8K</p></div>
+    <div class="seq-row"><span class="actor">Day 2</span><p>Identify: 200 unattached EBS volumes ($3.2K), 8 idle dev instances ($8K), 50 old snapshots ($1.8K)</p></div>
+    <div class="seq-row"><span class="actor">Week 1</span><p>Delete orphans, schedule dev instances, add S3 lifecycle → immediate $18K/month saved</p></div>
+    <div class="seq-row"><span class="actor">Week 3</span><p>Right-size EC2 (r5.4xl → r5.xl) and RDS in staging first, then prod after validation → $12K saved</p></div>
+    <div class="seq-row"><span class="actor">Week 5</span><p>Purchase Compute Savings Plan: $20K/month committed, ~30% discount → $8.5K saved</p></div>
+    <div class="seq-row"><span class="actor">Week 6</span><p>VPC endpoints for S3 ($2K), CloudFront for static ($1K) → $3K egress saved</p></div>
+    <div class="seq-row"><span class="actor">Month 2</span><p>New bill: $43.5K (was $85K). Set up weekly cost review and budget alerts to prevent regression</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Savings Plans vs Reserved Instances</strong>
+              <p>Savings Plans survive right-sizing and region changes. RIs give slightly higher discounts but lock you to specific instance families</p>
+            </div>
+            <div>
+              <strong>Aggressive vs conservative right-sizing</strong>
+              <p>Aggressive saves more but risks performance degradation. I right-size to 40% peak utilization with monitoring and quick scale-up path</p>
+            </div>
+            <div>
+              <strong>Single AZ vs multi-AZ cost</strong>
+              <p>Single AZ eliminates cross-AZ charges but sacrifices HA. Acceptable for dev/staging; never for production</p>
+            </div>
+            <div>
+              <strong>Spot for production</strong>
+              <p>60-70% savings but risk of interruption. Use for stateless, retryable workloads only; never for databases or single-instance services</p>
+            </div>
+            <div>
+              <strong>Upfront vs no-upfront Savings Plans</strong>
+              <p>All upfront saves ~5% more but locks capital. No-upfront preserves flexibility; start there and upgrade if committed</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Right-sized instance cannot handle Black Friday peak — monitor 30 days including peak events; keep scale-up automation ready</li>
+            <li>Savings Plan purchased for old instance family, then right-sized to different family — Compute Savings Plan avoids this; EC2 SP does not</li>
+            <li>Dev instances auto-stop breaks CI/CD running at night — whitelist CI runners from schedule; use Fargate for CI instead</li>
+            <li>S3 lifecycle deletes data needed for a compliance audit — Glacier with 7-year retention, not deletion; confirm with legal before setting expiry</li>
+            <li>Cost dashboard shows reduction but bill stays high — data transfer increase offset compute savings; monitor all categories, not just EC2</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you implement a chargeback model across 10 engineering teams?</li>
+            <li>How do you handle cost optimization for a multi-account AWS Organization?</li>
+            <li>What tools would you recommend for ongoing FinOps (CloudHealth, Kubecost, native)?</li>
+            <li>How do you balance cost optimization with developer productivity?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: CUR-based forensics to identify cost drivers, a phased action plan (quick wins, right-sizing, commitments), specific savings math per phase, and governance to sustain savings. Show concrete numbers: &#x27;$13.5K in orphaned resources&#x27; is more persuasive than &#x27;delete unused stuff.&#x27;</p>
+          <p>You do not need to design the full FinOps program or chargeback billing system. The interviewer wants to see: systematic cost analysis (not guessing), prioritized actions (biggest impact first), understanding of Savings Plans vs RIs, and a plan to prevent regression.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../s3_landing_zone/">← Build an S3-backed data lake landing zone</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../iam_platform/">Design IAM for a platform team →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

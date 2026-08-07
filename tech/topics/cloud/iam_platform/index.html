@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design IAM for a platform team | Cloud | Engineering Notes</title>
+  <meta name="description" content="Platform IAM is about scalable roles and guardrails — not long-lived access keys in a wiki.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Cloud</a> / Design IAM for a platform team</p>
+      <p class="eyebrow">Cloud · Hard · ~60 min</p>
+      <h1>Design IAM for a platform team</h1>
+      <p class="problem-deck">Platform IAM is about scalable roles and guardrails — not long-lived access keys in a wiki.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Team count, SSO provider, compliance needs, current IAM state</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Role hierarchy</strong><p>Team roles × environment levels; SSO group → IAM role mapping</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Permission boundaries</strong><p>Boundary policies that cap team-level permissions; prevent escalation</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Break-glass</strong><p>Emergency access: separate MFA-protected role, 1-hour session, full audit</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>CI/CD authentication</strong><p>OIDC federation for GitHub Actions; no long-lived secrets</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Audit + review</strong><p>CloudTrail analysis, unused permission detection, quarterly access review</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Failure modes</strong><p>SSO outage, permission boundary too restrictive, break-glass abuse</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Platform IAM is the difference between &#x27;developers can deploy safely&#x27; and &#x27;someone accidentally deleted the production database.&#x27; The goal is least privilege at scale: 50 engineers across 8 teams need different levels of access to 200+ AWS resources, and the permissions must be auditable, revocable, and impossible to accidentally escalate.</p>
+          <p>The foundation is roles over users. No IAM user accounts for engineers — everyone authenticates via SSO (Okta/Azure AD) and assumes a role. Roles are scoped by team and environment: team-orders-dev has read/write to dev resources, team-orders-prod has read-only plus deploy permissions, and an SRE on-call role has broader access with a 1-hour session expiry.</p>
+          <p>Permission boundaries are the guardrail that IAM policies alone cannot provide. A team admin can create roles for their team, but the permission boundary ensures they cannot create a role with more permissions than their boundary allows. This prevents privilege escalation: even if team-orders-admin creates a new role with AdministratorAccess, the boundary caps it.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many engineers and teams?</li>
+            <li>SSO provider — Okta, Azure AD, Google Workspace?</li>
+            <li>Multi-account or single account?</li>
+            <li>Compliance requirements — SOC2, PCI, HIPAA?</li>
+            <li>Current IAM state — users with access keys or roles?</li>
+            <li>CI/CD pipeline — how do deploys authenticate?</li>
+            <li>Break-glass access needs — who and for what?</li>
+            <li>Rotation policy for any remaining service credentials?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Role-based access with SSO, permission boundaries, break-glass procedure, CI/CD service roles</li>
+            <li>In scope — Audit logging, access review cadence, credential rotation</li>
+            <li>Out of scope — Application-level authorization (RBAC in the app)</li>
+            <li>Defer — Automated access request/approval workflow, ABAC policies</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>SSO integration</strong>
+              <p>Engineers authenticate via Okta SSO; no IAM user accounts</p>
+            </div>
+            <div>
+              <strong>Role hierarchy</strong>
+              <p>Team roles: dev (read/write dev), prod-read, prod-deploy, admin</p>
+            </div>
+            <div>
+              <strong>Permission boundaries</strong>
+              <p>Cap maximum permissions per team; prevent privilege escalation</p>
+            </div>
+            <div>
+              <strong>Break-glass</strong>
+              <p>Emergency admin access with MFA, 1-hour expiry, and full audit trail</p>
+            </div>
+            <div>
+              <strong>CI/CD roles</strong>
+              <p>Service roles for pipelines with minimal permissions per deployment</p>
+            </div>
+            <div>
+              <strong>Access review</strong>
+              <p>Quarterly review of role assignments; remove unused access</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Least privilege</strong>
+              <p>No role has broader permissions than required for its function</p>
+            </div>
+            <div>
+              <strong>Auditability</strong>
+              <p>Every assume-role event logged in CloudTrail; queryable via Athena</p>
+            </div>
+            <div>
+              <strong>Revocability</strong>
+              <p>Any role can be revoked within 5 minutes via SSO group removal</p>
+            </div>
+            <div>
+              <strong>Scalability</strong>
+              <p>Role structure supports 200+ engineers without per-person policies</p>
+            </div>
+            <div>
+              <strong>Recovery</strong>
+              <p>Break-glass access available within 2 minutes during incidents</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Engineers</strong>
+              <p>50 across 8 teams</p>
+            </div>
+            <div>
+              <strong>Roles</strong>
+              <p>8 teams × 4 levels (dev, prod-read, prod-deploy, admin) = 32 team roles + 3 platform roles = 35</p>
+            </div>
+            <div>
+              <strong>Policies</strong>
+              <p>~20 managed policies + 8 permission boundary policies</p>
+            </div>
+            <div>
+              <strong>CloudTrail events</strong>
+              <p>~500K AssumeRole events/month across all engineers</p>
+            </div>
+            <div>
+              <strong>Access reviews</strong>
+              <p>35 roles reviewed quarterly; ~2 hours of review time per quarter</p>
+            </div>
+            <div>
+              <strong>Break-glass usage</strong>
+              <p>Target: &lt; 5 uses per quarter; each fully audited</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code># Permission boundary policy (JSON)
+{
+  &quot;Version&quot;: &quot;2012-10-17&quot;,
+  &quot;Statement&quot;: [
+    {
+      &quot;Sid&quot;: &quot;AllowComputeAndStorage&quot;,
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Action&quot;: [
+        &quot;ec2:*&quot;, &quot;ecs:*&quot;, &quot;ecr:*&quot;, &quot;s3:*&quot;,
+        &quot;rds:Describe*&quot;, &quot;rds:List*&quot;,
+        &quot;logs:*&quot;, &quot;cloudwatch:*&quot;, &quot;xray:*&quot;
+      ],
+      &quot;Resource&quot;: &quot;*&quot;
+    },
+    {
+      &quot;Sid&quot;: &quot;DenyDangerousActions&quot;,
+      &quot;Effect&quot;: &quot;Deny&quot;,
+      &quot;Action&quot;: [
+        &quot;iam:CreateUser&quot;, &quot;iam:CreateAccessKey&quot;,
+        &quot;iam:AttachUserPolicy&quot;, &quot;iam:PutUserPolicy&quot;,
+        &quot;organizations:*&quot;, &quot;account:*&quot;,
+        &quot;sts:AssumeRole&quot;  
+      ],
+      &quot;Resource&quot;: &quot;*&quot;,
+      &quot;Condition&quot;: {
+        &quot;StringNotLike&quot;: {
+          &quot;aws:PrincipalArn&quot;: &quot;arn:aws:iam::*:role/platform-admin&quot;
+        }
+      }
+    }
+  ]
+}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The IAM architecture has four layers: identity, roles, boundaries, and audit.</p>
+          <p>Identity: all human access goes through SSO (Okta). No IAM users, no access keys for engineers. SSO maps Okta groups to AWS IAM roles via AWS SSO (IAM Identity Center). When an engineer is added to the &#x27;orders-dev&#x27; Okta group, they can assume the team-orders-dev role in the dev account. Removal from the group revokes access immediately — no key rotation needed.</p>
+          <p>Roles: four levels per team: dev (full access in dev account), prod-read (read-only in prod), prod-deploy (deploy permissions: ECS update, ECR push, but not database admin), and admin (team administration: create roles within the team&#x27;s permission boundary). Session durations decrease with privilege: dev=8h, prod-read=4h, prod-deploy=1h, break-glass=1h.</p>
+          <p>Boundaries: every role has a permission boundary attached. The boundary defines the maximum permissions the role can ever have, regardless of what policies are attached. If the boundary allows ec2:*, ecs:*, s3:* but denies iam:CreateUser, no role within that boundary can create IAM users — even if someone attaches AdministratorAccess. This is the guardrail against privilege escalation. Platform team manages boundaries; team admins manage policies within them.</p>
+          <p>Audit: CloudTrail logs every AssumeRole, API call, and console sign-in. I set up Athena queries to detect: (1) break-glass usage — alert immediately, (2) unused roles — no AssumeRole events in 90 days → candidate for removal, (3) permission escalation attempts — IAM policy changes outside of Terraform, (4) access from unexpected locations — non-VPN IPs assuming sensitive roles.</p>
+<figure class="diagram dark">
+  <figcaption>IAM Architecture</figcaption>
+  <div class="flow-row">
+    <div class="node">Okta SSO<br><small>authentication</small></div>
+    <div class="node accent">AWS IAM Identity Center<br><small>group → role mapping</small></div>
+    <div class="node">Team Roles<br><small>dev/prod-read/deploy</small></div>
+    <div class="node accent">Permission Boundary<br><small>max privilege cap</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Role Hierarchy per Team</figcaption>
+  <div class="concern-grid">
+    <div class="node"><span class="label">Dev</span><p>Full access in dev account<br>8h session</p></div>
+    <div class="node"><span class="label">Prod-Read</span><p>Read-only in prod<br>4h session</p></div>
+    <div class="node accent"><span class="label">Prod-Deploy</span><p>ECS/ECR deploy only<br>1h session</p></div>
+    <div class="node accent"><span class="label">Break-Glass</span><p>Emergency admin<br>1h + MFA + alert</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>CI/CD OIDC Federation</figcaption>
+  <div class="flow-row">
+    <div class="node">GitHub Actions<br><small>OIDC token</small></div>
+    <div class="node accent">AWS STS<br><small>validate + assume role</small></div>
+    <div class="node">Deploy Role<br><small>ECS + ECR only</small></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Permission boundary mechanics: a boundary is an IAM policy attached as a boundary, not as a permission. The effective permissions are the intersection of the role&#x27;s policies AND the boundary. If the policy allows s3:* and iam:CreateUser, but the boundary only allows s3:*, the effective permission is s3:* only. The boundary never grants permissions — it only restricts. This means team admins can safely create and modify policies within their team: they cannot accidentally (or maliciously) grant permissions beyond the boundary.</p>
+          <p>OIDC federation for CI/CD: GitHub Actions generates an OIDC token containing claims like repo, ref, and environment. The AWS IAM role trust policy validates these claims: only the &#x27;main&#x27; branch of the &#x27;org/orders&#x27; repo can assume the deploy role. No static secrets stored in GitHub. If a repo is compromised, you revoke the trust relationship from the AWS side. Session duration is 30 minutes — enough for a deploy, short enough to limit blast radius.</p>
+          <p>Break-glass procedure: (1) engineer requests break-glass in PagerDuty incident, (2) PagerDuty notifies the on-call platform engineer, (3) engineer authenticates via SSO with MFA to the sre-break-glass role, (4) CloudTrail captures every API call during the session, (5) after 1 hour the session expires automatically, (6) post-incident review audits all actions taken. Break-glass usage is alarmed: any AssumeRole to the break-glass role triggers a Slack/PD alert.</p>
+          <p>Unused permission detection: I run a weekly Athena query against CloudTrail to find actions that are in a role&#x27;s policy but were never invoked in the last 90 days. IAM Access Analyzer also provides this via policy generation from access activity. For each unused permission, I open a PR to remove it from the Terraform-managed policy. This continuously tightens access toward true least privilege.</p>
+          <p>Service control policies (SCPs): in a multi-account setup, SCPs on the organizational unit provide a second boundary above IAM. An SCP that denies ec2:RunInstances for instance types larger than r5.2xlarge prevents any role in any account from launching expensive instances — regardless of their IAM permissions. SCPs are the nuclear option: use them for organization-wide guardrails (no public S3 buckets, no IAM users, required encryption).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Unused IAM role detector</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import boto3
+
+def find_unused_roles(days_threshold=90):
+    iam = boto3.client(&#x27;iam&#x27;)
+    roles = iam.list_roles()[&#x27;Roles&#x27;]
+    unused = []
+
+    for role in roles:
+        if role[&#x27;Path&#x27;].startswith(&#x27;/aws-service-role/&#x27;):
+            continue
+        last_used = role.get(&#x27;RoleLastUsed&#x27;, {})
+        last_date = last_used.get(&#x27;LastUsedDate&#x27;)
+        if last_date is None:
+            unused.append({&#x27;role&#x27;: role[&#x27;RoleName&#x27;], &#x27;reason&#x27;: &#x27;never used&#x27;})
+        else:
+            from datetime import datetime, timezone
+            age = (datetime.now(timezone.utc) - last_date).days
+            if age &gt; days_threshold:
+                unused.append({
+                    &#x27;role&#x27;: role[&#x27;RoleName&#x27;],
+                    &#x27;last_used&#x27;: last_date.isoformat(),
+                    &#x27;days_idle&#x27;: age
+                })
+    return unused</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use aws_sdk_iam as iam;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub struct UnusedRole {
+    pub role: String,
+    pub reason: String,
+    pub last_used: Option&lt;String&gt;,
+    pub days_idle: Option&lt;i64&gt;,
+}
+
+pub async fn find_unused_roles(days_threshold: i64) -&gt; Vec&lt;UnusedRole&gt; {
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let client = iam::Client::new(&amp;config);
+
+    let resp = client.list_roles().send().await.unwrap();
+    let now = Utc::now();
+    let mut unused = Vec::new();
+
+    for role in resp.roles() {
+        let path = role.path();
+        if path.starts_with(&quot;/aws-service-role/&quot;) {
+            continue;
+        }
+        let role_name = role.role_name().to_string();
+
+        match role.role_last_used().and_then(|r| r.last_used_date()) {
+            None =&gt; {
+                unused.push(UnusedRole {
+                    role: role_name,
+                    reason: &quot;never used&quot;.into(),
+                    last_used: None,
+                    days_idle: None,
+                });
+            }
+            Some(last_date) =&gt; {
+                let last_dt: DateTime&lt;Utc&gt; = (*last_date).into();
+                let age = (now - last_dt).num_days();
+                if age &gt; days_threshold {
+                    unused.push(UnusedRole {
+                        role: role_name,
+                        reason: format!(&quot;idle {age} days&quot;),
+                        last_used: Some(last_dt.to_rfc3339()),
+                        days_idle: Some(age),
+                    });
+                }
+            }
+        }
+    }
+    unused
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+struct UnusedRole {
+    std::string roleName;
+    std::string reason;
+    std::string lastUsed; // ISO-8601 or empty
+    int         daysIdle;
+};
+
+@protocol AWSIAMClient &lt;NSObject&gt;
+- (NSArray&lt;NSDictionary *&gt; *)listRoles;
+@end
+
+static std::vector&lt;UnusedRole&gt; findUnusedRoles(id&lt;AWSIAMClient&gt; iam,
+                                               int daysThreshold) {
+    NSArray *roles = [iam listRoles];
+    std::vector&lt;UnusedRole&gt; unused;
+    NSDate *now = [NSDate date];
+
+    for (NSDictionary *role in roles) {
+        NSString *path = role[@&quot;Path&quot;];
+        if ([path hasPrefix:@&quot;/aws-service-role/&quot;]) continue;
+
+        NSString *roleName = role[@&quot;RoleName&quot;];
+        NSDate *lastDate = role[@&quot;RoleLastUsed&quot;][@&quot;LastUsedDate&quot;];
+
+        if (!lastDate) {
+            unused.push_back({roleName.UTF8String, &quot;never used&quot;, &quot;&quot;, 0});
+            continue;
+        }
+
+        int age = (int)([now timeIntervalSinceDate:lastDate] / 86400);
+        if (age &gt; daysThreshold) {
+            NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+            fmt.dateFormat = @&quot;yyyy-MM-dd&#x27;T&#x27;HH:mm:ssZ&quot;;
+            unused.push_back({
+                roleName.UTF8String,
+                &quot;idle &quot; + std::to_string(age) + &quot; days&quot;,
+                [fmt stringFromDate:lastDate].UTF8String,
+                age,
+            });
+        }
+    }
+    return unused;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Engineer</span><p>Okta SSO login → MFA verified → session token issued</p></div>
+    <div class="seq-row"><span class="actor">AWS SSO</span><p>Map Okta group "orders-dev" → IAM role team-orders-dev in dev account</p></div>
+    <div class="seq-row"><span class="actor">STS</span><p>AssumeRole: apply permission boundary (OrdersTeamBoundary) + role policies</p></div>
+    <div class="seq-row"><span class="actor">Engineer</span><p>Effective permissions: ec2:*, ecs:*, s3:orders-dev/* — no iam:*, no prod access</p></div>
+    <div class="seq-row"><span class="actor">CloudTrail</span><p>Log: AssumeRole by user@company.com to team-orders-dev at 10:30 UTC</p></div>
+    <div class="seq-row"><span class="actor">Audit</span><p>Weekly: scan for unused permissions, unused roles, break-glass events</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>SSO roles vs IAM users</strong>
+              <p>SSO roles eliminate credential management and enable instant revocation. IAM users are simpler for small teams but create key rotation burden</p>
+            </div>
+            <div>
+              <strong>Permission boundaries vs SCPs</strong>
+              <p>Boundaries scope individual roles; SCPs scope entire accounts. Use both: SCPs for org-wide guardrails, boundaries for team-level limits</p>
+            </div>
+            <div>
+              <strong>Broad roles vs fine-grained</strong>
+              <p>Broad roles are easier to manage but violate least privilege. Fine-grained roles multiply the management burden. 4 levels per team is a reasonable middle ground</p>
+            </div>
+            <div>
+              <strong>OIDC federation vs stored secrets</strong>
+              <p>OIDC eliminates secret management for CI/CD. Stored secrets are simpler but create rotation requirements and leak risk</p>
+            </div>
+            <div>
+              <strong>Short vs long session durations</strong>
+              <p>Shorter sessions reduce blast radius but annoy developers with re-auth. Match duration to the privilege level: 8h for dev, 1h for prod-deploy</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>SSO outage: nobody can access AWS → break-glass IAM user (the only IAM user) with MFA and sealed credentials stored in a vault</li>
+            <li>Permission boundary too restrictive: team cannot deploy because a new service needs a permission not in the boundary → platform team reviews and updates boundary (30-min SLA)</li>
+            <li>Break-glass used for non-emergency: engineer assumes break-glass to avoid waiting for proper role → audit catches it; require incident ID for break-glass access</li>
+            <li>OIDC token for wrong branch: misconfigured trust policy allows feature branches to deploy to prod → condition must include ref:refs/heads/main</li>
+            <li>Access review finds 30% of role assignments unused: engineers moved teams but SSO groups were not updated → automate group sync from HR system</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle cross-account access for a shared data platform?</li>
+            <li>How do you manage service-to-service authentication (mTLS, IAM roles for ECS tasks)?</li>
+            <li>How would you implement just-in-time access for sensitive operations?</li>
+            <li>How do you handle IAM for a multi-cloud environment (AWS + GCP)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: SSO-based authentication with no IAM users, role hierarchy with environment-based access levels, permission boundaries to prevent escalation, break-glass procedure with full audit, and OIDC federation for CI/CD. Explain the intersection model of boundaries and policies.</p>
+          <p>You do not need to write the full Terraform or design the ABAC policy engine. The interviewer wants to see: understanding that IAM is a scalability problem (not just a security checklist), permission boundaries as the key guardrail, and operational awareness (break-glass, access review, unused permission detection).</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../cut_cloud_bill/">← Cut a surprising cloud bill in half</a>
+          <a class="problem-nav-link back" href="../">All Cloud problems</a>
+          <a class="problem-nav-link next" href="../lambda_sqs_safe/">Make a Lambda + SQS pipeline production-safe →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

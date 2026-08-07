@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Course schedule / cycle detection | DSA | Engineering Notes</title>
+  <meta name="description" content="Prereq graphs are cycle detection in a trench coat — Kahn’s algorithm and DFS colors both belong in your pocket.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Course schedule / cycle detection</p>
+      <p class="eyebrow">DSA · Medium · ~60 min</p>
+      <h1>Course schedule / cycle detection</h1>
+      <p class="problem-deck">Prereq graphs are cycle detection in a trench coat — Kahn’s algorithm and DFS colors both belong in your pocket.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Boolean vs ordering; input format; edge cases.</p></div></div>
+            <div class="stack-step"><strong>5–15 min</strong><div><strong>Model as graph</strong><p>Draw adjacency list for a small example; identify DAG vs cycle.</p></div></div>
+            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code Kahn&#x27;s algorithm</strong><p>Build adj list + in-degree, BFS from zero-degree nodes.</p></div></div>
+            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through example</strong><p>4 courses with a cycle, watch the count fall short.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>DFS coloring alternative</strong><p>WHITE/GRAY/BLACK; back edge = cycle.</p></div></div>
+            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>Minimum semesters (longest path), parallel scheduling, alien dictionary.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d frame this as: we have a directed graph where an edge (a, b) means &#x27;take a before b&#x27;. The question is whether a valid ordering exists — which is equivalent to asking whether the graph is a DAG. If there&#x27;s a cycle, no valid ordering exists.</p>
+          <p>I know two clean approaches: Kahn&#x27;s algorithm (BFS with in-degree tracking) and DFS with three-color marking. Kahn&#x27;s is iterative and gives you the topological order as a side effect. DFS coloring is recursive and detects back edges. I&#x27;d ask which the interviewer prefers, but I&#x27;d default to Kahn&#x27;s because it&#x27;s easier to reason about in an interview without accidentally messing up recursion state.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Do we just need boolean &#x27;can finish&#x27; or the actual ordering?</li>
+            <li>Can there be self-loops (course requires itself)?</li>
+            <li>Are course IDs 0-indexed integers or arbitrary strings?</li>
+            <li>Can there be duplicate edges in the input?</li>
+            <li>What&#x27;s the range of numCourses — thousands or millions?</li>
+            <li>Multiple valid orderings — return any one?</li>
+            <li>Are there disconnected components (courses with no prereqs at all)?</li>
+            <li>Should we handle the empty input (0 courses)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: detect cycle (can finish) + produce topological order if no cycle.</li>
+            <li>Out: minimum semesters / parallel scheduling unless follow-up.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <ul class="ask-list">
+            <li>Input: numCourses (int), prerequisites (list of [course, prereq] pairs).</li>
+            <li>Output for Course Schedule I: boolean — can all courses be finished?</li>
+            <li>Output for Course Schedule II: list of courses in valid order, or [] if impossible.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Time</strong>
+              <p>O(V + E) for both Kahn&#x27;s and DFS — each node and edge visited once.</p>
+            </div>
+            <div>
+              <strong>Space</strong>
+              <p>O(V + E) for adjacency list + in-degree array or color array.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>V limit</strong>
+              <p>up to 2×10^3 courses in the LeetCode constraint</p>
+            </div>
+            <div>
+              <strong>E limit</strong>
+              <p>up to 5×10^3 prerequisite pairs</p>
+            </div>
+            <div>
+              <strong>Time target</strong>
+              <p>O(V+E) ≈ 7×10^3 operations — trivially fast</p>
+            </div>
+            <div>
+              <strong>Scaling note</strong>
+              <p>For V=10^6, iterative Kahn&#x27;s still runs in &lt;1 s; recursive DFS risks stack overflow at V&gt;10^4</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>def canFinish(numCourses: int, prerequisites: List[List[int]]) -&gt; bool:</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>adj: List[List[int]]   # adjacency list, adj[prereq] = [courses that depend on it]
+indeg: List[int]       # indeg[c] = number of unmet prerequisites for course c
+queue: Deque[int]      # courses with in-degree 0 ready to take
+order: List[int]       # topological order built during BFS</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Kahn&#x27;s algorithm: build an adjacency list and an in-degree array. Seed a queue with all nodes whose in-degree is 0. Pop a node, append to result, decrement in-degree of all its neighbors. If a neighbor hits in-degree 0, add it to the queue. After the queue empties, if the result length equals numCourses, the graph is a DAG — otherwise there&#x27;s a cycle.</p>
+          <p>DFS coloring: mark each node WHITE (unvisited), GRAY (in current DFS path), or BLACK (fully processed). When visiting a node, mark it GRAY. If we reach a GRAY neighbor, we&#x27;ve found a back edge — cycle. When all neighbors are done, mark BLACK. A node marked BLACK is safe and won&#x27;t be revisited.</p>
+          <p>I prefer Kahn&#x27;s for interviews because the invariant is simple: zero in-degree means all prereqs are satisfied. DFS coloring is elegant but the GRAY/BLACK state transitions confuse people under pressure.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">in-degree 0 nodes</span><b>→</b><span class="node accent">BFS queue → pop → decrement neighbors</span><b>→</b><span class="node">order[]</span></div><figcaption>Kahn: len(order) == V means DAG; otherwise a cycle trapped nodes at in-degree > 0</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">WHITE (unvisited)</span><b>→</b><span class="node accent">GRAY (on stack)</span><b>→</b><span class="node">BLACK (done)</span></div><figcaption>DFS coloring: hitting a GRAY node means a back edge — cycle detected</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Example: numCourses=4, prerequisites=[[1,0],[2,0],[3,1],[3,2]].
+Graph: 0→1, 0→2, 1→3, 2→3.</p>
+          <p>Kahn&#x27;s: in-degree = [0, 1, 1, 2]. Queue starts with [0] (only node with in-degree 0).
+Pop 0: result=[0]. Neighbors 1,2: in-degree becomes [0,0,0,2]. Enqueue 1 and 2.
+Pop 1: result=[0,1]. Neighbor 3: in-degree[3]=1. Not zero yet.
+Pop 2: result=[0,1,2]. Neighbor 3: in-degree[3]=0. Enqueue 3.
+Pop 3: result=[0,1,2,3]. Queue empty. len(result)=4 == numCourses. Valid ordering.</p>
+          <p>Now add a cycle: prerequisites=[[1,0],[0,1]]. Graph: 0→1, 1→0.
+in-degree = [1, 1]. No node has in-degree 0. Queue starts empty. Result is []. len(result)=0 != 2. Cycle detected.</p>
+          <p>DFS coloring on the cycle case: visit 0, mark GRAY. Visit neighbor 1, mark GRAY. Visit neighbor 0 — it&#x27;s GRAY. Back edge found. Return False immediately.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Kahn&#x27;s algorithm — can_finish + find_order</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from collections import deque
+from typing import List
+
+
+def can_finish(num_courses: int, prerequisites: List[List[int]]) -&gt; bool:
+    &quot;&quot;&quot;Kahn&#x27;s algorithm (BFS topological sort).
+    Returns True if all courses can be completed (i.e., no cycle).&quot;&quot;&quot;
+    adj = [[] for _ in range(num_courses)]
+    indeg = [0] * num_courses
+    for course, prereq in prerequisites:
+        adj[prereq].append(course)
+        indeg[course] += 1
+
+    # Seed the queue with all zero-indegree nodes
+    queue = deque(i for i in range(num_courses) if indeg[i] == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nei in adj[node]:
+            indeg[nei] -= 1
+            if indeg[nei] == 0:
+                queue.append(nei)
+
+    # If we processed all nodes, the graph is acyclic
+    return len(order) == num_courses
+
+
+def find_order(num_courses: int, prerequisites: List[List[int]]) -&gt; List[int]:
+    &quot;&quot;&quot;Same BFS topo-sort but returns the valid ordering, or [] if a cycle exists.&quot;&quot;&quot;
+    adj = [[] for _ in range(num_courses)]
+    indeg = [0] * num_courses
+    for course, prereq in prerequisites:
+        adj[prereq].append(course)
+        indeg[course] += 1
+
+    queue = deque(i for i in range(num_courses) if indeg[i] == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nei in adj[node]:
+            indeg[nei] -= 1
+            if indeg[nei] == 0:
+                queue.append(nei)
+
+    return order if len(order) == num_courses else []</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::VecDeque;
+
+/// Kahn&#x27;s BFS topological sort.
+/// Returns true if all courses can be completed (no cycle).
+fn can_finish(num: usize, prereqs: &amp;[(usize, usize)]) -&gt; bool {
+    let mut adj = vec![Vec::new(); num];
+    let mut indeg = vec![0u32; num];
+    for &amp;(course, pre) in prereqs {
+        adj[pre].push(course);
+        indeg[course] += 1;
+    }
+    // Seed queue with zero-indegree nodes
+    let mut queue: VecDeque&lt;usize&gt; = (0..num).filter(|&amp;i| indeg[i] == 0).collect();
+    let mut count = 0usize;
+    while let Some(node) = queue.pop_front() {
+        count += 1;
+        for &amp;nei in &amp;adj[node] {
+            indeg[nei] -= 1;
+            if indeg[nei] == 0 { queue.push_back(nei); }
+        }
+    }
+    count == num // all nodes processed ⇒ no cycle
+}
+
+/// Returns a valid course ordering, or empty Vec if a cycle exists.
+fn find_order(num: usize, prereqs: &amp;[(usize, usize)]) -&gt; Vec&lt;usize&gt; {
+    let mut adj = vec![Vec::new(); num];
+    let mut indeg = vec![0u32; num];
+    for &amp;(course, pre) in prereqs {
+        adj[pre].push(course);
+        indeg[course] += 1;
+    }
+    let mut queue: VecDeque&lt;usize&gt; = (0..num).filter(|&amp;i| indeg[i] == 0).collect();
+    let mut order = Vec::with_capacity(num);
+    while let Some(node) = queue.pop_front() {
+        order.push(node);
+        for &amp;nei in &amp;adj[node] {
+            indeg[nei] -= 1;
+            if indeg[nei] == 0 { queue.push_back(nei); }
+        }
+    }
+    if order.len() == num { order } else { Vec::new() }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;queue&gt;
+
+// Kahn&#x27;s BFS topological sort
+// Returns true if all courses can be completed (no cycle)
+static bool canFinish(int numCourses,
+                      const std::vector&lt;std::pair&lt;int,int&gt;&gt; &amp;prereqs) {
+    std::vector&lt;std::vector&lt;int&gt;&gt; adj(numCourses);
+    std::vector&lt;int&gt; indeg(numCourses, 0);
+    for (auto &amp;[course, pre] : prereqs) {
+        adj[pre].push_back(course);
+        indeg[course]++;
+    }
+    // Seed queue with zero-indegree nodes
+    std::queue&lt;int&gt; q;
+    for (int i = 0; i &lt; numCourses; i++)
+        if (indeg[i] == 0) q.push(i);
+    int count = 0;
+    while (!q.empty()) {
+        int node = q.front(); q.pop();
+        count++;
+        for (int nei : adj[node])
+            if (--indeg[nei] == 0) q.push(nei);
+    }
+    return count == numCourses;
+}
+
+// Returns valid ordering as NSArray, or empty array if cycle exists
+static NSArray&lt;NSNumber *&gt; *findOrder(int numCourses,
+                                       const std::vector&lt;std::pair&lt;int,int&gt;&gt; &amp;prereqs) {
+    std::vector&lt;std::vector&lt;int&gt;&gt; adj(numCourses);
+    std::vector&lt;int&gt; indeg(numCourses, 0);
+    for (auto &amp;[course, pre] : prereqs) {
+        adj[pre].push_back(course);
+        indeg[course]++;
+    }
+    std::queue&lt;int&gt; q;
+    for (int i = 0; i &lt; numCourses; i++)
+        if (indeg[i] == 0) q.push(i);
+    NSMutableArray *order = [NSMutableArray new];
+    while (!q.empty()) {
+        int node = q.front(); q.pop();
+        [order addObject:@(node)];
+        for (int nei : adj[node])
+            if (--indeg[nei] == 0) q.push(nei);
+    }
+    return (int)order.count == numCourses ? order : @[];
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Build</span><p>adj=[{1,2},{3},{3},{}], indeg=[0,1,1,2]</p></div><div class="seq-row"><span class="actor">Seed</span><p>enqueue node 0 (indeg=0)</p></div><div class="seq-row"><span class="actor">Pop 0</span><p>order=[0], decrement 1→0, 2→0 → enqueue both</p></div><div class="seq-row"><span class="actor">Pop 1</span><p>order=[0,1], decrement 3→1</p></div><div class="seq-row"><span class="actor">Pop 2</span><p>order=[0,1,2], decrement 3→0 → enqueue 3</p></div><div class="seq-row"><span class="actor">Pop 3</span><p>order=[0,1,2,3] — len==4==V, DAG confirmed</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Kahn&#x27;s vs DFS</strong>
+              <p>Kahn&#x27;s gives ordering naturally; DFS needs post-order reversal.</p>
+            </div>
+            <div>
+              <strong>Queue vs stack</strong>
+              <p>Queue gives BFS level order; stack gives one valid DFS order — both correct.</p>
+            </div>
+            <div>
+              <strong>Adjacency list vs matrix</strong>
+              <p>List is O(V+E) space; matrix is O(V²) — list wins for sparse graphs.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Reversing the edge direction (prereq → course vs course → prereq).</li>
+            <li>Forgetting disconnected components — nodes with no edges still need processing.</li>
+            <li>Self-loops not caught if you only check neighbor != current.</li>
+            <li>Using visited boolean instead of three colors in DFS — misses back edges.</li>
+            <li>Stack overflow on deep graphs with recursive DFS — use iterative for V &gt; 10^4.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Course Schedule III — minimum semesters = longest path in the DAG (BFS level counting).</li>
+            <li>Parallel course scheduling — how many courses can we take simultaneously each semester?</li>
+            <li>Alien dictionary — derive ordering from sorted word list, then topological sort.</li>
+            <li>Detect all cycles, not just one — DFS coloring with back-edge collection.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Cleanly model the graph, implement Kahn&#x27;s with correct edge direction, trace through a cycle example showing the in-degree never hits zero, and explain DFS coloring as an alternative. Mentioning the alien dictionary connection shows you see the pattern, not just the problem.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../merge_k_lists/">← Merge k sorted lists</a>
+          <a class="problem-nav-link back" href="../">All DSA problems</a>
+          <a class="problem-nav-link next" href="../serialize_tree/">Serialize and deserialize a binary tree →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design an exactly-once consumer | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="Brokers give at-least-once. Exactly-once is an application effect — or a transactional ecosystem with sharp edges.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Design an exactly-once consumer</p>
+      <p class="eyebrow">Distributed Systems · Hard · ~60 min</p>
+      <h1>Design an exactly-once consumer</h1>
+      <p class="problem-deck">Brokers give at-least-once. Exactly-once is an application effect — or a transactional ecosystem with sharp edges.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify semantics</strong><p>At-most-once vs at-least-once vs exactly-once; broker vs application boundary.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>At-least-once baseline</strong><p>Consume → process → commit. Crash before commit = replay.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Idempotent handler pattern</strong><p>Dedupe key, idempotency store, conditional writes.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Transactional outbox</strong><p>Process + offset commit in one DB transaction.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Kafka transactions</strong><p>init/begin/send/commitOffsets/commit — EOS within Kafka ecosystem.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code + failure traces</strong><p>Python consumer with Redis dedupe; failure scenarios.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Trade-offs and wrap-up</strong><p>Latency cost, dedupe store TTL, exactly-once vs idempotent-enough.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d open by saying that exactly-once delivery is impossible in the general case — it&#x27;s the Two Generals problem. What we actually build is at-least-once delivery with exactly-once processing, and there are two ways to get there: make the handler idempotent, or make the processing and offset commit atomic.</p>
+          <p>The idempotent handler path is the most general. Every message carries a unique ID (or we derive one from its content). Before processing, we check a dedupe store. After processing, we record the ID. The critical detail is that the check-process-record sequence must be atomic with respect to the side effect — otherwise a crash between processing and recording means we&#x27;ll process again on replay.</p>
+          <p>The transactional path is cleaner when the side effect is a database write: wrap the business write and the offset/dedupe record in a single DB transaction. If the transaction commits, both happened. If it rolls back, neither did. Kafka&#x27;s EOS (Exactly-Once Semantics) does this within the Kafka ecosystem — but the moment your side effect leaves Kafka (HTTP call, DB write), you&#x27;re back to idempotent handlers.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What broker are we consuming from — Kafka, SQS, RabbitMQ?</li>
+            <li>What is the side effect — DB write, HTTP call, another message?</li>
+            <li>Can we derive a natural idempotency key from the message content?</li>
+            <li>What is the acceptable processing latency per message?</li>
+            <li>How long should we retain dedupe keys before expiry?</li>
+            <li>Is the consumer single-threaded or multi-partition concurrent?</li>
+            <li>Do we need ordering guarantees within a partition?</li>
+            <li>What is the message volume — 100/s or 100 000/s?</li>
+            <li>Can we use a transactional DB for offset + business write?</li>
+            <li>What is the cost of a duplicate side effect if dedup fails?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: idempotent handler with dedupe store, transactional outbox, Kafka EOS overview.</li>
+            <li>Out: broker internals, custom consensus protocols.</li>
+            <li>Stretch: compare idempotent handler vs Kafka EOS vs transactional outbox in a trade-off matrix.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>consume(topic, group)</strong>
+              <p>Pulls messages, guarantees each is processed exactly once.</p>
+            </div>
+            <div>
+              <strong>dedupe_check(msg_id)</strong>
+              <p>Returns True if message was already processed.</p>
+            </div>
+            <div>
+              <strong>process_and_record(msg, side_effect)</strong>
+              <p>Atomically applies effect and marks message done.</p>
+            </div>
+            <div>
+              <strong>commit_offset(partition, offset)</strong>
+              <p>Advances consumer offset after successful processing.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Exactly-once</strong>
+              <p>No duplicate side effects under crash, rebalance, or network partition.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>Sustain 10 000 msgs/s per partition with dedupe overhead &lt; 2 ms per message.</p>
+            </div>
+            <div>
+              <strong>Dedupe TTL</strong>
+              <p>Retain IDs for 7 days — covers max consumer lag + reprocessing window.</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>p99 end-to-end processing &lt; 50 ms including dedupe lookup.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Message rate</strong>
+              <p>~10 000 msgs/s per consumer, 50 partitions = 500k msgs/s total.</p>
+            </div>
+            <div>
+              <strong>Dedupe store size</strong>
+              <p>10k msgs/s × 86 400 s × 7 days × 64 bytes/key ≈ 380 GB in Redis.</p>
+            </div>
+            <div>
+              <strong>Consumer instances</strong>
+              <p>50 instances (1 per partition), each single-threaded.</p>
+            </div>
+            <div>
+              <strong>Offset commit interval</strong>
+              <p>Every 1 000 messages or 5 seconds, whichever comes first.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Kafka consumer config
+enable.auto.commit = false
+isolation.level = read_committed   # for EOS
+group.id = order-processor
+
+# Idempotent handler interface
+POST /process
+  Header: Idempotency-Key: &lt;msg_id&gt;
+  Body: { ... message payload ... }
+  Response: 200 OK (processed) | 409 Conflict (duplicate)
+
+# Redis dedupe
+SET dedupe:&lt;msg_id&gt; 1 NX EX 604800   # 7-day TTL
+# Returns OK if new, nil if duplicate</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql"># Redis dedupe keys
+dedupe:{topic}:{msg_id}  →  1  (EX = 604800)
+
+# Transactional outbox table
+CREATE TABLE processed_messages (
+  msg_id        VARCHAR(64) PRIMARY KEY,
+  topic         VARCHAR(128),
+  partition_id  INT,
+  offset_val    BIGINT,
+  processed_at  TIMESTAMP DEFAULT now()
+);
+# Index on processed_at for TTL cleanup
+CREATE INDEX idx_processed_ttl ON processed_messages(processed_at);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>At-least-once is the baseline: consume, process, commit offset. If the consumer crashes after processing but before committing, the broker replays the message. The side effect happens twice. For a DB insert, that&#x27;s a duplicate row; for an HTTP POST, a double charge.</p>
+          <p>Idempotent handler: before processing, SET dedupe:{msg_id} 1 NX EX 604800 in Redis. If Redis returns nil, the message was already processed — skip. If OK, process, then commit offset. Crash between Redis SET and processing means we skip a message that wasn&#x27;t processed — so we need to reverse the order: process first, then SET. But then crash between process and SET means duplicate. The resolution: make the side effect itself idempotent (upsert, not insert) or wrap process + SET in a transaction.</p>
+          <p>Transactional outbox: the business write and the processed_messages insert happen in the same DB transaction. On replay, the consumer checks processed_messages before processing. The offset commit is asynchronous — a replay just hits the dedupe check. This is the strongest guarantee for DB-bound side effects.</p>
+          <p>Kafka EOS: the producer calls initTransactions(), then beginTransaction(), sends output messages + sendOffsetsToTransaction() for the consumer group, then commitTransaction(). The broker treats all of these atomically using a transaction coordinator and two-phase commit internally. The limitation: this only works for consume-transform-produce within Kafka. External side effects are not covered.</p>
+          <p>In practice, I combine approaches: natural idempotency keys where possible (e.g., order_id + event_type), Redis dedupe for hot path, and a DB outbox for financial operations. The dedupe TTL is set to max(consumer_lag) + safety margin — typically 7 days.</p>
+<figure class="diagram dark" aria-label="Exactly-once consumer flow">
+  <div class="flow-row">
+    <div class="node">Kafka broker</div>
+    <div class="node">Consumer poll()</div>
+    <div class="node">Dedupe check (Redis NX)</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">New? → Process side effect</div>
+    <div class="node">Record in dedupe store</div>
+    <div class="node accent">Commit offset</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Transactional outbox pattern">
+  <div class="flow-row">
+    <div class="node">BEGIN TX</div>
+    <div class="node">INSERT order row</div>
+    <div class="node">INSERT processed_messages</div>
+    <div class="node accent">COMMIT</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">On replay: SELECT from processed_messages</div>
+    <div class="node accent">Found → skip</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Trace a concrete failure: consumer reads message M (offset 42, msg_id=&#x27;order-7891-placed&#x27;). It processes M — inserts a row in the orders table. Before it can call commitSync(), the consumer crashes. On restart, Kafka delivers M again (offset 42). Without dedup, the consumer inserts a second row. With a UNIQUE constraint on order_id, the INSERT fails — but now the consumer is stuck on a poison message unless it catches the duplicate-key exception and commits past it.</p>
+          <p>With the idempotent handler: on replay, the consumer calls SET dedupe:order-7891-placed 1 NX. If the first processing succeeded and the dedupe key was set, Redis returns nil — skip. But what if the consumer crashed after the INSERT but before the Redis SET? Then the dedupe key is missing, and we process again. The orders table gets a duplicate. This is the window-of-vulnerability problem: the side effect and the dedupe record are in different stores, so they can&#x27;t be atomic without a distributed transaction.</p>
+          <p>The transactional outbox eliminates this gap. We INSERT the order row and INSERT INTO processed_messages(msg_id, ...) in the same PostgreSQL transaction. If the transaction commits, both are durable. If it rolls back, neither is. On replay, we SELECT from processed_messages before processing. Found? Skip and commit offset. Not found? Process in a new transaction. The offset commit is best-effort — a missed commit just means an extra dedupe check on next restart, not a duplicate.</p>
+          <p>Kafka EOS internals: the transaction coordinator (a broker with a __transaction_state partition) writes a PREPARE marker to all involved partitions, then a COMMIT marker. Consumers with isolation.level=read_committed skip records belonging to open transactions. The overhead is real: EOS adds ~10–20% latency per produce call and limits throughput because transactions are per-producer, serialized. At 100k msgs/s, this matters.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Kafka consumer with Redis dedupe and idempotent DB write</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import json, redis, psycopg2
+from kafka import KafkaConsumer
+
+DEDUPE_TTL = 7 * 86400  # 7 days
+
+def make_consumer(topic, group):
+    return KafkaConsumer(
+        topic,
+        group_id=group,
+        enable_auto_commit=False,
+        auto_offset_reset=&#x27;earliest&#x27;,
+    )
+
+def run(topic=&#x27;orders&#x27;, group=&#x27;order-processor&#x27;):
+    consumer = make_consumer(topic, group)
+    rds = redis.Redis()
+    db = psycopg2.connect(dsn=&#x27;dbname=app&#x27;)
+
+    for msg in consumer:
+        payload = json.loads(msg.value)
+        msg_id = payload[&#x27;order_id&#x27;] + &#x27;:&#x27; + payload[&#x27;event_type&#x27;]
+
+        if not rds.set(f&#x27;dedupe:{msg_id}&#x27;, 1, nx=True, ex=DEDUPE_TTL):
+            consumer.commit()
+            continue  # already processed
+
+        try:
+            with db:
+                cur = db.cursor()
+                cur.execute(
+                    &quot;INSERT INTO orders (order_id, event_type, payload) &quot;
+                    &quot;VALUES (%s, %s, %s) ON CONFLICT (order_id, event_type) DO NOTHING&quot;,
+                    (payload[&#x27;order_id&#x27;], payload[&#x27;event_type&#x27;], json.dumps(payload)),
+                )
+        except Exception:
+            rds.delete(f&#x27;dedupe:{msg_id}&#x27;)  # allow retry
+            raise
+
+        consumer.commit()
+
+if __name__ == &#x27;__main__&#x27;:
+    run()</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::config::ClientConfig;
+use rdkafka::message::Message;
+use redis::Commands;
+use tokio_postgres::NoTls;
+
+const DEDUPE_TTL: usize = 7 * 86400; // 7 days
+
+async fn run(topic: &amp;str, group: &amp;str) -&gt; anyhow::Result&lt;()&gt; {
+    let consumer: StreamConsumer = ClientConfig::new()
+        .set(&quot;group.id&quot;, group)
+        .set(&quot;enable.auto.commit&quot;, &quot;false&quot;)
+        .set(&quot;auto.offset.reset&quot;, &quot;earliest&quot;)
+        .create()?;
+    consumer.subscribe(&amp;[topic])?;
+
+    let rds = redis::Client::open(&quot;redis://127.0.0.1/&quot;)?;
+    let mut rds_conn = rds.get_connection()?;
+
+    let (db, conn) = tokio_postgres::connect(&quot;dbname=app&quot;, NoTls).await?;
+    tokio::spawn(async move { conn.await.unwrap() });
+
+    loop {
+        let msg = consumer.recv().await?;
+        let bytes = msg.payload().unwrap_or_default();
+        let payload: serde_json::Value = serde_json::from_slice(bytes)?;
+
+        let msg_id = format!(
+            &quot;{}:{}&quot;,
+            payload[&quot;order_id&quot;].as_str().unwrap_or_default(),
+            payload[&quot;event_type&quot;].as_str().unwrap_or_default(),
+        );
+        let key = format!(&quot;dedupe:{msg_id}&quot;);
+
+        // SET NX with TTL — skip if already processed
+        let set: bool = redis::cmd(&quot;SET&quot;)
+            .arg(&amp;key).arg(1).arg(&quot;NX&quot;).arg(&quot;EX&quot;).arg(DEDUPE_TTL)
+            .query(&amp;mut rds_conn)?;
+        if !set {
+            consumer.commit_message(&amp;msg, rdkafka::consumer::CommitMode::Sync)?;
+            continue;
+        }
+
+        let result = db.execute(
+            &quot;INSERT INTO orders (order_id, event_type, payload) \
+             VALUES ($1, $2, $3) ON CONFLICT (order_id, event_type) DO NOTHING&quot;,
+            &amp;[
+                &amp;payload[&quot;order_id&quot;].as_str().unwrap_or_default(),
+                &amp;payload[&quot;event_type&quot;].as_str().unwrap_or_default(),
+                &amp;serde_json::to_string(&amp;payload)?,
+            ],
+        ).await;
+
+        if result.is_err() {
+            rds_conn.del::&lt;_, ()&gt;(&amp;key)?; // allow retry
+            result?;
+        }
+
+        consumer.commit_message(&amp;msg, rdkafka::consumer::CommitMode::Sync)?;
+    }
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+
+static const NSTimeInterval kDedupeTTL = 7 * 86400; // 7 days
+
+// Protocols abstract the broker, cache, and DB so the logic mirrors Python.
+@protocol KafkaConsumer &lt;NSObject&gt;
+- (nullable NSDictionary *)poll;  // blocks until next message
+- (void)commit;
+@end
+
+@protocol RedisClient &lt;NSObject&gt;
+- (BOOL)setNX:(NSString *)key value:(int)val expiry:(NSTimeInterval)ttl;
+- (void)del:(NSString *)key;
+@end
+
+@protocol DBClient &lt;NSObject&gt;
+- (BOOL)execute:(NSString *)sql params:(NSArray *)params error:(NSError **)err;
+@end
+
+@interface ExactlyOnceConsumer : NSObject
+@property (nonatomic, strong) id&lt;KafkaConsumer&gt; consumer;
+@property (nonatomic, strong) id&lt;RedisClient&gt;   redis;
+@property (nonatomic, strong) id&lt;DBClient&gt;      db;
+@end
+
+@implementation ExactlyOnceConsumer
+
+- (void)run {
+    while (true) {
+        NSDictionary *payload = [_consumer poll];
+        if (!payload) continue;
+
+        NSString *msgId = [NSString stringWithFormat:@&quot;%@:%@&quot;,
+                           payload[@&quot;order_id&quot;], payload[@&quot;event_type&quot;]];
+        NSString *dedupeKey = [@&quot;dedupe:&quot; stringByAppendingString:msgId];
+
+        // Dedupe via SET NX — skip if key already exists
+        if (![_redis setNX:dedupeKey value:1 expiry:kDedupeTTL]) {
+            [_consumer commit];
+            continue;
+        }
+
+        NSError *err = nil;
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:payload
+                                                          options:0 error:nil];
+        NSString *jsonStr = [[NSString alloc] initWithData:jsonData
+                                                  encoding:NSUTF8StringEncoding];
+
+        BOOL ok = [_db execute:
+            @&quot;INSERT INTO orders (order_id, event_type, payload) &quot;
+             &quot;VALUES ($1, $2, $3) ON CONFLICT (order_id, event_type) DO NOTHING&quot;
+                        params:@[payload[@&quot;order_id&quot;],
+                                 payload[@&quot;event_type&quot;],
+                                 jsonStr]
+                         error:&amp;err];
+        if (!ok) {
+            [_redis del:dedupeKey]; // allow retry on next delivery
+            @throw [NSException exceptionWithName:@&quot;DBError&quot;
+                                           reason:err.localizedDescription
+                                         userInfo:nil];
+        }
+        [_consumer commit];
+    }
+}
+
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Idempotent consumer sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Kafka</span><p>Delivers msg_id=order-7891, offset=42</p></div>
+    <div class="seq-row"><span class="actor">Consumer</span><p>SET dedupe:order-7891 1 NX EX 604800</p></div>
+    <div class="seq-row"><span class="actor">Redis</span><p>OK (first time)</p></div>
+    <div class="seq-row"><span class="actor">Consumer</span><p>INSERT INTO orders (order_id, ...) VALUES (7891, ...)</p></div>
+    <div class="seq-row"><span class="actor">Postgres</span><p>OK — row inserted</p></div>
+    <div class="seq-row"><span class="actor">Consumer</span><p>commitSync(partition=3, offset=43)</p></div>
+    <div class="seq-row"><span class="actor">Kafka</span><p>Offset committed</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Dedupe in Redis vs DB</strong>
+              <p>Redis is faster (~0.5 ms) but adds a second failure domain; DB dedupe is atomic but slower.</p>
+            </div>
+            <div>
+              <strong>Kafka EOS vs app-level idempotency</strong>
+              <p>EOS is transparent but only works within Kafka; app-level works for any side effect.</p>
+            </div>
+            <div>
+              <strong>Dedupe TTL length</strong>
+              <p>Longer TTL catches more replays but costs more storage — 7 days covers most lag scenarios.</p>
+            </div>
+            <div>
+              <strong>Auto-commit vs manual commit</strong>
+              <p>Auto-commit risks committing before processing; manual adds code complexity.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Auto-committing offsets before processing completes — at-most-once, not at-least-once.</li>
+            <li>Dedup store and side effect in different transactions — crash between them causes inconsistency.</li>
+            <li>Dedupe TTL shorter than max consumer lag — old replays slip through.</li>
+            <li>Using message offset as dedupe key — offsets reset on partition reassignment.</li>
+            <li>Forgetting ON CONFLICT in the DB upsert — duplicate-key exceptions on replay.</li>
+            <li>Not handling rebalance during processing — half-processed message re-delivered to another consumer.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Extend to multi-partition parallel processing with per-partition dedupe scopes.</li>
+            <li>Add a dead-letter queue for messages that fail N times despite idempotency.</li>
+            <li>Build a dedupe store compaction job that purges entries older than 7 days.</li>
+            <li>Compare latency profiles: Redis dedupe vs transactional outbox vs Kafka EOS.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Clearly explain why exactly-once delivery is impossible and reframe it as idempotent processing. Show the dedupe-store pattern with concrete failure traces (crash before commit, crash before dedupe record). Walk through the transactional outbox as the stronger alternative for DB-bound effects. Mention Kafka EOS as ecosystem-specific and its limitations for external side effects.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../distributed_lock/">← Implement a distributed lock</a>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../split_brain/">Handle split-brain in a leader election →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

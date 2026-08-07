@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build a daily orders pipeline that can be re-run safely | Big Data | Engineering Notes</title>
+  <meta name="description" content="A green Airflow square means nothing if yesterday&#x27;s re-run duplicated revenue or wiped a partial partition.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Build a daily orders pipeline that can be re-run safely</p>
+      <p class="eyebrow">Big Data · Hard · ~60 min</p>
+      <h1>Build a daily orders pipeline that can be re-run safely</h1>
+      <p class="problem-deck">A green Airflow square means nothing if yesterday&#x27;s re-run duplicated revenue or wiped a partial partition.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Nail down source format, volume (50M rows/day), late-data SLA, and downstream freshness requirement</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Idempotency pattern</strong><p>Stage → validate → atomic publish; explain why append-to-curated breaks on retry</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Raw zone design</strong><p>Immutable landing: s3://lake/raw/orders/dt=.../run_id=.../. Late files land in same dt prefix</p></div></div>
+            <div class="stack-step"><strong>22-32m</strong><div><strong>Transform + dedup</strong><p>Spark job reads raw, deduplicates on (order_id, updated_at), writes staging Parquet/Iceberg</p></div></div>
+            <div class="stack-step"><strong>32-40m</strong><div><strong>Quality gates</strong><p>Great Expectations or custom checks: row count, null rates, PK uniqueness, revenue reconciliation</p></div></div>
+            <div class="stack-step"><strong>40-48m</strong><div><strong>Publish + watermark</strong><p>Iceberg overwritePartitions or Delta REPLACE WHERE. Watermark table updated atomically</p></div></div>
+            <div class="stack-step"><strong>48-55m</strong><div><strong>Late data + backfill</strong><p>Lookback window detects new raw files; controlled re-publish without breaking downstream</p></div></div>
+            <div class="stack-step"><strong>55-60m</strong><div><strong>Failure modes</strong><p>Partial staging write, quality gate false-positive, Airflow clear-run behavior</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d define success as: re-running dt=2024-06-15 twice leaves curated.orders identical, and a late file arriving at 11:00 still lands without manual surgery. That sounds trivial — but most pipelines I have inherited fail this test because tasks append directly into curated, retry logic re-inserts, or partition-overwrite mode is off and nobody noticed.</p>
+          <p>The pattern that works every time: write to a staging location keyed by dt + run_id, validate row counts and null thresholds, then atomically publish into the curated dt partition via Iceberg/Delta MERGE or whole-partition overwrite. Never append straight into curated from a task that might restart.</p>
+          <p>The raw zone must be append-only and immutable. If a source file lands late, the re-run picks it up because we scan raw/orders/dt=2024-06-15/** — any file dropped there by any run_id gets included. The staging write is idempotent because we either replace the staging directory entirely or use MERGE with a deterministic surrogate key. The publish step is atomic: Hive ALTER TABLE PARTITION … SET LOCATION or Delta REPLACE WHERE dt = &#x27;2024-06-15&#x27;.</p>
+          <p>Late data is handled by a lookback window. The daily job for dt processes not just today but also dt-1 and dt-2 raw partitions, checks if any new files appeared since the last successful run, and re-publishes affected partitions. The watermark table tracks what was processed, so downstream consumers know which dates are fresh.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Source format — nightly CSV/JSON dumps, CDC events, or API pulls?</li>
+            <li>How late can data arrive — hours, days, or unbounded?</li>
+            <li>Partition grain — daily or hourly?</li>
+            <li>Downstream SLAs — dashboards must refresh by 08:00 UTC?</li>
+            <li>Exactly-once into the lake or at-least-once with dedup?</li>
+            <li>Schema evolution expectations — columns added monthly or rarely?</li>
+            <li>Volume per day — 1M rows, 100M, or 1B+?</li>
+            <li>Are there hard-deletes in the source we need to propagate?</li>
+            <li>Orchestrator — Airflow, Dagster, Prefect?</li>
+            <li>Table format — Iceberg, Delta Lake, or plain Hive?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Daily orders batch with idempotent recompute, late-file handling, quality gates</li>
+            <li>In scope — Staging → validate → publish pattern, watermark tracking</li>
+            <li>Out of scope — Full mesh of 200 dependent downstream jobs</li>
+            <li>Defer — Schema evolution automation, GDPR delete propagation</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Ingest</strong>
+              <p>Land raw files immutably under dt/run_id — never overwrite raw</p>
+            </div>
+            <div>
+              <strong>Transform</strong>
+              <p>Build staging table from raw; dedup on order_id + updated_at</p>
+            </div>
+            <div>
+              <strong>Validate</strong>
+              <p>Row count ±5% of yesterday, null rate on revenue &lt; 1%, PK uniqueness</p>
+            </div>
+            <div>
+              <strong>Publish</strong>
+              <p>Atomic replace of the dt partition in the curated layer</p>
+            </div>
+            <div>
+              <strong>Late handling</strong>
+              <p>Lookback window re-processes dt-1 and dt-2 if new files appeared</p>
+            </div>
+            <div>
+              <strong>Watermark</strong>
+              <p>Track last-processed timestamp per dt so downstream can trust freshness</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Idempotency</strong>
+              <p>Any dt can be re-run N times with identical curated output</p>
+            </div>
+            <div>
+              <strong>Latency</strong>
+              <p>Pipeline completes within 45 min for a normal day (50M rows)</p>
+            </div>
+            <div>
+              <strong>Late tolerance</strong>
+              <p>Files arriving up to +48h auto-included on next scheduled run</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Staging writes add ~20% storage overhead; cleaned after 7 days</p>
+            </div>
+            <div>
+              <strong>Observability</strong>
+              <p>Airflow alerts on quality-gate failure before publish</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Rows/day</strong>
+              <p>50M orders/day, ~2KB per row after Parquet encoding</p>
+            </div>
+            <div>
+              <strong>Raw volume</strong>
+              <p>50M * 2KB = 100GB/day raw; 36TB/year</p>
+            </div>
+            <div>
+              <strong>Staging overhead</strong>
+              <p>One staging copy per run: 100GB * 1.2 = 120GB; TTL 7 days</p>
+            </div>
+            <div>
+              <strong>Curated partition</strong>
+              <p>~80GB after Parquet compression (10:1 vs CSV)</p>
+            </div>
+            <div>
+              <strong>Spark cluster</strong>
+              <p>10 × m5.2xlarge executors, 20 min typical, 40 min worst case</p>
+            </div>
+            <div>
+              <strong>Late files</strong>
+              <p>~2% of files arrive late; lookback re-processes 3–5GB extra</p>
+            </div>
+            <div>
+              <strong>Quality checks</strong>
+              <p>Full-table scan + aggregation: ~3 min on the staging data</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Airflow DAG pseudo-structure
+# ─────────────────────────────
+ingest_raw  &gt;&gt; transform_to_staging &gt;&gt; quality_gate &gt;&gt; publish_curated &gt;&gt; update_watermark
+
+# Ingest (sensor + copy)
+wait_for_source = S3KeySensor(bucket=&#x27;vendor-drop&#x27;, prefix=&#x27;orders/{{ ds }}/&#x27;)
+copy_raw = S3CopyOperator(
+    src=&#x27;s3://vendor-drop/orders/{{ ds }}/&#x27;,
+    dst=&#x27;s3://lake/raw/orders/dt={{ ds }}/run_id={{ run_id }}/&#x27;
+)
+
+# Transform
+spark_transform = SparkSubmitOperator(
+    application=&#x27;jobs/orders_transform.py&#x27;,
+    conf={&#x27;spark.sql.sources.partitionOverwriteMode&#x27;: &#x27;dynamic&#x27;},
+    args=[&#x27;--dt&#x27;, &#x27;{{ ds }}&#x27;, &#x27;--lookback&#x27;, &#x27;2&#x27;]
+)
+
+# Quality gate
+quality_check = PythonOperator(
+    python_callable=run_quality_checks,
+    op_kwargs={&#x27;dt&#x27;: &#x27;{{ ds }}&#x27;, &#x27;table&#x27;: &#x27;staging.orders&#x27;}
+)
+
+# Publish (atomic partition swap)
+publish = SparkSQLOperator(
+    sql=&quot;INSERT OVERWRITE TABLE curated.orders PARTITION (dt=&#x27;{{ ds }}&#x27;) &quot;
+        &quot;SELECT * FROM staging.orders WHERE dt=&#x27;{{ ds }}&#x27;&quot;
+)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Raw (immutable, partitioned by dt and run_id)
+-- s3://lake/raw/orders/dt=2024-06-15/run_id=af83c1/
+--   part-00000.parquet, part-00001.parquet, ...
+
+-- Staging (written per run, validated before publish)
+CREATE TABLE staging.orders (
+  order_id        BIGINT,
+  customer_id     BIGINT,
+  order_total     DECIMAL(12,2),
+  currency        STRING,
+  status          STRING,
+  created_at      TIMESTAMP,
+  updated_at      TIMESTAMP,
+  _dedup_rank     INT          -- ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY updated_at DESC)
+) PARTITIONED BY (dt STRING, run_id STRING);
+
+-- Curated (published, single partition per dt)
+CREATE TABLE curated.orders (
+  order_id        BIGINT,
+  customer_id     BIGINT,
+  order_total     DECIMAL(12,2),
+  currency        STRING,
+  status          STRING,
+  created_at      TIMESTAMP,
+  updated_at      TIMESTAMP
+) PARTITIONED BY (dt STRING)
+STORED AS PARQUET;
+
+-- Watermark tracking
+CREATE TABLE meta.watermarks (
+  table_name      STRING,
+  dt              STRING,
+  published_at    TIMESTAMP,
+  row_count       BIGINT,
+  run_id          STRING,
+  PRIMARY KEY (table_name, dt)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The core insight is separating the write from the publish. Every pipeline run writes to a staging location that includes the run_id, so concurrent or retried runs never collide. The quality gate reads staging and either passes (triggering atomic publish) or fails (blocking the DAG and alerting).</p>
+          <p>Transform logic: Spark reads all Parquet files under raw/orders/dt=YYYY-MM-DD/ — regardless of run_id. This is what makes late files work: a file that lands at 11:00 in a new run_id subdirectory is simply another file in the same dt prefix. The transform deduplicates by order_id using ROW_NUMBER() partitioned by order_id, ordered by updated_at DESC, keeping rank=1. This handles both duplicates from retries and updates to the same order.</p>
+          <p>Publish uses INSERT OVERWRITE with dynamic partition mode or Iceberg&#x27;s replacePartitions(). The key property: this is atomic at the catalog level. Downstream queries either see the old partition or the new one — never a half-written state. If the publish fails mid-write, the old partition is still intact.</p>
+          <p>For late data, the daily DAG includes a lookback window. On the run for dt=2024-06-15, we also check raw/orders/dt=2024-06-13/ and dt=2024-06-14/ for files newer than the watermark. If found, we re-stage and re-publish those dates too. The watermark table records the latest published_at for each dt, so we can efficiently detect new arrivals.</p>
+          <p>Airflow behavior on clear+re-run: because we use partition overwrite (not append), clearing a task and re-running it produces identical output. No manual partition deletion needed. The run_id in staging prevents collisions between the original run and the retry.</p>
+<figure class="diagram dark">
+  <figcaption>Stage → Validate → Publish</figcaption>
+  <div class="flow-row">
+    <div class="node">Vendor Drop<br><small>CSV/JSON</small></div>
+    <div class="node">Raw Zone<br><small>immutable, dt/run_id</small></div>
+    <div class="node accent">Spark Transform<br><small>dedup + clean</small></div>
+    <div class="node">Staging<br><small>dt/run_id</small></div>
+    <div class="node accent">Quality Gate<br><small>row count, nulls, PK</small></div>
+    <div class="node">Curated<br><small>atomic partition swap</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Late File Handling</figcaption>
+  <div class="flow-row">
+    <div class="node">Late File<br><small>arrives dt-1 at 11:00</small></div>
+    <div class="node">Raw dt-1<br><small>new run_id subdir</small></div>
+    <div class="node accent">Lookback Check<br><small>compare vs watermark</small></div>
+    <div class="node">Re-stage dt-1</div>
+    <div class="node">Re-publish dt-1</div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Idempotent Retry Behavior</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Append mode (broken)</span><p>Retry inserts duplicates; revenue doubles</p></div>
+    <div class="node accent"><span class="label">Overwrite mode (safe)</span><p>Retry replaces partition; same output</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>The dedup strategy deserves scrutiny. ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY updated_at DESC) keeps the latest version of each order. But what if two source files contain the same order_id with the same updated_at? Then ROW_NUMBER is non-deterministic. I add a tiebreaker: ORDER BY updated_at DESC, _file_modification_time DESC, _input_file_name DESC. The file metadata columns make the ordering deterministic even with timestamp ties.</p>
+          <p>Partition overwrite modes matter. In Hive/Spark, there are two modes: static and dynamic. Static overwrites ALL partitions in the table — catastrophic if you only meant to replace one day. Dynamic overwrites only the partitions that appear in the output data. You must set spark.sql.sources.partitionOverwriteMode=dynamic. I have seen production incidents where this config was missing and a re-run of dt=2024-06-15 deleted every other date in the table.</p>
+          <p>Quality gate design: I run three tiers of checks. Tier 1 (blocking): row count &gt; 0, row count within ±10% of yesterday, PK uniqueness (COUNT DISTINCT order_id = COUNT *). Tier 2 (warning): null rate on revenue &lt; 1%, null rate on customer_id &lt; 0.5%, no negative order_total values. Tier 3 (monitoring): reconciliation against source system&#x27;s count API. Tier 1 failures block the publish and page on-call. Tier 2 sends a Slack alert but publishes. Tier 3 is logged for audit.</p>
+          <p>Iceberg vs Delta for the curated layer: both support atomic partition replacement. Iceberg&#x27;s replacePartitions() is cleaner for this use case because it explicitly scopes the overwrite to the specified partition filter — there is no risk of accidentally touching other partitions. Delta&#x27;s REPLACE WHERE achieves the same but requires careful predicate matching. Both maintain time-travel history, so if a publish is wrong, you can rollback to the previous snapshot.</p>
+          <p>Watermark table atomicity: the publish and watermark update should be in the same transaction if possible. With Iceberg, I commit a custom metadata property on the table snapshot that includes the watermark. With Hive, I use a separate Postgres table and wrap the ALTER PARTITION and watermark INSERT in a single Airflow task so they succeed or fail together.</p>
+          <p>Backfill mode: when re-processing 30 days, I fan out into parallel Airflow tasks — one per dt. Each runs the same stage → validate → publish pipeline independently. The parallelism is bounded by pool slots (I set max 5 concurrent dt partitions to avoid starving production jobs). The watermark table tracks which dates completed, so a partial backfill failure is resumable.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Spark transform with dedup and quality gate</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from pyspark.sql import SparkSession, Window
+from pyspark.sql import functions as F
+from datetime import datetime, timedelta
+
+
+def transform_orders(spark: SparkSession, dt: str, run_id: str, lookback: int = 2):
+    &quot;&quot;&quot;
+    Daily orders pipeline that can be re-run safely.
+    - Processes target date plus lookback days for late-arriving files.
+    - Deduplicates on order_id using latest updated_at timestamp.
+    - Quality gates block bad data from reaching the curated layer.
+    - Atomic publish via overwrite ensures idempotent reruns.
+    &quot;&quot;&quot;
+    # Build date list: target date + lookback for late-file detection
+    base = datetime.strptime(dt, &#x27;%Y-%m-%d&#x27;)
+    dates = [dt] + [
+        (base - timedelta(days=i)).strftime(&#x27;%Y-%m-%d&#x27;)
+        for i in range(1, lookback + 1)
+    ]
+
+    for process_dt in dates:
+        raw_path = f&#x27;s3://lake/raw/orders/dt={process_dt}/&#x27;
+        raw_df = spark.read.parquet(raw_path)
+
+        # Deduplicate: keep latest version of each order_id
+        w = Window.partitionBy(&#x27;order_id&#x27;).orderBy(
+            F.col(&#x27;updated_at&#x27;).desc(),
+            F.col(&#x27;_metadata.file_modification_time&#x27;).desc()
+        )
+        deduped = (
+            raw_df
+            .withColumn(&#x27;_rank&#x27;, F.row_number().over(w))
+            .filter(F.col(&#x27;_rank&#x27;) == 1)
+            .drop(&#x27;_rank&#x27;)
+        )
+
+        # Write to staging (run_id makes it idempotent)
+        staging_path = f&#x27;s3://lake/staging/orders/dt={process_dt}/run_id={run_id}/&#x27;
+        deduped.write.mode(&#x27;overwrite&#x27;).parquet(staging_path)
+
+        # Quality gates: block if data looks wrong
+        count = deduped.count()
+        null_revenue = deduped.filter(F.col(&#x27;order_total&#x27;).isNull()).count()
+        assert count &gt; 0, f&#x27;Zero rows for {process_dt}&#x27;
+        assert null_revenue / count &lt; 0.01, f&#x27;Null revenue rate {null_revenue/count:.2%}&#x27;
+
+        # Atomic publish to curated layer (overwrite = idempotent)
+        deduped.write.mode(&#x27;overwrite&#x27;).insertInto(&#x27;curated.orders&#x27;)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Conceptual Rust implementation using Polars for DataFrame operations.
+// In production, this would run as a compiled binary on the cluster
+// or orchestrate Spark via REST API (Livy/Spark Connect).
+
+use polars::prelude::*;
+use chrono::{NaiveDate, Duration};
+use std::path::Path;
+
+/// Daily orders pipeline that can be re-run safely.
+/// - Deduplicates on order_id using latest updated_at.
+/// - Quality gates block bad data from reaching curated layer.
+/// - Atomic publish via overwrite ensures idempotent reruns.
+pub fn transform_orders(
+    dt: &amp;str,
+    run_id: &amp;str,
+    lookback: usize,
+) -&gt; Result&lt;(), PolarsError&gt; {
+    let base = NaiveDate::parse_from_str(dt, &quot;%Y-%m-%d&quot;).expect(&quot;Invalid date&quot;);
+
+    // Build date list: target date + lookback for late-file detection
+    let mut dates = vec![dt.to_string()];
+    for i in 1..=lookback {
+        let d = base - Duration::days(i as i64);
+        dates.push(d.format(&quot;%Y-%m-%d&quot;).to_string());
+    }
+
+    for process_dt in &amp;dates {
+        let raw_path = format!(&quot;s3://lake/raw/orders/dt={}/&quot;, process_dt);
+
+        // Read parquet files from the raw layer
+        let raw_df = LazyFrame::scan_parquet(&amp;raw_path, Default::default())?;
+
+        // Deduplicate: sort by updated_at descending, keep first per order_id
+        let deduped = raw_df
+            .sort(
+                [&quot;updated_at&quot;],
+                SortMultipleOptions::default().with_order_descending(true),
+            )
+            .unique(Some(vec![&quot;order_id&quot;.into()]), UniqueKeepStrategy::First)
+            .collect()?;
+
+        // Write to staging (run_id makes reruns idempotent)
+        let staging_path = format!(
+            &quot;s3://lake/staging/orders/dt={}/run_id={}/data.parquet&quot;,
+            process_dt, run_id
+        );
+        let mut file = std::fs::File::create(&amp;staging_path)?;
+        ParquetWriter::new(&amp;mut file).finish(&amp;mut deduped.clone())?;
+
+        // Quality gates
+        let count = deduped.height();
+        assert!(count &gt; 0, &quot;Zero rows for {}&quot;, process_dt);
+
+        let null_revenue = deduped
+            .column(&quot;order_total&quot;)?
+            .null_count();
+        let null_rate = null_revenue as f64 / count as f64;
+        assert!(
+            null_rate &lt; 0.01,
+            &quot;Null revenue rate {:.2}% exceeds 1% threshold&quot;,
+            null_rate * 100.0
+        );
+
+        // Atomic publish: overwrite the curated partition
+        let curated_path = format!(&quot;s3://lake/curated/orders/dt={}/data.parquet&quot;, process_dt);
+        let mut file = std::fs::File::create(&amp;curated_path)?;
+        ParquetWriter::new(&amp;mut file).finish(&amp;mut deduped.clone())?;
+    }
+
+    Ok(())
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Orchestration layer for a daily orders pipeline.
+// In an Objective-C++ context this would typically call a Spark/Livy REST API
+// or invoke spark-submit as a subprocess. The logic below shows the full
+// pipeline structure with dedup, quality gates, and atomic publish.
+
+@interface OrdersPipeline : NSObject
+@property (nonatomic, strong) NSString *sparkEndpoint;
+
+- (instancetype)initWithEndpoint:(NSString *)endpoint;
+- (BOOL)transformOrdersForDate:(NSString *)dt runId:(NSString *)runId lookback:(int)lookback;
+@end
+
+@implementation OrdersPipeline
+
+- (instancetype)initWithEndpoint:(NSString *)endpoint {
+    self = [super init];
+    if (self) { _sparkEndpoint = endpoint; }
+    return self;
+}
+
+/// Submit the daily orders transform via Spark Connect / Livy REST API.
+/// Handles lookback dates, dedup, quality gates, and atomic publish.
+- (BOOL)transformOrdersForDate:(NSString *)dt runId:(NSString *)runId lookback:(int)lookback {
+    // Build list of dates to process (target + lookback for late arrivals)
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @&quot;yyyy-MM-dd&quot;;
+    NSDate *baseDate = [fmt dateFromString:dt];
+    NSMutableArray&lt;NSString *&gt; *dates = [NSMutableArray arrayWithObject:dt];
+
+    for (int i = 1; i &lt;= lookback; i++) {
+        NSDate *d = [baseDate dateByAddingTimeInterval:-(i * 86400)];
+        [dates addObject:[fmt stringFromDate:d]];
+    }
+
+    for (NSString *processDt in dates) {
+        // Submit PySpark job via REST API with these parameters:
+        // - raw_path: s3://lake/raw/orders/dt={processDt}/
+        // - Dedup logic: ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY updated_at DESC)
+        // - Staging write: s3://lake/staging/orders/dt={processDt}/run_id={runId}/
+        // - Quality gate: count &gt; 0, null_revenue_rate &lt; 1%
+        // - Atomic publish: overwrite into curated.orders
+
+        NSDictionary *jobConfig = @{
+            @&quot;raw_path&quot;: [NSString stringWithFormat:@&quot;s3://lake/raw/orders/dt=%@/&quot;, processDt],
+            @&quot;staging_path&quot;: [NSString stringWithFormat:
+                @&quot;s3://lake/staging/orders/dt=%@/run_id=%@/&quot;, processDt, runId],
+            @&quot;dedup_key&quot;: @&quot;order_id&quot;,
+            @&quot;dedup_order&quot;: @&quot;updated_at DESC&quot;,
+            @&quot;quality_checks&quot;: @[
+                @{@&quot;type&quot;: @&quot;row_count&quot;, @&quot;min&quot;: @1},
+                @{@&quot;type&quot;: @&quot;null_rate&quot;, @&quot;column&quot;: @&quot;order_total&quot;, @&quot;max_rate&quot;: @0.01}
+            ],
+            @&quot;target_table&quot;: @&quot;curated.orders&quot;,
+            @&quot;write_mode&quot;: @&quot;overwrite&quot;
+        };
+
+        BOOL success = [self submitSparkJob:jobConfig];
+        if (!success) {
+            NSLog(@&quot;Pipeline failed for dt=%@&quot;, processDt);
+            return NO;
+        }
+    }
+    return YES;
+}
+
+/// Submit a Spark job via the configured REST endpoint (Livy/Spark Connect).
+- (BOOL)submitSparkJob:(NSDictionary *)config {
+    NSError *err = nil;
+    NSData *body = [NSJSONSerialization dataWithJSONObject:config options:0 error:&amp;err];
+    if (err) return NO;
+
+    NSURL *url = [NSURL URLWithString:
+        [NSString stringWithFormat:@&quot;%@/batches&quot;, _sparkEndpoint]];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    req.HTTPMethod = @&quot;POST&quot;;
+    req.HTTPBody = body;
+    [req setValue:@&quot;application/json&quot; forHTTPHeaderField:@&quot;Content-Type&quot;];
+
+    // Synchronous for illustration; production would use async + polling
+    NSURLResponse *resp = nil;
+    NSData *data = [NSURLConnection sendSynchronousRequest:req
+                                        returningResponse:&amp;resp error:&amp;err];
+    NSHTTPURLResponse *httpResp = (NSHTTPURLResponse *)resp;
+    return httpResp.statusCode == 200 || httpResp.statusCode == 201;
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Scheduler</span><p>Trigger DAG for dt=2024-06-15, run_id=af83c1</p></div>
+    <div class="seq-row"><span class="actor">Sensor</span><p>Wait for s3://vendor-drop/orders/2024-06-15/ — files present, proceed</p></div>
+    <div class="seq-row"><span class="actor">Ingest</span><p>Copy to s3://lake/raw/orders/dt=2024-06-15/run_id=af83c1/</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Read all files under raw/orders/dt=2024-06-15/**, dedup by order_id</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Write 48M rows to staging.orders WHERE dt=2024-06-15, run_id=af83c1</p></div>
+    <div class="seq-row"><span class="actor">Quality Gate</span><p>Row count 48M vs yesterday 47.2M (+1.7%) ✓, null revenue 0.3% ✓, PK unique ✓</p></div>
+    <div class="seq-row"><span class="actor">Publish</span><p>INSERT OVERWRITE curated.orders PARTITION (dt=2024-06-15) — atomic swap</p></div>
+    <div class="seq-row"><span class="actor">Watermark</span><p>UPDATE meta.watermarks SET published_at=now(), row_count=48M WHERE dt=2024-06-15</p></div>
+    <div class="seq-row"><span class="actor">Lookback</span><p>Check raw/dt=2024-06-13 and dt=2024-06-14 for new files — none found, skip</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Append vs overwrite</strong>
+              <p>Append is cheaper but non-idempotent — retries duplicate data. Overwrite costs a full partition rewrite but guarantees identical output on re-run</p>
+            </div>
+            <div>
+              <strong>Iceberg vs Delta vs Hive</strong>
+              <p>Iceberg and Delta give atomic partition replacement and time travel. Hive requires careful ALTER PARTITION management but has zero migration cost for existing warehouses</p>
+            </div>
+            <div>
+              <strong>Lookback window size</strong>
+              <p>Larger lookback catches more late data but increases compute. I default to 2 days and expand to 7 for known-late sources</p>
+            </div>
+            <div>
+              <strong>In-DAG quality checks vs separate job</strong>
+              <p>In-DAG is simpler and blocks bad data. Separate quality DAG adds flexibility but introduces timing gaps where bad data is briefly visible</p>
+            </div>
+            <div>
+              <strong>Staging TTL</strong>
+              <p>7-day retention balances debuggability against storage cost. Shorter TTL saves money but makes post-incident investigation harder</p>
+            </div>
+            <div>
+              <strong>Dedup strategy</strong>
+              <p>ROW_NUMBER is deterministic and correct; DISTINCT is cheaper but loses update ordering. GROUP BY + MAX(updated_at) works but drops other columns</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Partition overwrite mode set to &#x27;static&#x27; — re-run of one date wipes entire table; set dynamic mode explicitly</li>
+            <li>Sensor times out before vendor file arrives — task fails, Airflow retry picks it up; but if retry exhaustion hits, late-file lookback catches it next day</li>
+            <li>Quality gate false positive: yesterday had a holiday dip, today&#x27;s +15% looks suspicious — use day-of-week baselines, not just yesterday</li>
+            <li>Staging write fails mid-way: partial Parquet files in staging — overwrite mode on next run replaces them; no corruption propagates to curated</li>
+            <li>Concurrent DAG runs for the same dt: run_id isolation prevents collision, but publish order matters — last writer wins, which is correct if transform is deterministic</li>
+            <li>Iceberg snapshot accumulates: 365 daily publishes × 3 years = 1095 snapshots with data files — run expire_snapshots weekly</li>
+            <li>Watermark update fails after publish succeeds: lookback will re-process an already-correct partition — harmless due to idempotency but wastes compute</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle hard-deletes from the source system?</li>
+            <li>How do you backfill 6 months without starving today&#x27;s production run?</li>
+            <li>How would you add schema evolution — a new column appears in the source?</li>
+            <li>What if downstream jobs depend on the watermark — how do you avoid publishing stale data?</li>
+            <li>How do you test the pipeline end-to-end before deploying to production?</li>
+            <li>How would you migrate from Hive to Iceberg without downtime?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: immutable raw zone design, the stage → validate → atomic publish pattern, dedup logic with deterministic ordering, quality gates that block bad data before it reaches curated, and late-file handling via lookback windows. You should draw the linear DAG flow and explain why append mode breaks on retry.</p>
+          <p>You do not need to design the full Airflow DAG YAML, the downstream dependency graph, or the schema evolution automation. Mentioning Iceberg/Delta time travel for rollback and watermark tracking for downstream freshness shows depth. The interviewer wants to see that you understand idempotency is a property of the entire pipeline, not just one task.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../skewed_spark_join/">Fix a skewed Spark join →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

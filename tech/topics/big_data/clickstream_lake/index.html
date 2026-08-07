@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a near-real-time clickstream lake | Big Data | Engineering Notes</title>
+  <meta name="description" content="Clickstream wants minutes of lag, cheap storage, and honest language about exactly-once.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Design a near-real-time clickstream lake</p>
+      <p class="eyebrow">Big Data · Hard · ~60 min</p>
+      <h1>Design a near-real-time clickstream lake</h1>
+      <p class="problem-deck">Clickstream wants minutes of lag, cheap storage, and honest language about exactly-once.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Confirm volume (2B events/day, 50k eps peak), freshness SLA (2 min), exactly-once expectations</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Ingestion tier</strong><p>SDK → Kafka (partitioned by user_id hash), topic design, retention, and consumer group strategy</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Stream processor</strong><p>Flink job: validate → enrich → sessionize → dedup → micro-batch write to Iceberg</p></div></div>
+            <div class="stack-step"><strong>22-32m</strong><div><strong>Lake landing</strong><p>Iceberg table design: partitioned by event_hour, sorted by user_id. Micro-batch commit every 60s</p></div></div>
+            <div class="stack-step"><strong>32-42m</strong><div><strong>Exactly-once deep dive</strong><p>Flink checkpointing + Iceberg atomic commits. Where duplicates still sneak in and how to handle them</p></div></div>
+            <div class="stack-step"><strong>42-50m</strong><div><strong>Compaction + maintenance</strong><p>Tiny file compaction, snapshot expiry, partition evolution for time-based queries</p></div></div>
+            <div class="stack-step"><strong>50-60m</strong><div><strong>Failure modes</strong><p>Flink checkpoint failure, Kafka consumer lag spike, Iceberg commit conflict, late events</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>Clickstream is the canonical &#x27;high volume, low value per event&#x27; data problem. We are talking about 2–5 billion events per day — page views, clicks, scrolls, impressions — each 300–500 bytes. The business wants near-real-time analytics (minutes, not hours) but also cheap long-term storage for ML training data and retrospective analysis.</p>
+          <p>The architecture is: browser/app SDK → Kafka → stream processor (Flink or Spark Structured Streaming) → Iceberg/Delta tables on S3. The stream processor handles schema validation, sessionization, enrichment (geo-IP, user-agent parsing), and writes micro-batches to the lake every 1–2 minutes.</p>
+          <p>The &#x27;exactly-once&#x27; question is where most designs get dishonest. Kafka gives at-least-once by default. Flink&#x27;s exactly-once requires checkpointing + two-phase commit to the sink. With Iceberg, we get atomic commits, so a failed micro-batch either fully commits or fully rolls back. But duplicates can still arrive from the SDK (user retries, network blips). True exactly-once is an application-level property: we need event deduplication either in the stream processor (windowed dedup on event_id) or downstream (MERGE on event_id in the lake table).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Event volume — peak events per second?</li>
+            <li>Freshness SLA — minutes or sub-second?</li>
+            <li>Do we need sessionization in the streaming layer or batch?</li>
+            <li>Which enrichments — geo-IP, device type, user lookup?</li>
+            <li>Retention policy — how long to keep raw events?</li>
+            <li>Downstream consumers — real-time dashboards, batch ML, or both?</li>
+            <li>Schema evolution — how often do new event types appear?</li>
+            <li>Exactly-once requirement — is at-least-once with dedup acceptable?</li>
+            <li>Are there PII fields that need masking before lake landing?</li>
+            <li>Multi-region — do events originate from multiple continents?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Kafka ingestion, stream processing with enrichment, Iceberg lake landing, near-real-time freshness</li>
+            <li>In scope — Event deduplication, sessionization, schema validation</li>
+            <li>Out of scope — SDK implementation, real-time dashboards (downstream consumer)</li>
+            <li>Defer — Cross-region replication, PII tokenization pipeline</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Ingest</strong>
+              <p>Accept 50k events/sec peak from Kafka with back-pressure handling</p>
+            </div>
+            <div>
+              <strong>Validate</strong>
+              <p>Reject malformed events to a dead-letter topic; enforce schema</p>
+            </div>
+            <div>
+              <strong>Enrich</strong>
+              <p>Geo-IP lookup, user-agent parse, session assignment</p>
+            </div>
+            <div>
+              <strong>Deduplicate</strong>
+              <p>Remove duplicate events within a 10-minute window by event_id</p>
+            </div>
+            <div>
+              <strong>Land</strong>
+              <p>Write enriched events to Iceberg table with 1–2 minute freshness</p>
+            </div>
+            <div>
+              <strong>Sessionize</strong>
+              <p>Assign session_id based on 30-minute inactivity timeout</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Throughput</strong>
+              <p>Sustained 50k events/sec, peak 150k/sec during flash sales</p>
+            </div>
+            <div>
+              <strong>Freshness</strong>
+              <p>Events queryable in the lake within 2 minutes of occurrence</p>
+            </div>
+            <div>
+              <strong>Durability</strong>
+              <p>Zero event loss after Kafka acknowledgment</p>
+            </div>
+            <div>
+              <strong>Exactly-once</strong>
+              <p>At-least-once delivery with application-level dedup; no silent duplicates in the lake</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Storage under $0.02/GB/month using Parquet + S3; compute scales down during off-peak</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Events/day</strong>
+              <p>2B events × 400 bytes avg = 800GB/day raw</p>
+            </div>
+            <div>
+              <strong>Kafka throughput</strong>
+              <p>50k eps sustained = 20MB/s; 150k eps peak = 60MB/s; 6 brokers with 3 partitions each</p>
+            </div>
+            <div>
+              <strong>Flink parallelism</strong>
+              <p>18 task slots (3 TaskManagers × 6 slots); each handles ~8k eps</p>
+            </div>
+            <div>
+              <strong>Iceberg writes</strong>
+              <p>Micro-batch every 60s: ~3M events per batch = 1.2GB Parquet</p>
+            </div>
+            <div>
+              <strong>Storage (1 year)</strong>
+              <p>800GB/day × 365 = 292TB raw; Parquet compression 4:1 → 73TB on S3 = ~$1,500/month</p>
+            </div>
+            <div>
+              <strong>Dedup state</strong>
+              <p>10-minute window × 50k eps = 30M event_ids in Flink state; ~1.2GB RocksDB</p>
+            </div>
+            <div>
+              <strong>Sessions/day</strong>
+              <p>~200M sessions (avg 10 events/session)</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Kafka topic layout
+# ───────────────────
+Topic: clickstream.raw       Partitions: 18  Retention: 7 days
+Topic: clickstream.enriched   Partitions: 18  Retention: 3 days
+Topic: clickstream.dlq        Partitions: 6   Retention: 30 days
+
+# Event schema (Avro / JSON)
+{
+  &quot;event_id&quot;: &quot;uuid-v4&quot;,
+  &quot;event_type&quot;: &quot;page_view | click | scroll | impression&quot;,
+  &quot;user_id&quot;: &quot;u_12345&quot;,
+  &quot;timestamp&quot;: &quot;2024-06-15T10:30:00.123Z&quot;,
+  &quot;url&quot;: &quot;https://shop.example.com/product/42&quot;,
+  &quot;referrer&quot;: &quot;https://google.com/search?q=...&quot;,
+  &quot;user_agent&quot;: &quot;Mozilla/5.0 ...&quot;,
+  &quot;properties&quot;: {&quot;button_id&quot;: &quot;add_to_cart&quot;, &quot;product_id&quot;: 42}
+}
+
+# Flink SQL (simplified)
+INSERT INTO iceberg.clickstream.events
+SELECT
+  event_id, event_type, user_id,
+  event_ts,
+  geo_ip_lookup(ip_address) AS country,
+  parse_user_agent(user_agent) AS device_type,
+  session_window(event_ts, INTERVAL &#x27;30&#x27; MINUTE) AS session_id
+FROM clickstream_raw
+WHERE event_id NOT IN (SELECT event_id FROM dedup_state)</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Iceberg clickstream table
+CREATE TABLE iceberg.clickstream.events (
+  event_id        STRING NOT NULL,        -- UUID, dedup key
+  event_type      STRING NOT NULL,
+  user_id         STRING,
+  session_id      STRING,
+  event_ts        TIMESTAMP NOT NULL,
+  url             STRING,
+  referrer        STRING,
+  country_code    STRING,
+  device_type     STRING,
+  properties      MAP&lt;STRING, STRING&gt;,
+  ingested_at     TIMESTAMP NOT NULL       -- processing time
+) PARTITIONED BY (hours(event_ts))
+SORTED BY (user_id);
+
+-- Partition layout: event_ts_hour=2024061510, event_ts_hour=2024061511, ...
+-- Each hourly partition: ~33GB raw → ~8GB Parquet
+
+-- Dead letter table
+CREATE TABLE iceberg.clickstream.dead_letters (
+  raw_payload     STRING,
+  error_reason    STRING,
+  received_at     TIMESTAMP
+) PARTITIONED BY (days(received_at));</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The pipeline has four stages: ingest, process, land, and maintain.</p>
+          <p>Ingest: the SDK sends events to a Kafka REST proxy or directly to Kafka. Events are partitioned by hash(user_id) so all events from the same user land on the same partition — essential for sessionization. We use Avro with a schema registry to enforce structure at the producer level. Malformed events go to a dead-letter topic.</p>
+          <p>Process: Flink reads from clickstream.raw with exactly-once source semantics (consumer offsets committed as part of checkpoints). The processing pipeline: (1) schema validation — reject events missing required fields, (2) deduplication — maintain a keyed state of event_ids seen in the last 10 minutes, (3) enrichment — geo-IP lookup from a MaxMind database loaded as a broadcast variable, user-agent parsing, (4) sessionization — assign session_id using a session window with 30-minute gap.</p>
+          <p>Land: Flink writes to Iceberg using the IcebergSink with micro-batch commits every 60 seconds. Each commit is atomic — either all events in the batch land or none do. The table is partitioned by hours(event_ts) for time-range query efficiency and sorted by user_id within partitions for user-centric queries.</p>
+          <p>Maintain: compaction runs every hour to merge small files (the 60-second micro-batches produce many small files). Target file size is 256MB. Snapshot expiry runs daily, keeping 72 hours of snapshots for time-travel debugging. Old partitions (&gt;90 days) are moved to S3 Glacier via lifecycle rules, but the Iceberg metadata remains — queries transparently read from Glacier with higher latency.</p>
+          <p>Exactly-once semantics: Flink&#x27;s checkpointing guarantees that on recovery, processing resumes from the last checkpoint — no events are reprocessed that were already committed to Iceberg. The remaining gap is SDK-level duplicates: the user&#x27;s browser might retry an event that was already sent. The dedup window catches most of these; for the rest, downstream consumers should use event_id as a natural key for idempotent processing.</p>
+<figure class="diagram dark">
+  <figcaption>Clickstream Pipeline</figcaption>
+  <div class="flow-row">
+    <div class="node">SDK<br><small>browser/app</small></div>
+    <div class="node">Kafka<br><small>18 partitions</small></div>
+    <div class="node accent">Flink<br><small>validate + enrich + dedup</small></div>
+    <div class="node">Iceberg on S3<br><small>hourly partitions</small></div>
+    <div class="node">Query Engine<br><small>Trino / Spark</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Flink Processing Stages</figcaption>
+  <div class="flow-row">
+    <div class="node">Kafka Source<br><small>exactly-once offsets</small></div>
+    <div class="node">Schema Check<br><small>→ DLQ on fail</small></div>
+    <div class="node accent">Dedup<br><small>10-min window</small></div>
+    <div class="node">Enrich<br><small>geo-IP, UA</small></div>
+    <div class="node">Sessionize<br><small>30-min gap</small></div>
+    <div class="node accent">Iceberg Sink<br><small>60s micro-batch</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Storage Tiering</figcaption>
+  <div class="compare">
+    <div class="node accent"><span class="label">Hot (0-7 days)</span><p>S3 Standard, 56GB/day, fast queries</p></div>
+    <div class="node"><span class="label">Warm (7-90 days)</span><p>S3 IA, ~$0.0125/GB, batch queries</p></div>
+    <div class="node"><span class="label">Cold (90+ days)</span><p>S3 Glacier, ~$0.004/GB, ML training</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Sessionization strategy: I use event-time session windows with a 30-minute gap. Flink&#x27;s session window merges events within the gap into a single session. The session_id is deterministic: hash(user_id + session_start_ts). Late events (arriving after the window closes) either extend an existing session or create a new one, depending on the allowed-lateness configuration. I set allowed lateness to 1 hour — events arriving more than 1 hour late are still processed but may create a separate session that gets merged in a downstream batch job.</p>
+          <p>Watermarking: Flink tracks event-time progress using watermarks. With out-of-order events, I use a bounded-out-of-orderness strategy with a 30-second tolerance. This means: when Flink sees an event at T=10:30:00, it advances the watermark to T=10:29:30. Any event with timestamp before 10:29:30 is considered late. The 30-second bound is a tradeoff: larger bounds improve completeness but increase latency (windows cannot close until the watermark passes their end).</p>
+          <p>Iceberg commit conflicts: with multiple Flink subtasks writing to the same table, commit conflicts can occur. Iceberg uses optimistic concurrency — each commit validates against the current table state. If another commit happened since the snapshot was read, the commit retries with a merge. For append-only workloads (our case), conflicts are rare because subtasks write to different files. The risk is during compaction: if a compaction commit and a write commit overlap, one retries.</p>
+          <p>Geo-IP enrichment: I load the MaxMind database (~50MB) as a Flink broadcast state, refreshed every 24 hours. The lookup is in-memory, adding &lt;1ms per event. User-agent parsing uses a compiled regex library (ua-parser) — also &lt;1ms. Total enrichment overhead is ~2ms per event, negligible at 50k eps.</p>
+          <p>Compaction strategy: every micro-batch commit adds files. With 60-second batches and 18 parallelism, we add 18 files per minute = 1,080 files per hour. Without compaction, a single hourly partition would have 1,080 tiny files. The compaction job (Iceberg&#x27;s rewriteDataFiles) runs hourly, targeting 256MB files. After compaction, an hourly partition has ~32 files (8GB / 256MB). This is critical for query performance — Trino/Spark plan time scales linearly with file count.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Flink clickstream pipeline with dedup</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.table import StreamTableEnvironment
+
+def build_clickstream_pipeline():
+    &quot;&quot;&quot;
+    Near-real-time clickstream lake using Flink.
+    - Consumes from Kafka topic in Avro format.
+    - Watermark at 30s handles late events.
+    - Deduplicates on event_id using ROW_NUMBER window.
+    - Enriches with geo and device type UDFs.
+    - Sinks to Iceberg table for lakehouse queries.
+    &quot;&quot;&quot;
+    env = StreamExecutionEnvironment.get_execution_environment()
+    # Checkpoint every 60s for fault tolerance
+    env.enable_checkpointing(60_000)
+    env.get_checkpoint_config().set_min_pause_between_checkpoints(30_000)
+
+    t_env = StreamTableEnvironment.create(env)
+
+    # Source: Kafka topic with Avro deserialization
+    t_env.execute_sql(&quot;&quot;&quot;
+    CREATE TABLE clickstream_raw (
+      event_id STRING,
+      event_type STRING,
+      user_id STRING,
+      event_ts TIMESTAMP(3),
+      url STRING,
+      ip_address STRING,
+      user_agent STRING,
+      WATERMARK FOR event_ts AS event_ts - INTERVAL &#x27;30&#x27; SECOND
+    ) WITH (
+      &#x27;connector&#x27; = &#x27;kafka&#x27;,
+      &#x27;topic&#x27; = &#x27;clickstream.raw&#x27;,
+      &#x27;properties.bootstrap.servers&#x27; = &#x27;kafka:9092&#x27;,
+      &#x27;format&#x27; = &#x27;avro&#x27;,
+      &#x27;scan.startup.mode&#x27; = &#x27;latest-offset&#x27;
+    )
+    &quot;&quot;&quot;)
+
+    # Sink: Iceberg table with dedup and enrichment
+    t_env.execute_sql(&quot;&quot;&quot;
+    INSERT INTO iceberg_clickstream
+    SELECT event_id, event_type, user_id, event_ts,
+           geo_lookup(ip_address) AS country_code,
+           parse_ua(user_agent) AS device_type
+    FROM (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY event_id ORDER BY event_ts
+      ) AS rn
+      FROM clickstream_raw
+    ) WHERE rn = 1
+    &quot;&quot;&quot;)</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Conceptual Rust streaming pipeline for clickstream data.
+// In production, this would use a framework like Arroyo, Fluvio, or
+// interface with Flink via REST. The logic below shows the streaming
+// dedup and enrichment pattern.
+
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::Message;
+
+#[derive(Clone, Debug)]
+pub struct ClickEvent {
+    pub event_id: String,
+    pub event_type: String,
+    pub user_id: String,
+    pub event_ts: u64,  // epoch millis
+    pub url: String,
+    pub ip_address: String,
+    pub user_agent: String,
+}
+
+#[derive(Debug)]
+pub struct EnrichedEvent {
+    pub event_id: String,
+    pub event_type: String,
+    pub user_id: String,
+    pub event_ts: u64,
+    pub country_code: String,
+    pub device_type: String,
+}
+
+/// Deduplication window that tracks seen event_ids within a time window.
+/// Rejects duplicates and evicts entries older than the watermark.
+pub struct DedupWindow {
+    seen: HashMap&lt;String, u64&gt;,  // event_id -&gt; first_seen_ts
+    watermark_ms: u64,
+}
+
+impl DedupWindow {
+    pub fn new(watermark_ms: u64) -&gt; Self {
+        Self { seen: HashMap::new(), watermark_ms }
+    }
+
+    /// Returns true if this event_id has NOT been seen before.
+    pub fn is_new(&amp;mut self, event_id: &amp;str, event_ts: u64) -&gt; bool {
+        // Evict entries below watermark
+        let cutoff = event_ts.saturating_sub(self.watermark_ms);
+        self.seen.retain(|_, ts| *ts &gt;= cutoff);
+
+        if self.seen.contains_key(event_id) {
+            false  // duplicate
+        } else {
+            self.seen.insert(event_id.to_string(), event_ts);
+            true
+        }
+    }
+}
+
+/// Enrich a click event with geo and device info.
+fn enrich(event: &amp;ClickEvent) -&gt; EnrichedEvent {
+    EnrichedEvent {
+        event_id: event.event_id.clone(),
+        event_type: event.event_type.clone(),
+        user_id: event.user_id.clone(),
+        event_ts: event.event_ts,
+        country_code: geo_lookup(&amp;event.ip_address),
+        device_type: parse_user_agent(&amp;event.user_agent),
+    }
+}
+
+fn geo_lookup(ip: &amp;str) -&gt; String {
+    // In production: MaxMind GeoIP2 lookup
+    &quot;US&quot;.to_string()
+}
+
+fn parse_user_agent(ua: &amp;str) -&gt; String {
+    // In production: parse User-Agent header for device classification
+    if ua.contains(&quot;Mobile&quot;) { &quot;mobile&quot;.into() } else { &quot;desktop&quot;.into() }
+}
+
+/// Main streaming loop: consume from Kafka, dedup, enrich, write to Iceberg.
+pub async fn run_clickstream_pipeline(
+    consumer: StreamConsumer,
+    mut dedup: DedupWindow,
+) {
+    loop {
+        match consumer.recv().await {
+            Ok(msg) =&gt; {
+                let payload = msg.payload().unwrap_or_default();
+                let event: ClickEvent = serde_json::from_slice(payload).unwrap();
+
+                // Dedup: skip if we&#x27;ve seen this event_id
+                if !dedup.is_new(&amp;event.event_id, event.event_ts) {
+                    continue;
+                }
+
+                // Enrich with geo and device type
+                let enriched = enrich(&amp;event);
+
+                // Write to Iceberg (via iceberg-rust or REST catalog)
+                write_to_iceberg(&amp;enriched).await;
+            }
+            Err(e) =&gt; eprintln!(&quot;Kafka error: {}&quot;, e),
+        }
+    }
+}
+
+async fn write_to_iceberg(event: &amp;EnrichedEvent) {
+    // In production: batch writes to Iceberg via the iceberg-rust crate
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;vector&gt;
+
+// Near-real-time clickstream pipeline orchestration.
+// This Objective-C++ implementation shows:
+// 1. Kafka consumer wrapper for event ingestion
+// 2. Dedup logic using a time-windowed set
+// 3. Enrichment with geo and device type
+// 4. Sink to Iceberg via REST catalog API
+
+struct ClickEvent {
+    std::string event_id;
+    std::string event_type;
+    std::string user_id;
+    uint64_t event_ts;  // epoch millis
+    std::string url;
+    std::string ip_address;
+    std::string user_agent;
+};
+
+struct EnrichedEvent {
+    std::string event_id;
+    std::string event_type;
+    std::string user_id;
+    uint64_t event_ts;
+    std::string country_code;
+    std::string device_type;
+};
+
+@interface ClickstreamPipeline : NSObject {
+    // Dedup window: event_id -&gt; first-seen timestamp
+    std::unordered_map&lt;std::string, uint64_t&gt; _seenEvents;
+    uint64_t _watermarkMs;  // 30 seconds for late-event tolerance
+}
+
+@property (nonatomic, strong) NSString *kafkaBrokers;
+@property (nonatomic, strong) NSString *icebergEndpoint;
+
+- (instancetype)initWithKafka:(NSString *)brokers iceberg:(NSString *)endpoint;
+- (void)runPipeline;
+@end
+
+@implementation ClickstreamPipeline
+
+- (instancetype)initWithKafka:(NSString *)brokers iceberg:(NSString *)endpoint {
+    self = [super init];
+    if (self) {
+        _kafkaBrokers = brokers;
+        _icebergEndpoint = endpoint;
+        _watermarkMs = 30000;  // 30s watermark for late events
+    }
+    return self;
+}
+
+/// Main pipeline loop: consume -&gt; dedup -&gt; enrich -&gt; sink.
+- (void)runPipeline {
+    // In production: use librdkafka for Kafka consumption
+    // Here we show the processing logic structure
+
+    while (true) {
+        ClickEvent event = [self consumeNextEvent];
+
+        // Dedup: skip duplicate event_ids within watermark window
+        if (![self isNewEvent:event]) {
+            continue;
+        }
+
+        // Enrich with geo lookup and device classification
+        EnrichedEvent enriched = [self enrich:event];
+
+        // Sink to Iceberg table via REST catalog
+        [self writeToIceberg:enriched];
+    }
+}
+
+/// Dedup check: returns YES if event_id not seen within watermark window.
+- (BOOL)isNewEvent:(const ClickEvent &amp;)event {
+    // Evict entries older than watermark
+    uint64_t cutoff = event.event_ts &gt; _watermarkMs ? event.event_ts - _watermarkMs : 0;
+    for (auto it = _seenEvents.begin(); it != _seenEvents.end();) {
+        if (it-&gt;second &lt; cutoff) {
+            it = _seenEvents.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (_seenEvents.count(event.event_id)) {
+        return NO;  // duplicate
+    }
+    _seenEvents[event.event_id] = event.event_ts;
+    return YES;
+}
+
+/// Enrich event with country code (geo) and device type (UA parsing).
+- (EnrichedEvent)enrich:(const ClickEvent &amp;)event {
+    EnrichedEvent enriched;
+    enriched.event_id = event.event_id;
+    enriched.event_type = event.event_type;
+    enriched.user_id = event.user_id;
+    enriched.event_ts = event.event_ts;
+    enriched.country_code = [self geoLookup:event.ip_address];
+    enriched.device_type = [self parseUA:event.user_agent];
+    return enriched;
+}
+
+- (std::string)geoLookup:(const std::string &amp;)ip {
+    // MaxMind GeoIP2 lookup in production
+    return &quot;US&quot;;
+}
+
+- (std::string)parseUA:(const std::string &amp;)ua {
+    if (ua.find(&quot;Mobile&quot;) != std::string::npos) return &quot;mobile&quot;;
+    return &quot;desktop&quot;;
+}
+
+- (ClickEvent)consumeNextEvent {
+    // Placeholder: in production, poll librdkafka consumer
+    return ClickEvent{};
+}
+
+- (void)writeToIceberg:(const EnrichedEvent &amp;)event {
+    // POST to Iceberg REST catalog to append to the clickstream table
+    // Batch multiple events before flushing for efficiency
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Browser SDK</span><p>POST /events [{event_id: "abc", type: "click", ts: 10:30:00.123}]</p></div>
+    <div class="seq-row"><span class="actor">Kafka</span><p>Partition by hash(user_id) → partition 7; ack to SDK</p></div>
+    <div class="seq-row"><span class="actor">Flink</span><p>Consume from partition 7, validate schema ✓, check dedup state → new event</p></div>
+    <div class="seq-row"><span class="actor">Flink</span><p>Enrich: geo-IP → "US", UA parse → "mobile/chrome", session → "sess_x7k2"</p></div>
+    <div class="seq-row"><span class="actor">Flink</span><p>Buffer in micro-batch; 60s timer fires → commit batch of 3M events to Iceberg</p></div>
+    <div class="seq-row"><span class="actor">Iceberg</span><p>Atomic commit: 18 new Parquet files → metadata update → table version N+1</p></div>
+    <div class="seq-row"><span class="actor">Trino</span><p>SELECT COUNT(*) WHERE event_ts > now() - INTERVAL 5 MINUTE → sees new data</p></div>
+    <div class="seq-row"><span class="actor">Compaction</span><p>Hourly: merge 1,080 small files → 32 × 256MB files; snapshot expire old versions</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Flink vs Spark Structured Streaming</strong>
+              <p>Flink has true event-time processing and lower latency. Spark SS is simpler for teams already on Spark but micro-batch latency is 30s+ minimum</p>
+            </div>
+            <div>
+              <strong>Iceberg vs Delta Lake</strong>
+              <p>Both support atomic commits. Iceberg has better partition evolution and Flink integration. Delta has tighter Spark integration and Unity Catalog</p>
+            </div>
+            <div>
+              <strong>Dedup in stream vs lake</strong>
+              <p>Stream dedup (Flink state) catches duplicates in real time but costs memory. Lake dedup (MERGE) is cheaper but duplicates are visible briefly</p>
+            </div>
+            <div>
+              <strong>Avro vs JSON</strong>
+              <p>Avro with schema registry enforces contracts and is 30-40% smaller. JSON is human-readable and easier to debug but schema violations are silent</p>
+            </div>
+            <div>
+              <strong>Hourly vs daily partitions</strong>
+              <p>Hourly gives finer query granularity and smaller compaction units. Daily reduces partition count but means larger compaction jobs</p>
+            </div>
+            <div>
+              <strong>Exactly-once vs at-least-once</strong>
+              <p>Exactly-once requires Flink checkpointing + 2PC to Iceberg — higher latency on recovery. At-least-once with dedup is simpler and usually sufficient</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Flink checkpoint fails — recovery replays from last checkpoint, causing duplicate processing; Iceberg atomic commits prevent duplicate files but dedup state may re-emit</li>
+            <li>Kafka consumer lag spikes during traffic surge — autoscale Flink parallelism or accept temporary increased latency</li>
+            <li>Schema change in SDK without registry update — events fail validation and flood the DLQ; need backward-compatible schema evolution</li>
+            <li>Compaction job and write job commit simultaneously — Iceberg optimistic concurrency handles it, but one commit retries with slight delay</li>
+            <li>Late events arrive 2 hours after window close — sessionization is incorrect for those users; batch reconciliation job needed</li>
+            <li>S3 throttling at 5,500 PUT/s per prefix — partition Iceberg output across multiple prefixes using hive-style partitioning</li>
+            <li>MaxMind geo-IP database becomes stale — weekly refresh via broadcast update in Flink</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add real-time anomaly detection (bot traffic) in the streaming layer?</li>
+            <li>How do you handle GDPR delete requests for clickstream data across hot/warm/cold tiers?</li>
+            <li>How would you support schema evolution — adding a new event type without redeploying Flink?</li>
+            <li>How do you monitor end-to-end latency from event occurrence to lake queryability?</li>
+            <li>How would you build a real-time funnel analysis on top of this pipeline?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: Kafka topic design with partitioning strategy, Flink processing stages (validate, dedup, enrich, sessionize), Iceberg table design with hourly partitions, the exactly-once semantics story (checkpointing + atomic commits + where gaps remain), and compaction strategy for tiny files.</p>
+          <p>You do not need to implement the full Flink job or design the downstream analytics layer. The interviewer wants to see: honest handling of exactly-once claims, understanding of event-time vs processing-time, watermarking tradeoffs, and practical compaction planning.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../skewed_spark_join/">← Fix a skewed Spark join</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../tiny_files/">Compact a tiny-file disaster →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model slowly changing dimensions at scale | Big Data | Engineering Notes</title>
+  <meta name="description" content="SCD2 is correct and expensive — at warehouse scale you need merge strategy and query patterns that don&#x27;t scan five years of versions by accident.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Model slowly changing dimensions at scale</p>
+      <p class="eyebrow">Big Data · Medium · ~60 min</p>
+      <h1>Model slowly changing dimensions at scale</h1>
+      <p class="problem-deck">SCD2 is correct and expensive — at warehouse scale you need merge strategy and query patterns that don&#x27;t scan five years of versions by accident.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Clarify</strong><p>Dimension size, change frequency, point-in-time requirements, join patterns</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>SCD2 schema design</strong><p>Surrogate key, valid_from/valid_to, is_current flag, hash-diff for change detection</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>MERGE strategy</strong><p>Iceberg MERGE INTO with partition pruning; close old record + insert new in one atomic operation</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Query optimization</strong><p>Partition by is_current for fast current-state queries; sort by customer_id for point-in-time joins</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Current-state view</strong><p>Materialized view or is_current partition for the 90% of queries that only need current data</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Storage management</strong><p>Partition evolution, archive old versions, compression strategy</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Failure modes</strong><p>MERGE conflict, late-arriving changes, version ordering ambiguity</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>SCD Type 2 tracks every historical version of a dimension record. When a customer changes their address, we do not overwrite — we close the old record (set valid_to = now()) and insert a new one (valid_from = now(), valid_to = &#x27;9999-12-31&#x27;). This gives us point-in-time queries: &#x27;What was this customer&#x27;s segment on 2023-03-15?&#x27;</p>
+          <p>At small scale, SCD2 is straightforward. At warehouse scale — 50M customers with an average of 12 versions each = 600M rows — it becomes an operational challenge. Every query that joins to the dimension must filter WHERE valid_from &lt;= event_date AND valid_to &gt; event_date. Without a partition or sort strategy, this means scanning all 600M rows for every join.</p>
+          <p>The merge strategy matters too. Daily CDC delivers 500K changed records. A naive MERGE INTO scans the entire 600M-row table to match on customer_id. With Iceberg or Delta, merge-on-read strategies and partition pruning can reduce this to a much smaller working set. The daily merge should take minutes, not hours.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many dimension records and what is the average version count?</li>
+            <li>How often do changes arrive — daily CDC, real-time, or weekly?</li>
+            <li>Do we need point-in-time queries, or is current-state sufficient?</li>
+            <li>What is the downstream join pattern — fact tables with event dates?</li>
+            <li>Storage budget — can we keep all versions forever?</li>
+            <li>Query latency expectations for dimension lookups?</li>
+            <li>Do hard-deletes in the source need to be tracked?</li>
+            <li>Is the surrogate key strategy deterministic or auto-increment?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — SCD2 table design, daily MERGE logic, query optimization, storage management</li>
+            <li>In scope — Point-in-time join patterns, current-view materialization</li>
+            <li>Out of scope — Full CDC pipeline design, MDM (master data management)</li>
+            <li>Defer — SCD3/SCD6 hybrid approaches, schema-on-read alternatives</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Version tracking</strong>
+              <p>Every change creates a new version with valid_from/valid_to timestamps</p>
+            </div>
+            <div>
+              <strong>Current view</strong>
+              <p>Efficient query for current-state records (valid_to = &#x27;9999-12-31&#x27;)</p>
+            </div>
+            <div>
+              <strong>Point-in-time</strong>
+              <p>Given an event_date, resolve the dimension version active at that time</p>
+            </div>
+            <div>
+              <strong>MERGE</strong>
+              <p>Daily CDC of 500K changes merged in under 10 minutes</p>
+            </div>
+            <div>
+              <strong>Hard deletes</strong>
+              <p>Source deletions tracked with is_deleted flag, not removed from history</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>MERGE time</strong>
+              <p>Daily merge of 500K changes into 600M rows completes in &lt; 10 min</p>
+            </div>
+            <div>
+              <strong>Query time</strong>
+              <p>Point-in-time join for one day of facts (5M rows) completes in &lt; 2 min</p>
+            </div>
+            <div>
+              <strong>Storage</strong>
+              <p>600M rows × 500 bytes = 300GB; Parquet compression → ~75GB</p>
+            </div>
+            <div>
+              <strong>Freshness</strong>
+              <p>Dimension changes reflected within 1 hour of CDC arrival</p>
+            </div>
+            <div>
+              <strong>History retention</strong>
+              <p>All versions kept for 5 years; older versions archived</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Dimension records</strong>
+              <p>50M unique customers × avg 12 versions = 600M rows</p>
+            </div>
+            <div>
+              <strong>Daily CDC volume</strong>
+              <p>500K changed records per day (~1% change rate)</p>
+            </div>
+            <div>
+              <strong>Row size</strong>
+              <p>500 bytes per row (30 columns including valid_from/valid_to)</p>
+            </div>
+            <div>
+              <strong>Total storage</strong>
+              <p>600M × 500B = 300GB raw; ~75GB in Parquet with compression</p>
+            </div>
+            <div>
+              <strong>MERGE scan scope</strong>
+              <p>With partition on is_current: only 50M current rows scanned, not 600M</p>
+            </div>
+            <div>
+              <strong>Point-in-time join</strong>
+              <p>5M fact rows × range filter on 600M dimension → with sort: ~2M rows scanned</p>
+            </div>
+            <div>
+              <strong>Growth rate</strong>
+              <p>500K new versions/day × 365 = 182M new rows/year</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- SCD2 dimension table
+CREATE TABLE dim.customers (
+  sk              BIGINT,                -- surrogate key (Snowflake ID)
+  customer_id     BIGINT,                -- natural key
+  customer_name   STRING,
+  address         STRING,
+  segment         STRING,
+  region          STRING,
+  row_hash        STRING,                -- MD5 of tracked columns
+  valid_from      TIMESTAMP NOT NULL,
+  valid_to        TIMESTAMP NOT NULL,     -- &#x27;9999-12-31&#x27; for current
+  is_current      BOOLEAN NOT NULL,       -- partition/filter key
+  is_deleted      BOOLEAN DEFAULT FALSE   -- soft delete tracking
+) PARTITIONED BY (is_current)
+SORTED BY (customer_id, valid_from);
+
+-- Current-state view (for queries that don&#x27;t need history)
+CREATE VIEW dim.customers_current AS
+SELECT * FROM dim.customers WHERE is_current = TRUE;
+
+-- Point-in-time join pattern
+-- SELECT f.*, d.segment, d.region
+-- FROM fact_orders f
+-- JOIN dim.customers d
+--   ON f.customer_id = d.customer_id
+--  AND f.order_date &gt;= d.valid_from
+--  AND f.order_date &lt; d.valid_to;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The core design has three pillars: efficient MERGE, optimized queries, and storage management.</p>
+          <p>Efficient MERGE: the daily CDC delivers 500K changed records. A naive MERGE scans all 600M rows. With is_current partitioning, the MERGE only needs to match against the 50M current rows (the is_current=TRUE partition). The row_hash column enables change detection: we only close and reopen records where the hash differs. If the CDC sends a record identical to the current version, we skip it. This reduces the actual MERGE work to only genuinely changed records — often 100K out of the 500K CDC records.</p>
+          <p>The MERGE is a two-step atomic operation: (1) UPDATE matching current records with changed hash to set is_current=FALSE and valid_to=now(), (2) INSERT new versions with is_current=TRUE and valid_to=&#x27;9999-12-31&#x27;. Both steps are within the same Iceberg commit, so readers see either the pre-MERGE or post-MERGE state, never a mix.</p>
+          <p>Query optimization: 90% of analytical queries only need the current dimension state. The is_current partition means these queries scan 50M rows instead of 600M — 12× less data. For point-in-time queries, the table is sorted by (customer_id, valid_from) within partitions. This means a range filter on valid_from/valid_to combined with a customer_id equality filter can use min/max pruning to skip most files. A query for 5M fact rows joining on customer_id with a single date scans approximately 2M dimension rows instead of 600M.</p>
+          <p>Storage management: at 500K new versions/day, the table grows by ~250MB/day in Parquet. After 5 years, historical versions total ~3.5TB. For versions older than 2 years, I archive to a separate cold-storage table with lifecycle rules on S3 Glacier. The dim.customers table retains only 2 years of history + all current records. A view unions both for rare full-history queries.</p>
+<figure class="diagram dark">
+  <figcaption>SCD2 MERGE Flow</figcaption>
+  <div class="flow-row">
+    <div class="node">CDC Feed<br><small>500K changes</small></div>
+    <div class="node accent">Hash Compare<br><small>detect real changes</small></div>
+    <div class="node">Close Old<br><small>is_current → FALSE</small></div>
+    <div class="node accent">Insert New<br><small>is_current = TRUE</small></div>
+    <div class="node">Atomic Commit</div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Partition Strategy</figcaption>
+  <div class="compare">
+    <div class="node accent"><span class="label">is_current = TRUE</span><p>50M rows, 12.5GB<br>Used by 90% of queries</p></div>
+    <div class="node"><span class="label">is_current = FALSE</span><p>550M rows, 62.5GB<br>Point-in-time only</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Point-in-Time Join</figcaption>
+  <div class="flow-row">
+    <div class="node">Fact Orders<br><small>order_date = 2024-06-15</small></div>
+    <div class="node accent">Range Join<br><small>valid_from ≤ date &lt; valid_to</small></div>
+    <div class="node">Dim Customers<br><small>sorted by (id, valid_from)</small></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Row hash for change detection: I use MD5(concat_ws(&#x27;|&#x27;, tracked_columns)). This catches any change across all tracked columns in a single comparison. The alternative — comparing each column individually — is more expensive and harder to maintain as columns are added. MD5 has collision risk, but at 50M records, the probability is astronomically low (~10^-24) and a collision means we miss one update, not data corruption.</p>
+          <p>Surrogate key generation: I use a Snowflake ID for the surrogate key (sk). Each version of a customer gets a new sk, while customer_id (the natural key) stays the same. Fact tables should store customer_id (the natural key), not the surrogate key, because the sk changes with every dimension update. This is a departure from classic Kimball, where facts store the sk — but at scale, updating fact tables to point to new surrogate keys is impractical.</p>
+          <p>Late-arriving dimension changes: if a CDC event for a change that happened at 14:00 arrives at 22:00, we need to insert a version with valid_from = 14:00, not 22:00. This means splitting the current record: close the current version at 14:00, insert the changed version from 14:00 to 22:00, and insert another current version from 22:00. This three-way operation is more complex and I only implement it if business requirements demand accurate historical timestamps.</p>
+          <p>Version explosion: some entities change frequently — a product with daily price changes accumulates 365 versions/year. After 5 years: 1,825 versions per product. With 1M products, that is 1.8B rows in the dimension table. Mitigations: (1) micro-batch CDC to catch intraday changes and collapse them into a single daily version, (2) only track columns that matter for analytics (exclude frequently-changing metadata), (3) use SCD4 (separate history table) for columns that change constantly.</p>
+          <p>Merge-on-read vs copy-on-write: Iceberg supports both. Copy-on-write rewrites affected files during MERGE — expensive for a 500K-record MERGE. Merge-on-read writes delta files that are reconciled at query time — cheaper MERGE but slower queries until compaction runs. For a daily MERGE cadence, I prefer copy-on-write because the query latency impact of merge-on-read accumulates throughout the day, and compaction adds operational complexity.</p>
+        </section>
+        <section class="problem-section">
+          <h2>SCD2 merge with hash-based change detection</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from pyspark.sql import SparkSession, functions as F
+
+
+def scd2_merge(spark: SparkSession, target_table: str, cdc_table: str, dt: str,
+               natural_key: str = &#x27;customer_id&#x27;,
+               tracked_cols: list = None):
+    &quot;&quot;&quot;
+    SCD Type 2 merge with hash-based change detection.
+    - Compares MD5 hash of tracked columns to detect actual changes.
+    - Closes old versions (sets valid_to, is_current=False).
+    - Inserts new versions with valid_from=now, is_current=True.
+    - Avoids unnecessary writes when data hasn&#x27;t changed.
+    &quot;&quot;&quot;
+    cdc = spark.table(cdc_table).filter(F.col(&#x27;dt&#x27;) == dt)
+    current = spark.table(target_table).filter(F.col(&#x27;is_current&#x27;) == True)
+
+    if tracked_cols is None:
+        tracked_cols = [&#x27;customer_name&#x27;, &#x27;address&#x27;, &#x27;segment&#x27;, &#x27;region&#x27;]
+
+    # Hash tracked columns for efficient change detection
+    hash_expr = F.md5(F.concat_ws(&#x27;|&#x27;, *[F.col(c) for c in tracked_cols]))
+    cdc = cdc.withColumn(&#x27;_new_hash&#x27;, hash_expr)
+    current = current.withColumn(&#x27;_cur_hash&#x27;, hash_expr)
+
+    # Find rows where the hash differs (actual changes only)
+    changed = (
+        cdc.alias(&#x27;s&#x27;)
+        .join(current.alias(&#x27;t&#x27;), natural_key, &#x27;inner&#x27;)
+        .filter(F.col(&#x27;s._new_hash&#x27;) != F.col(&#x27;t._cur_hash&#x27;))
+        .select(&#x27;s.*&#x27;)
+    )
+
+    now = F.current_timestamp()
+
+    # Close old versions: set valid_to and mark as not current
+    closed = (
+        current.join(changed.select(natural_key), natural_key, &#x27;inner&#x27;)
+        .withColumn(&#x27;valid_to&#x27;, now)
+        .withColumn(&#x27;is_current&#x27;, F.lit(False))
+    )
+
+    # New versions: open-ended validity, marked as current
+    new_versions = (
+        changed
+        .withColumn(&#x27;valid_from&#x27;, now)
+        .withColumn(&#x27;valid_to&#x27;, F.lit(&#x27;9999-12-31&#x27;).cast(&#x27;timestamp&#x27;))
+        .withColumn(&#x27;is_current&#x27;, F.lit(True))
+        .withColumn(&#x27;row_hash&#x27;, F.col(&#x27;_new_hash&#x27;))
+    )
+
+    return closed, new_versions</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// SCD Type 2 merge with hash-based change detection using Polars.
+// Conceptual implementation showing the merge logic pattern.
+
+use polars::prelude::*;
+use md5;
+use chrono::Utc;
+
+/// SCD Type 2 merge result: rows to close and new versions to insert.
+pub struct SCD2Result {
+    pub closed_versions: DataFrame,
+    pub new_versions: DataFrame,
+}
+
+/// Perform SCD2 merge with hash-based change detection.
+/// - Compares MD5 hash of tracked columns to detect actual changes.
+/// - Returns closed rows (to update) and new versions (to insert).
+pub fn scd2_merge(
+    current: &amp;DataFrame,
+    cdc: &amp;DataFrame,
+    natural_key: &amp;str,
+    tracked_cols: &amp;[&amp;str],
+) -&gt; Result&lt;SCD2Result, PolarsError&gt; {
+    // Compute hash for tracked columns in both DataFrames
+    let cdc_hashed = add_row_hash(cdc, tracked_cols, &quot;_new_hash&quot;)?;
+    let current_hashed = add_row_hash(current, tracked_cols, &quot;_cur_hash&quot;)?;
+
+    // Join on natural key to find matching records
+    let joined = cdc_hashed.join(
+        &amp;current_hashed,
+        &amp;[natural_key],
+        &amp;[natural_key],
+        JoinArgs::new(JoinType::Inner),
+    )?;
+
+    // Filter to rows where hash differs (actual changes only)
+    let changed_mask = joined.column(&quot;_new_hash&quot;)?
+        .not_equal(joined.column(&quot;_cur_hash&quot;)?)?;
+    let changed_keys = joined.filter(&amp;changed_mask)?
+        .select([natural_key])?;
+
+    let now = Utc::now().naive_utc();
+
+    // Close old versions: set valid_to and is_current=false
+    let closed = current_hashed.join(
+        &amp;changed_keys,
+        &amp;[natural_key],
+        &amp;[natural_key],
+        JoinArgs::new(JoinType::Inner),
+    )?
+    .lazy()
+    .with_columns([
+        lit(now).alias(&quot;valid_to&quot;),
+        lit(false).alias(&quot;is_current&quot;),
+    ])
+    .collect()?;
+
+    // New versions: valid_from=now, valid_to=9999-12-31, is_current=true
+    let far_future = chrono::NaiveDate::from_ymd_opt(9999, 12, 31)
+        .unwrap().and_hms_opt(0, 0, 0).unwrap();
+
+    let new_versions = cdc_hashed.join(
+        &amp;changed_keys,
+        &amp;[natural_key],
+        &amp;[natural_key],
+        JoinArgs::new(JoinType::Inner),
+    )?
+    .lazy()
+    .with_columns([
+        lit(now).alias(&quot;valid_from&quot;),
+        lit(far_future).alias(&quot;valid_to&quot;),
+        lit(true).alias(&quot;is_current&quot;),
+        col(&quot;_new_hash&quot;).alias(&quot;row_hash&quot;),
+    ])
+    .collect()?;
+
+    Ok(SCD2Result { closed_versions: closed, new_versions })
+}
+
+/// Compute MD5 hash of concatenated tracked columns and add as a new column.
+fn add_row_hash(
+    df: &amp;DataFrame,
+    tracked_cols: &amp;[&amp;str],
+    hash_col_name: &amp;str,
+) -&gt; Result&lt;DataFrame, PolarsError&gt; {
+    let concatenated: Vec&lt;String&gt; = (0..df.height()).map(|i| {
+        tracked_cols.iter()
+            .map(|&amp;col_name| {
+                df.column(col_name)
+                    .ok()
+                    .and_then(|s| s.get(i).ok())
+                    .map(|v| format!(&quot;{}&quot;, v))
+                    .unwrap_or_default()
+            })
+            .collect::&lt;Vec&lt;_&gt;&gt;()
+            .join(&quot;|&quot;)
+    }).collect();
+
+    let hashes: Vec&lt;String&gt; = concatenated.iter()
+        .map(|s| format!(&quot;{:x}&quot;, md5::compute(s.as_bytes())))
+        .collect();
+
+    let hash_series = Series::new(hash_col_name, hashes);
+    let mut result = df.clone();
+    result.with_column(hash_series)?;
+    Ok(result)
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;CommonCrypto/CommonDigest.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+
+// SCD Type 2 merge with hash-based change detection.
+// Conceptual implementation for orchestrating the merge logic.
+
+struct DimensionRow {
+    std::string natural_key;
+    std::string customer_name;
+    std::string address;
+    std::string segment;
+    std::string region;
+    std::string valid_from;
+    std::string valid_to;
+    bool is_current;
+    std::string row_hash;
+};
+
+@interface SCD2Merger : NSObject
+
+/// Compute MD5 hash of tracked columns for change detection.
++ (NSString *)computeRowHash:(NSDictionary *)row trackedCols:(NSArray&lt;NSString *&gt; *)cols;
+
+/// Perform SCD2 merge: detect changes, close old versions, create new versions.
++ (NSDictionary *)mergeCurrentRows:(NSArray&lt;NSDictionary *&gt; *)currentRows
+                       withCDCRows:(NSArray&lt;NSDictionary *&gt; *)cdcRows
+                        naturalKey:(NSString *)naturalKey
+                       trackedCols:(NSArray&lt;NSString *&gt; *)trackedCols;
+@end
+
+@implementation SCD2Merger
+
+/// MD5 hash of pipe-concatenated tracked column values.
++ (NSString *)computeRowHash:(NSDictionary *)row trackedCols:(NSArray&lt;NSString *&gt; *)cols {
+    NSMutableString *concat = [NSMutableString string];
+    for (NSUInteger i = 0; i &lt; cols.count; i++) {
+        if (i &gt; 0) [concat appendString:@&quot;|&quot;];
+        [concat appendString:row[cols[i]] ?: @&quot;&quot;];
+    }
+
+    unsigned char digest[CC_MD5_DIGEST_LENGTH];
+    CC_MD5([concat UTF8String],
+           (CC_LONG)[concat lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
+           digest);
+
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH * 2];
+    for (int i = 0; i &lt; CC_MD5_DIGEST_LENGTH; i++) {
+        [hex appendFormat:@&quot;%02x&quot;, digest[i]];
+    }
+    return hex;
+}
+
+/// Perform SCD2 merge and return closed rows + new versions.
++ (NSDictionary *)mergeCurrentRows:(NSArray&lt;NSDictionary *&gt; *)currentRows
+                       withCDCRows:(NSArray&lt;NSDictionary *&gt; *)cdcRows
+                        naturalKey:(NSString *)naturalKey
+                       trackedCols:(NSArray&lt;NSString *&gt; *)trackedCols {
+    // Build lookup: natural_key -&gt; current row hash
+    NSMutableDictionary *currentHashes = [NSMutableDictionary dictionary];
+    for (NSDictionary *row in currentRows) {
+        NSString *key = row[naturalKey];
+        NSString *hash = [self computeRowHash:row trackedCols:trackedCols];
+        currentHashes[key] = @{@&quot;hash&quot;: hash, @&quot;row&quot;: row};
+    }
+
+    NSMutableArray *closedRows = [NSMutableArray array];
+    NSMutableArray *newVersions = [NSMutableArray array];
+    NSString *now = [self currentTimestamp];
+
+    for (NSDictionary *cdcRow in cdcRows) {
+        NSString *key = cdcRow[naturalKey];
+        NSString *newHash = [self computeRowHash:cdcRow trackedCols:trackedCols];
+
+        NSDictionary *existing = currentHashes[key];
+        if (!existing) continue;  // new inserts handled separately
+
+        NSString *curHash = existing[@&quot;hash&quot;];
+        if ([newHash isEqualToString:curHash]) {
+            continue;  // no change, skip
+        }
+
+        // Close old version: set valid_to and is_current=false
+        NSMutableDictionary *closed = [existing[@&quot;row&quot;] mutableCopy];
+        closed[@&quot;valid_to&quot;] = now;
+        closed[@&quot;is_current&quot;] = @NO;
+        [closedRows addObject:closed];
+
+        // Create new version: valid_from=now, is_current=true
+        NSMutableDictionary *newVersion = [cdcRow mutableCopy];
+        newVersion[@&quot;valid_from&quot;] = now;
+        newVersion[@&quot;valid_to&quot;] = @&quot;9999-12-31T00:00:00Z&quot;;
+        newVersion[@&quot;is_current&quot;] = @YES;
+        newVersion[@&quot;row_hash&quot;] = newHash;
+        [newVersions addObject:newVersion];
+    }
+
+    return @{@&quot;closed&quot;: closedRows, @&quot;new_versions&quot;: newVersions};
+}
+
++ (NSString *)currentTimestamp {
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @&quot;yyyy-MM-dd&#x27;T&#x27;HH:mm:ss&#x27;Z&#x27;&quot;;
+    fmt.timeZone = [NSTimeZone timeZoneWithName:@&quot;UTC&quot;];
+    return [fmt stringFromDate:[NSDate date]];
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">CDC</span><p>500K changed customer records land in staging.customers_cdc dt=2024-06-15</p></div>
+    <div class="seq-row"><span class="actor">Hash Check</span><p>Compare MD5 hashes: 100K records genuinely changed, 400K unchanged → skip</p></div>
+    <div class="seq-row"><span class="actor">MERGE Step 1</span><p>UPDATE 100K current rows: is_current=FALSE, valid_to=2024-06-15T02:00:00</p></div>
+    <div class="seq-row"><span class="actor">MERGE Step 2</span><p>INSERT 100K new versions: is_current=TRUE, valid_from=2024-06-15T02:00:00</p></div>
+    <div class="seq-row"><span class="actor">Iceberg</span><p>Atomic commit: 200K row changes in one snapshot → table version N+1</p></div>
+    <div class="seq-row"><span class="actor">Verify</span><p>Current row count: 50M ✓. Total versions: 600.1M. MERGE time: 7 min ✓</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>SCD2 vs SCD1 (overwrite)</strong>
+              <p>SCD2 preserves history for point-in-time queries but costs 12× storage. SCD1 is simpler and cheaper if history is not needed</p>
+            </div>
+            <div>
+              <strong>is_current partition vs full scan</strong>
+              <p>Partitioning by is_current gives 12× speedup for current-state queries but adds partition management and MERGE complexity</p>
+            </div>
+            <div>
+              <strong>Row hash vs column-by-column comparison</strong>
+              <p>Hash is faster and simpler as columns grow. Column comparison allows identifying which specific column changed</p>
+            </div>
+            <div>
+              <strong>Natural key in facts vs surrogate key</strong>
+              <p>Natural key avoids updating facts on dimension changes. Surrogate key follows Kimball but is impractical at scale</p>
+            </div>
+            <div>
+              <strong>Copy-on-write vs merge-on-read</strong>
+              <p>COW has expensive MERGE but fast queries. MOR has cheap MERGE but slower queries until compaction</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>MERGE scans all 600M rows because is_current partition filter was missing from the ON clause — always include it</li>
+            <li>CDC delivers the same record twice — row_hash match means no change; second delivery is a no-op (correct behavior)</li>
+            <li>Late-arriving change: CDC event timestamped 14:00 arrives at 22:00 — current version&#x27;s valid_from is wrong; need temporal insert logic</li>
+            <li>Version explosion: one customer changes address 50 times in a day — collapse intraday changes before MERGE</li>
+            <li>Point-in-time join misses events exactly at valid_from boundary — use &gt;= for valid_from and &lt; for valid_to (half-open interval)</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you handle SCD2 for a table with 1B base records?</li>
+            <li>How would you implement bi-temporal modeling (valid time + transaction time)?</li>
+            <li>What if the source does not provide timestamps — how do you determine valid_from?</li>
+            <li>How would you optimize point-in-time joins for very large fact tables (10B rows)?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: SCD2 schema design with valid_from/valid_to and is_current, the MERGE strategy with hash-based change detection, partition-by-is_current for query optimization, point-in-time join patterns, and storage growth management. Show the MERGE SQL and explain why it needs to be atomic.</p>
+          <p>You do not need to design the full CDC pipeline or handle bi-temporal modeling. The interviewer wants to see: understanding of why SCD2 is expensive at scale, practical optimization through partitioning and sorting, and awareness of the query-side implications (range joins, current views).</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../data_quality_drops/">← Detect silent data quality drops</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../cloud_bill_control/">Cost-control an overgrown EMR / Databricks bill →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

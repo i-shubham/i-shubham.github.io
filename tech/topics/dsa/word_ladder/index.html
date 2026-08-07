@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word ladder | DSA | Engineering Notes</title>
+  <meta name="description" content="Shortest word transformation is BFS — the optimization talk is about neighbor generation and bidirectional search.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Word ladder</p>
+      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <h1>Word ladder</h1>
+      <p class="problem-deck">Shortest word transformation is BFS — the optimization talk is about neighbor generation and bidirectional search.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Word length, dictionary size, return type.</p></div></div>
+            <div class="stack-step"><strong>5–15 min</strong><div><strong>Model as graph + BFS</strong><p>Implicit graph, why BFS gives shortest path.</p></div></div>
+            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code BFS solution</strong><p>Hash set for O(1) lookup, 26-replacement neighbor generation.</p></div></div>
+            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through example</strong><p>&#x27;hit&#x27; → &#x27;cog&#x27; with dictionary, level by level.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Bidirectional BFS</strong><p>Search from both ends, meet in the middle.</p></div></div>
+            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>Word Ladder II (all shortest paths), wildcard patterns.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by saying this is shortest-path on an implicit graph where nodes are words and edges connect words that differ by exactly one character. BFS from the start word gives the shortest transformation sequence because all edges have weight 1.</p>
+          <p>The naive approach generates neighbors by checking every word in the dictionary — O(n × L) per BFS step where n is dictionary size and L is word length. That&#x27;s too slow when n is large. The optimization is to generate neighbors by trying all 26 replacements at each position — O(26 × L) per word, independent of n. For a 5-letter word that&#x27;s 130 candidates per step, checked against a hash set in O(1).</p>
+          <p>For very large dictionaries, I&#x27;d mention bidirectional BFS: search from both ends simultaneously and stop when the frontiers meet. This reduces the search space from O(b^d) to O(b^(d/2)) where b is branching factor and d is distance.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>All words same length?</li>
+            <li>Are start and end words guaranteed to be in the dictionary?</li>
+            <li>Case-sensitive? Lowercase only?</li>
+            <li>Return the length of the path or the actual sequence of words?</li>
+            <li>Can the dictionary have duplicates?</li>
+            <li>What if no transformation sequence exists — return 0 or -1?</li>
+            <li>How large is the dictionary — thousands or millions?</li>
+            <li>Do we need all shortest paths or just one?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: shortest transformation length using BFS with O(26L) neighbor generation.</li>
+            <li>Out: all shortest paths (Word Ladder II) unless follow-up; A* heuristics.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <ul class="ask-list">
+            <li>Input: beginWord, endWord, wordList (list of strings).</li>
+            <li>Output: length of shortest transformation sequence (including start and end).</li>
+            <li>Each step changes exactly one letter. Every intermediate word must be in wordList.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Time</strong>
+              <p>O(n × L × 26) where n = |wordList|, L = word length. Hash set lookup is O(L).</p>
+            </div>
+            <div>
+              <strong>Space</strong>
+              <p>O(n × L) for the word set + BFS queue.</p>
+            </div>
+            <div>
+              <strong>Edge case</strong>
+              <p>endWord not in wordList → return 0 immediately.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>n limit</strong>
+              <p>up to 5×10^3 words in LeetCode constraints</p>
+            </div>
+            <div>
+              <strong>L limit</strong>
+              <p>word length up to 10 characters</p>
+            </div>
+            <div>
+              <strong>BFS nodes</strong>
+              <p>worst case visits all n words → 5×10^3 pops</p>
+            </div>
+            <div>
+              <strong>Neighbor gen</strong>
+              <p>26 × L = 260 candidates per word, each checked in O(L) → ~1.3×10^6 hash ops total</p>
+            </div>
+            <div>
+              <strong>Bidirectional</strong>
+              <p>reduces frontier to O(b^(d/2)) — meaningful when d &gt; 6 and b &gt; 10</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>def ladderLength(beginWord: str, endWord: str, wordList: List[str]) -&gt; int:</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>word_set: Set[str]                  # dictionary as hash set for O(1) lookup
+queue: Deque[Tuple[str, int]]        # (current_word, depth)
+# visited is implicit: words removed from word_set after enqueue</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Convert wordList to a set for O(1) lookup. If endWord is not in the set, return 0.</p>
+          <p>BFS: queue starts with (beginWord, 1). For each word, generate neighbors by replacing each character position with &#x27;a&#x27; through &#x27;z&#x27;. If the new word is in the word set, add it to the queue and remove it from the set (this acts as &#x27;visited&#x27; — no need for a separate visited set). If the new word equals endWord, return current length + 1.</p>
+          <p>Removing from the set instead of maintaining a separate visited set is a clean trick — it prevents revisiting and saves space.</p>
+          <p>Bidirectional BFS: maintain two frontiers (sets), one from start and one from end. Each step, expand the smaller frontier. If a generated neighbor is in the other frontier, the paths have met — return the sum of depths. This is significantly faster when the shortest path is long and the branching factor is high.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">hit</span><b>→</b><span class="node">hot</span><b>→</b><span class="node">dot/lot</span><b>→</b><span class="node">dog/log</span><b>→</b><span class="node accent">cog ✓</span></div><figcaption>BFS level-by-level: hit→hot→dot→dog→cog = 5 words (4 transformations)</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Forward frontier</span><b>⇄</b><span class="node accent">Meet in middle</span><b>⇄</b><span class="node">Backward frontier</span></div><figcaption>Bidirectional BFS: expand smaller frontier each step — O(b^(d/2)) vs O(b^d)</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>beginWord=&#x27;hit&#x27;, endWord=&#x27;cog&#x27;, wordList=[&#x27;hot&#x27;,&#x27;dot&#x27;,&#x27;dog&#x27;,&#x27;lot&#x27;,&#x27;log&#x27;,&#x27;cog&#x27;].</p>
+          <p>word_set = {&#x27;hot&#x27;,&#x27;dot&#x27;,&#x27;dog&#x27;,&#x27;lot&#x27;,&#x27;log&#x27;,&#x27;cog&#x27;}. endWord &#x27;cog&#x27; is in set.</p>
+          <p>BFS queue: [(&#x27;hit&#x27;, 1)].</p>
+          <p>Process &#x27;hit&#x27; (depth 1): try all positions.
+  pos 0: ait, bit, ..., hot ✓ (in set). Add (&#x27;hot&#x27;, 2). Remove &#x27;hot&#x27; from set.
+  pos 1: hat, hbt, ..., none in set besides &#x27;hot&#x27; already removed.
+  pos 2: hia, hib, ..., none in set.
+Queue: [(&#x27;hot&#x27;, 2)]. Set: {&#x27;dot&#x27;,&#x27;dog&#x27;,&#x27;lot&#x27;,&#x27;log&#x27;,&#x27;cog&#x27;}.</p>
+          <p>Process &#x27;hot&#x27; (depth 2):
+  pos 0: aot, bot, ..., dot ✓, ..., lot ✓. Add both at depth 3. Remove from set.
+  pos 1: hat, hbt, ..., none new.
+  pos 2: hoa, hob, ..., none.
+Queue: [(&#x27;dot&#x27;,3), (&#x27;lot&#x27;,3)]. Set: {&#x27;dog&#x27;,&#x27;log&#x27;,&#x27;cog&#x27;}.</p>
+          <p>Process &#x27;dot&#x27; (depth 3): pos 2: doa..dog ✓. Add (&#x27;dog&#x27;,4). Remove.
+Process &#x27;lot&#x27; (depth 3): pos 2: loa..log ✓. Add (&#x27;log&#x27;,4). Remove.
+Queue: [(&#x27;dog&#x27;,4),(&#x27;log&#x27;,4)]. Set: {&#x27;cog&#x27;}.</p>
+          <p>Process &#x27;dog&#x27; (depth 4): pos 0: aog, bog, cog ✓. cog == endWord → return 4+1 = 5.</p>
+          <p>Shortest path: hit → hot → dot → dog → cog (5 words, 4 transformations).</p>
+        </section>
+        <section class="problem-section">
+          <h2>BFS word ladder — unidirectional + bidirectional</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from collections import deque
+from typing import List
+
+
+def ladder_length(begin_word: str, end_word: str, word_list: List[str]) -&gt; int:
+    &quot;&quot;&quot;BFS from begin_word — try all single-char mutations at each level.
+    Returns the length of the shortest transformation sequence, or 0.&quot;&quot;&quot;
+    word_set = set(word_list)
+    if end_word not in word_set:
+        return 0
+
+    queue = deque([(begin_word, 1)])
+    while queue:
+        word, depth = queue.popleft()
+        for i in range(len(word)):
+            for c in &quot;abcdefghijklmnopqrstuvwxyz&quot;:
+                candidate = word[:i] + c + word[i + 1:]
+                if candidate == end_word:
+                    return depth + 1
+                if candidate in word_set:
+                    word_set.discard(candidate)  # mark visited
+                    queue.append((candidate, depth + 1))
+    return 0
+
+
+def ladder_length_bidir(begin_word: str, end_word: str, word_list: List[str]) -&gt; int:
+    &quot;&quot;&quot;Bidirectional BFS: expand from both ends, always pick the smaller frontier.
+    Meets in the middle for O(sqrt) speedup on branchy graphs.&quot;&quot;&quot;
+    word_set = set(word_list)
+    if end_word not in word_set:
+        return 0
+
+    front, back = {begin_word}, {end_word}
+    word_set.discard(begin_word)
+    depth = 1
+    while front:
+        # Always expand the smaller frontier for efficiency
+        if len(front) &gt; len(back):
+            front, back = back, front
+        nxt = set()
+        for word in front:
+            for i in range(len(word)):
+                for c in &quot;abcdefghijklmnopqrstuvwxyz&quot;:
+                    candidate = word[:i] + c + word[i + 1:]
+                    if candidate in back:
+                        return depth + 1  # frontiers met
+                    if candidate in word_set:
+                        word_set.discard(candidate)
+                        nxt.add(candidate)
+        front = nxt
+        depth += 1
+    return 0</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashSet, VecDeque};
+
+/// BFS word ladder: try all single-char mutations at each level.
+fn ladder_length(begin: &amp;str, end: &amp;str, word_list: &amp;[&amp;str]) -&gt; u32 {
+    let mut word_set: HashSet&lt;String&gt; = word_list.iter().map(|s| s.to_string()).collect();
+    if !word_set.contains(end) { return 0; }
+
+    let mut queue: VecDeque&lt;(String, u32)&gt; = VecDeque::new();
+    queue.push_back((begin.to_string(), 1));
+    while let Some((word, depth)) = queue.pop_front() {
+        let bytes = word.as_bytes().to_vec();
+        for i in 0..bytes.len() {
+            for c in b&#x27;a&#x27;..=b&#x27;z&#x27; {
+                let mut candidate = bytes.clone();
+                candidate[i] = c;
+                let cand = String::from_utf8(candidate).unwrap();
+                if cand == end { return depth + 1; }
+                if word_set.remove(&amp;cand) {
+                    queue.push_back((cand, depth + 1));
+                }
+            }
+        }
+    }
+    0
+}
+
+/// Bidirectional BFS: expand smaller frontier, meet in the middle.
+fn ladder_length_bidir(begin: &amp;str, end: &amp;str, word_list: &amp;[&amp;str]) -&gt; u32 {
+    let mut word_set: HashSet&lt;String&gt; = word_list.iter().map(|s| s.to_string()).collect();
+    if !word_set.contains(end) { return 0; }
+
+    let mut front: HashSet&lt;String&gt; = [begin.to_string()].into();
+    let mut back: HashSet&lt;String&gt; = [end.to_string()].into();
+    word_set.remove(begin);
+    let mut depth = 1u32;
+    while !front.is_empty() {
+        // Always expand the smaller frontier
+        if front.len() &gt; back.len() { std::mem::swap(&amp;mut front, &amp;mut back); }
+        let mut nxt = HashSet::new();
+        for word in &amp;front {
+            let bytes = word.as_bytes().to_vec();
+            for i in 0..bytes.len() {
+                for c in b&#x27;a&#x27;..=b&#x27;z&#x27; {
+                    let mut cand = bytes.clone();
+                    cand[i] = c;
+                    let s = String::from_utf8(cand).unwrap();
+                    if back.contains(&amp;s) { return depth + 1; }
+                    if word_set.remove(&amp;s) { nxt.insert(s); }
+                }
+            }
+        }
+        front = nxt;
+        depth += 1;
+    }
+    0
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;unordered_set&gt;
+#include &lt;queue&gt;
+
+// BFS word ladder: try all single-char mutations at each level
+static int ladderLength(const std::string &amp;begin, const std::string &amp;end,
+                        const std::vector&lt;std::string&gt; &amp;wordList) {
+    std::unordered_set&lt;std::string&gt; wordSet(wordList.begin(), wordList.end());
+    if (!wordSet.count(end)) return 0;
+
+    std::queue&lt;std::pair&lt;std::string, int&gt;&gt; q;
+    q.push({begin, 1});
+    while (!q.empty()) {
+        auto [word, depth] = q.front(); q.pop();
+        for (int i = 0; i &lt; (int)word.size(); i++) {
+            std::string cand = word;
+            for (char c = &#x27;a&#x27;; c &lt;= &#x27;z&#x27;; c++) {
+                cand[i] = c;
+                if (cand == end) return depth + 1;
+                if (wordSet.erase(cand))       // erase returns 1 if found
+                    q.push({cand, depth + 1});
+            }
+            cand[i] = word[i]; // restore
+        }
+    }
+    return 0;
+}
+
+// Bidirectional BFS: expand smaller frontier, meet in the middle
+static int ladderLengthBidir(const std::string &amp;begin, const std::string &amp;end,
+                             const std::vector&lt;std::string&gt; &amp;wordList) {
+    std::unordered_set&lt;std::string&gt; wordSet(wordList.begin(), wordList.end());
+    if (!wordSet.count(end)) return 0;
+
+    std::unordered_set&lt;std::string&gt; front = {begin}, back = {end};
+    wordSet.erase(begin);
+    int depth = 1;
+    while (!front.empty()) {
+        if (front.size() &gt; back.size()) std::swap(front, back);
+        std::unordered_set&lt;std::string&gt; nxt;
+        for (auto &amp;word : front) {
+            for (int i = 0; i &lt; (int)word.size(); i++) {
+                std::string cand = word;
+                for (char c = &#x27;a&#x27;; c &lt;= &#x27;z&#x27;; c++) {
+                    cand[i] = c;
+                    if (back.count(cand)) return depth + 1; // frontiers met
+                    if (wordSet.erase(cand)) nxt.insert(cand);
+                }
+            }
+        }
+        front = nxt;
+        depth++;
+    }
+    return 0;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Level 1</span><p>hit → generate neighbors → hot found in set</p></div><div class="seq-row"><span class="actor">Level 2</span><p>hot → dot, lot found in set</p></div><div class="seq-row"><span class="actor">Level 3</span><p>dot → dog; lot → log</p></div><div class="seq-row"><span class="actor">Level 4</span><p>dog → cog == endWord → return 5</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>26L vs dictionary scan</strong>
+              <p>26L is better when dictionary is large; dictionary scan wins for very long words with tiny dictionaries.</p>
+            </div>
+            <div>
+              <strong>Set removal vs visited set</strong>
+              <p>Removing from word_set doubles as visited marking — saves space.</p>
+            </div>
+            <div>
+              <strong>Bidirectional BFS</strong>
+              <p>Roughly square-root speedup but more complex code; worth it for long shortest paths.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Not checking if endWord is in the dictionary — infinite BFS.</li>
+            <li>Generating the same neighbor twice from different parents (visited check prevents it).</li>
+            <li>String concatenation cost — O(L) per candidate, often overlooked in complexity analysis.</li>
+            <li>Using DFS instead of BFS — finds a path but not the shortest.</li>
+            <li>Not removing used words from set — BFS revisits and TLEs on large inputs.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Word Ladder II — find all shortest paths; BFS for distances, then DFS backtrack.</li>
+            <li>Wildcard patterns (h_t matches hat, hit, hot) — precompute pattern → word mapping.</li>
+            <li>Minimum genetic mutation — same BFS, alphabet is {A, C, G, T}, length is 8.</li>
+            <li>Open the lock — BFS on 4-digit combinations, each digit ±1 as neighbor generation.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Model the problem as implicit graph BFS, explain why BFS guarantees shortest path, implement the 26-replacement neighbor generation with set-as-visited, and trace through the classic hit→cog example level by level. Mentioning bidirectional BFS with the square-root argument shows optimization depth.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../median_stream/">← Find median from data stream</a>
+          <a class="problem-nav-link back" href="../">All DSA problems</a>
+          <a class="problem-nav-link next" href="../trapping_rain_water/">Trapping rain water →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

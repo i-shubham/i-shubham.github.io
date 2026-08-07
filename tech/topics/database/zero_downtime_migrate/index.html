@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Migrate a live table with zero downtime | Database | Engineering Notes</title>
+  <meta name="description" content="Locking ALTER on a 200M-row table is an outage wearing a maintenance window badge.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Database</a> / Migrate a live table with zero downtime</p>
+      <p class="eyebrow">Database · Hard · ~60 min</p>
+      <h1>Migrate a live table with zero downtime</h1>
+      <p class="problem-deck">Locking ALTER on a 200M-row table is an outage wearing a maintenance window badge.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Understand the migration</strong><p>What DDL change, table size, traffic.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Expand/contract pattern</strong><p>Add new column nullable, backfill, make required, drop old.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Dual-write strategy</strong><p>Application writes to old and new columns simultaneously.</p></div></div>
+            <div class="stack-step"><strong>25–40</strong><div><strong>Backfill execution</strong><p>Batched updates, throttling, progress tracking.</p></div></div>
+            <div class="stack-step"><strong>40–50</strong><div><strong>Verification and cutover</strong><p>Data validation, read switch, old column cleanup.</p></div></div>
+            <div class="stack-step"><strong>50–60</strong><div><strong>Edge cases and tools</strong><p>pg_repack, gh-ost, pt-online-schema-change.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I learned this lesson the hard way: ALTER TABLE orders ADD COLUMN total_usd NUMERIC NOT NULL DEFAULT 0 on a 200M-row table took an ACCESS EXCLUSIVE lock for 45 minutes while it rewrote every row. The entire application was down. Since then, I use the expand/contract pattern for every non-trivial migration.</p>
+          <p>The pattern has four phases. Expand: add the new column as nullable with no default (instant in Postgres 11+). Dual-write: update the app to write to both old and new columns. Backfill: batch-update existing rows to populate the new column. Contract: make the new column NOT NULL, drop the old column or code path.</p>
+          <p>Each phase is a separate deployment. If anything goes wrong, you roll back to the previous phase. The key insight is that at no point does the database hold a long lock, and at no point is the application in an inconsistent state.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What is the specific DDL change — add column, rename, change type, split table?</li>
+            <li>How many rows in the table?</li>
+            <li>What is the current write throughput?</li>
+            <li>Is this Postgres, MySQL, or another engine?</li>
+            <li>Can we use online DDL tools (gh-ost, pt-osc, pg_repack)?</li>
+            <li>Is there a read replica that needs to stay in sync?</li>
+            <li>What is the acceptable backfill duration (hours, days)?</li>
+            <li>Are there triggers or foreign keys on this table?</li>
+            <li>What is the rollback plan if the migration fails mid-backfill?</li>
+            <li>Do we have a staging environment with production-scale data?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: expand/contract, dual writes, backfill, verification, cutover.</li>
+            <li>Out: full pg_repack / gh-ost internals.</li>
+            <li>Out: data model redesign (separate problem).</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Add column</strong>
+              <p>Add a new column to a 200M-row table without downtime.</p>
+            </div>
+            <div>
+              <strong>Backfill</strong>
+              <p>Populate the new column for all existing rows.</p>
+            </div>
+            <div>
+              <strong>Cutover</strong>
+              <p>Switch reads and writes to the new column.</p>
+            </div>
+            <div>
+              <strong>Cleanup</strong>
+              <p>Drop the old column or code path after verification.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Zero downtime</strong>
+              <p>No query should fail or block during the migration.</p>
+            </div>
+            <div>
+              <strong>Write throughput</strong>
+              <p>Backfill should not reduce OLTP write throughput by more than 10%.</p>
+            </div>
+            <div>
+              <strong>Data correctness</strong>
+              <p>100% of rows must have correct values in the new column post-migration.</p>
+            </div>
+            <div>
+              <strong>Rollback</strong>
+              <p>Each phase is independently reversible.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Table size</strong>
+              <p>200M rows × 500 bytes = 100 GB.</p>
+            </div>
+            <div>
+              <strong>Write throughput</strong>
+              <p>2,000 writes/s on the table during peak.</p>
+            </div>
+            <div>
+              <strong>Backfill rate</strong>
+              <p>1,000 rows/batch × 50 batches/s = 50,000 rows/s.</p>
+            </div>
+            <div>
+              <strong>Backfill duration</strong>
+              <p>200M rows ÷ 50K rows/s = 4,000 seconds ≈ 67 minutes.</p>
+            </div>
+            <div>
+              <strong>WAL amplification</strong>
+              <p>Backfill generates ~100 GB of WAL; replicas must keep up.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Phase 1: Expand (instant, no lock)
+ALTER TABLE orders ADD COLUMN total_usd NUMERIC;
+
+-- Phase 2: Dual-write (application code)
+-- All INSERTs and UPDATEs now write to both total_cents and total_usd
+
+-- Phase 3: Backfill (batched)
+UPDATE orders SET total_usd = total_cents / 100.0
+WHERE id BETWEEN :start AND :end AND total_usd IS NULL;
+
+-- Phase 4: Contract
+ALTER TABLE orders ALTER COLUMN total_usd SET NOT NULL;
+-- Later: ALTER TABLE orders DROP COLUMN total_cents;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Before migration
+CREATE TABLE orders (
+    id          BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    total_cents BIGINT NOT NULL,
+    currency    TEXT NOT NULL DEFAULT &#x27;USD&#x27;,
+    status      TEXT NOT NULL DEFAULT &#x27;pending&#x27;,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- After expand phase
+-- orders now has: total_cents (BIGINT NOT NULL) + total_usd (NUMERIC, nullable)
+
+-- After contract phase
+-- orders has: total_usd (NUMERIC NOT NULL), total_cents dropped</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Phase 1 — Expand: run ALTER TABLE orders ADD COLUMN total_usd NUMERIC. In Postgres 11+, adding a nullable column with no default is a metadata-only operation — it completes in milliseconds regardless of table size. No rows are rewritten. Deploy this in a normal release.</p>
+          <p>Phase 2 — Dual-write: update the application to write to both total_cents and total_usd on every INSERT and UPDATE. New rows get both values; existing rows still have total_usd = NULL. This is a code-only change, no DDL. Deploy it and verify in production for at least one release cycle.</p>
+          <p>Phase 3 — Backfill: run a batched UPDATE that sets total_usd = total_cents / 100.0 for rows where total_usd IS NULL. Process 1,000 rows per batch with a 20 ms sleep between batches to throttle WAL generation and avoid overwhelming replicas. Track progress in a migration_status table. If backfill is interrupted, resume from the last completed batch.</p>
+          <p>Phase 4 — Verify: run a count query to confirm zero rows with total_usd IS NULL. Run a sampling query to verify total_usd = total_cents / 100.0 for a random 1% of rows. If verification passes, switch reads: update the application to read from total_usd instead of total_cents.</p>
+          <p>Phase 5 — Contract: once all reads use total_usd, run ALTER TABLE orders ALTER COLUMN total_usd SET NOT NULL. In Postgres 12+, this is a metadata check if a CHECK constraint already validated all rows. Then drop the old column: ALTER TABLE orders DROP COLUMN total_cents. This rewrites the table in Postgres, so use a pg_repack or schedule during low traffic.</p>
+          <p>Each phase is a separate deploy with its own rollback. If phase 3 fails, total_usd stays NULL for some rows but the app still reads total_cents. If phase 4 reveals mismatches, fix the backfill logic and re-run.</p>
+<figure class="diagram dark" aria-label="Expand/contract migration phases">
+  <div class="flow-row">
+    <div class="node">Expand<br>ADD COLUMN nullable</div>
+    <div class="node">Dual-write<br>app writes both</div>
+    <div class="node">Backfill<br>batch UPDATE</div>
+    <div class="node accent">Contract<br>SET NOT NULL, drop old</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Backfill batch processing">
+  <div class="flow-row">
+    <div class="node">Batch 1<br>rows 1–1000</div>
+    <div class="node">Sleep 20ms</div>
+    <div class="node">Batch 2<br>rows 1001–2000</div>
+    <div class="node accent">… 200K batches<br>≈67 min total</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s dig into the backfill mechanics. We need to update 200M rows without locking the table or overwhelming the WAL. The naive approach — UPDATE orders SET total_usd = total_cents / 100.0 WHERE total_usd IS NULL — acquires a row-level lock on every row and generates a WAL entry for each. On a 200M-row table, this takes ~45 minutes and generates 100+ GB of WAL, which replicas must replay. If a replica falls behind, you get replication lag alerts and possibly a full re-sync.</p>
+          <p>Batched approach: UPDATE orders SET total_usd = total_cents / 100.0 WHERE id BETWEEN :start AND :end AND total_usd IS NULL. Process 1,000 rows per batch. Between batches, sleep for 20 ms. This throttles WAL generation to ~50,000 rows/s, which generates ~25 MB/s of WAL — well within most replicas&#x27; capacity. Total time: 200M / 50K = 4,000 seconds ≈ 67 minutes.</p>
+          <p>Progress tracking: maintain a migration_status table with columns (migration_id, last_processed_id, rows_updated, started_at, updated_at). After each batch, update last_processed_id. If the backfill process crashes, restart from last_processed_id + 1. The WHERE total_usd IS NULL clause makes the backfill idempotent — re-processing a batch is harmless.</p>
+          <p>Dual-write race condition: during backfill, the app might INSERT a row with total_usd set, then the backfill tries to UPDATE it. The WHERE total_usd IS NULL clause skips it — no conflict. But what about an UPDATE to total_cents that happens after the backfill sets total_usd? The app&#x27;s dual-write ensures it sets both columns on every UPDATE, so the backfill value is overwritten with the correct one. This is why dual-write must be deployed before backfill starts.</p>
+          <p>Verification is non-negotiable. After backfill completes, run: SELECT COUNT(*) FROM orders WHERE total_usd IS NULL. Must be 0. Then: SELECT COUNT(*) FROM orders WHERE total_usd != total_cents / 100.0. Must be 0 (accounting for rounding). Only then proceed to the contract phase. I&#x27;ve seen teams skip verification and discover 0.1% of rows had wrong values — that&#x27;s 200K incorrect orders.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Migration sequence across deploys">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">DBA</span><p>ALTER TABLE orders ADD COLUMN total_usd NUMERIC (instant)</p></div>
+    <div class="seq-row"><span class="actor">Dev team</span><p>Deploy dual-write code; all new writes populate both columns</p></div>
+    <div class="seq-row"><span class="actor">Migration job</span><p>Batch-update 200M rows; 1K per batch, 20ms sleep, ~67 min</p></div>
+    <div class="seq-row"><span class="actor">QA</span><p>Verify: zero NULL rows, zero mismatches</p></div>
+    <div class="seq-row"><span class="actor">Dev team</span><p>Switch reads to total_usd; deploy</p></div>
+    <div class="seq-row"><span class="actor">DBA</span><p>ALTER COLUMN total_usd SET NOT NULL; later DROP COLUMN total_cents</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Expand/contract vs big-bang ALTER</strong>
+              <p>Expand/contract is multi-deploy but zero downtime; big-bang is one step but locks the table.</p>
+            </div>
+            <div>
+              <strong>Batched backfill vs pg_repack</strong>
+              <p>Batched is simpler and controllable; pg_repack handles table rewrites but uses more disk and has edge cases with triggers.</p>
+            </div>
+            <div>
+              <strong>Dual-write vs trigger-based sync</strong>
+              <p>Dual-write is explicit and testable; trigger is transparent but harder to debug and adds overhead.</p>
+            </div>
+            <div>
+              <strong>Sleep between batches vs adaptive throttling</strong>
+              <p>Fixed sleep is simple; adaptive (watch replica lag) is better for production.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Running ALTER TABLE ADD COLUMN with NOT NULL DEFAULT on a large table — rewrites all rows (pre-Postgres 11).</li>
+            <li>Starting backfill before dual-write is deployed — new rows written during backfill get correct value overwritten.</li>
+            <li>No progress tracking — if backfill crashes, you restart from zero.</li>
+            <li>Backfill generating too much WAL — replicas lag behind and may disconnect.</li>
+            <li>Skipping verification — 0.1% mismatch rate on 200M rows = 200K wrong values.</li>
+            <li>Dropping the old column before confirming all reads use the new one.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you migrate a column type change (INT to BIGINT) on a live table?</li>
+            <li>What if the table has foreign keys — how does that change the approach?</li>
+            <li>How do you handle backfill for a computed column that depends on another table?</li>
+            <li>What monitoring would you set up during the backfill to detect problems early?</li>
+            <li>How does this approach change for MySQL with gh-ost or pt-online-schema-change?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Walk through all four phases of expand/contract with specific DDL and application code changes. Show the batched backfill with throttling and progress tracking. Explain the dual-write race condition and why it&#x27;s safe. Insist on verification before contract. That demonstrates you&#x27;ve done this in production and know where the landmines are.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../audit_trail/">← Build an audit trail without killing write throughput</a>
+          <a class="problem-nav-link back" href="../">All Database problems</a>
+          <a class="problem-nav-link next" href="../explain_plan/">Explain a bad EXPLAIN plan →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+</body>
+</html>

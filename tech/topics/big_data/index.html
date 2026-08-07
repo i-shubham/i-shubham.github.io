@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Big Data | Engineering Notes</title>
+  <meta name="description" content="Batch and streaming problems where re-runs, skew, tiny files, and silent quality drops matter more than the Spark logo on the slide.">
+  <link rel="icon" href="../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../css/tech.css" rel="stylesheet">
+  <script src="../../../assets/js/navigation.js"></script>
+</head>
+<body>
+  <main>
+    <section class="topic-hero">
+      <div class="container">
+        <p class="breadcrumbs"><a href="../../tech-index.html">Engineering Notes</a> / Big Data</p>
+        <p class="eyebrow">Pipelines that stay honest at scale</p>
+        <h1>Big Data</h1>
+        <p class="topic-deck">Batch and streaming problems where re-runs, skew, tiny files, and silent quality drops matter more than the Spark logo on the slide.</p>
+      </div>
+    </section>
+
+    <section class="section topic-section">
+      <div class="container">
+        <div class="topic-nav" aria-label="Other topics">
+          <a class="topic-pill" href="../system_design/">System Design</a>
+          <a class="topic-pill" href="../dsa/">DSA</a>
+          <a class="topic-pill" href="../database/">Database</a>
+          <a class="topic-pill is-active" href="../big_data/">Big Data</a>
+          <a class="topic-pill" href="../distributed_systems/">Distributed Systems</a>
+          <a class="topic-pill" href="../cloud/">Cloud</a>
+        </div>
+
+        <div class="problem-list">
+          <a class="problem-card" href="safe_orders_pipeline/">
+            <div class="problem-index">01</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Build a daily orders pipeline that can be re-run safely</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>A green Airflow square means nothing if yesterday&#x27;s re-run duplicated revenue or wiped a partial partition.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="skewed_spark_join/">
+            <div class="problem-index">02</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Fix a skewed Spark join</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Salting, AQE, and when broadcast is the wrong hammer.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="clickstream_lake/">
+            <div class="problem-index">03</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Design a near-real-time clickstream lake</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Kafka → lakehouse, watermarking, and exactly-once claims.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="tiny_files/">
+            <div class="problem-index">04</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Compact a tiny-file disaster</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>File sizing targets, compaction jobs, and read amplification.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="large_backfill/">
+            <div class="problem-index">05</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Backfill 18 months without melting the cluster</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Range slicing, priority queues, and publish gates.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="data_quality_drops/">
+            <div class="problem-index">06</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Detect silent data quality drops</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Volume, null-rate, and reconcile checks that page humans.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="scd2_scale/">
+            <div class="problem-index">07</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Model slowly changing dimensions at scale</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>SCD2 storage cost vs query convenience.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="cloud_bill_control/">
+            <div class="problem-index">08</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Cost-control an overgrown EMR / Databricks bill</h2>
+                <span class="difficulty">Easy</span>
+              </div>
+              <p>Spot vs on-demand, autoscaling traps, and idle clusters.</p>
+            </div>
+          </a>
+        </div>
+        <p class="topic-foot">Each write-up is paced for a ~60 minute interview: clarifying questions, estimates, APIs/schemas, diagrams, failure modes, and follow-ups.</p>
+      </div>
+    </section>
+  </main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../tech-index.html">All notes</a>
+        <a href="../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../js/code-tabs.js" defer></script>
+</body>
+</html>

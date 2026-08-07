@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a news feed | System Design | Engineering Notes</title>
+  <meta name="description" content="Feeds are a ranking problem pretending to be a storage problem — until a celebrity posts and your fan-out job melts.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a news feed</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a news feed</h1>
+      <p class="problem-deck">Feeds are a ranking problem pretending to be a storage problem — until a celebrity posts and your fan-out job melts.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Feed type (social vs news), ranking signals, celebrity threshold.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Post creation, feed generation, basic ranking. Defer ads injection.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>500M users, 50M DAU, avg 300 friends, feed length 200.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Post service, fan-out service, feed cache, ranking layer.</p></div></div>
+            <div class="stack-step"><strong>25–35 min</strong><div><strong>Fan-out deep dive</strong><p>Write vs read vs hybrid. Celebrity threshold (&gt;500K followers).</p></div></div>
+            <div class="stack-step"><strong>35–45 min</strong><div><strong>Ranking</strong><p>Affinity scores, recency decay, engagement signals, ML re-ranker.</p></div></div>
+            <div class="stack-step"><strong>45–55 min</strong><div><strong>Scaling &amp; failures</strong><p>Feed cache invalidation, hot-partition mitigation, consistency.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Follow-ups — ads, stories, real-time push.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d first clarify what kind of feed we are building. A social feed (like Instagram) ranks by affinity and engagement; a news feed (like Twitter) leans toward reverse-chronological with light boosting. The core architectural question is fan-out on write versus fan-out on read — and the answer is almost always a hybrid.</p>
+          <p>Fan-out on write means when a user posts, we immediately push that post ID into every follower&#x27;s feed cache. This is great for fast reads but terrible when a celebrity with 50 million followers posts — the fan-out job takes minutes and creates a write storm. Fan-out on read means we compute the feed at request time by merging posts from followed users. Reads are expensive but writes are cheap. The hybrid approach fans out on write for normal users and on read for celebrities.</p>
+          <p>I&#x27;d walk through the post-creation flow, the feed-generation flow, and then drill into the ranking layer that decides which posts surface first. The ranking layer is where the product magic lives, but the infrastructure under it is what keeps it from falling over.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Is this a social graph feed (friends) or a follow graph feed (asymmetric)?</li>
+            <li>What is the median and p99 follower count?</li>
+            <li>Do we rank chronologically or by engagement?</li>
+            <li>Are there different content types (text, image, video, link)?</li>
+            <li>Do we need real-time push updates or pull-on-refresh?</li>
+            <li>What is the feed page size and maximum depth?</li>
+            <li>Do we inject ads or sponsored content?</li>
+            <li>Should the feed include reshares/retweets?</li>
+            <li>What is the target feed-load latency?</li>
+            <li>Do we personalize per user or use a global ranking?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: post creation, fan-out, feed retrieval with basic ranking, celebrity handling.</li>
+            <li>In: feed caching layer, pagination with cursor-based scrolling.</li>
+            <li>Out: ads injection, stories/ephemeral content, video transcoding.</li>
+            <li>Defer: ML-based ranking model training, A/B testing framework.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Create post</strong>
+              <p>POST /posts with content, media refs, and visibility. Returns post_id.</p>
+            </div>
+            <div>
+              <strong>Get feed</strong>
+              <p>GET /feed?cursor=&amp;limit=20 returns ranked list of post summaries.</p>
+            </div>
+            <div>
+              <strong>Follow/unfollow</strong>
+              <p>POST /follow and DELETE /follow to manage the social graph.</p>
+            </div>
+            <div>
+              <strong>Like/comment</strong>
+              <p>POST /posts/{id}/likes and /comments for engagement signals.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Feed latency</strong>
+              <p>p99 &lt; 300 ms for feed retrieval — users notice anything above 500 ms.</p>
+            </div>
+            <div>
+              <strong>Fan-out latency</strong>
+              <p>Normal user post reaches all follower feeds within 5 seconds.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.95% — feed downtime is highly visible and drives churn.</p>
+            </div>
+            <div>
+              <strong>Consistency</strong>
+              <p>Eventual — a post appearing 10 seconds late in some feeds is acceptable.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>50M DAU × 10 feed loads/day = 500M feed requests/day ≈ 6K RPS avg.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Users</strong>
+              <p>500M total, 50M DAU, avg 300 friends each.</p>
+            </div>
+            <div>
+              <strong>Posts/day</strong>
+              <p>50M DAU × 2 posts/day = 100M new posts/day.</p>
+            </div>
+            <div>
+              <strong>Fan-out writes/day</strong>
+              <p>100M posts × 300 avg followers = 30B feed-cache writes/day.</p>
+            </div>
+            <div>
+              <strong>Feed cache size</strong>
+              <p>50M active feeds × 200 post IDs × 8B = 80 GB in Redis.</p>
+            </div>
+            <div>
+              <strong>Post storage</strong>
+              <p>100M posts/day × 1 KB avg = 100 GB/day ≈ 36 TB/year.</p>
+            </div>
+            <div>
+              <strong>Read QPS</strong>
+              <p>500M feed loads/day ≈ 6K/sec avg, 30K/sec peak.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/posts
+  Body: { content, media_ids[], visibility }
+  Response 201: { post_id, created_at }
+
+GET /api/v1/feed?cursor=&lt;post_id&gt;&amp;limit=20
+  Response 200: { posts[], next_cursor }
+
+POST /api/v1/follow
+  Body: { target_user_id }
+  Response 201: { following: true }
+
+GET /api/v1/posts/{post_id}
+  Response 200: { post_id, author, content, likes, comments_count }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Posts table (sharded by author_id)
+CREATE TABLE posts (
+  post_id     BIGINT PRIMARY KEY,
+  author_id   BIGINT NOT NULL,
+  content     TEXT,
+  media_urls  TEXT[],
+  created_at  TIMESTAMP DEFAULT now(),
+  like_count  INT DEFAULT 0
+);
+
+-- Social graph (adjacency list, sharded by follower_id)
+CREATE TABLE follows (
+  follower_id  BIGINT,
+  followee_id  BIGINT,
+  created_at   TIMESTAMP,
+  PRIMARY KEY (follower_id, followee_id)
+);
+
+-- Feed cache in Redis
+-- Key: feed:{user_id}
+-- Value: sorted set of post_ids scored by timestamp
+-- ZREVRANGE feed:12345 0 19  -&gt; top 20 post IDs</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>When a normal user (&lt; 500K followers) creates a post, the post service writes it to the posts table and enqueues a fan-out job. The fan-out workers read the poster&#x27;s follower list and insert the post_id into each follower&#x27;s feed cache (a Redis sorted set keyed by user_id, scored by timestamp). A follower opening the app does ZREVRANGE on their feed key, fetches the top 20 post IDs, then hydrates them from the post cache. This is the push model — reads are O(1) from cache.</p>
+          <p>For celebrity accounts (&gt; 500K followers), fan-out on write is prohibitively slow — 10M followers × 1 write = 10M Redis operations per post. Instead, we skip the fan-out. When a user loads their feed, the feed service merges the pre-built feed cache (from push) with a pull query for recent posts from any celebrities the user follows. This hybrid approach bounds fan-out cost while keeping feed latency low for most users.</p>
+          <p>Ranking happens in two phases. First, a lightweight scorer in the feed service assigns each candidate post a score based on recency, author affinity (how often the user engages with this author), and engagement velocity (likes in the first 30 minutes). This score sorts the merged list. Second, for users where we have enough signal, a server-side ML model re-ranks the top 50 candidates. The ML model is optional at launch — chronological with affinity boosting is a reasonable MVP.</p>
+          <p>Pagination uses cursor-based scrolling. The cursor is the (score, post_id) of the last item returned. On the next request, the feed service fetches items with scores below the cursor. This avoids the offset-skip problem where inserting new posts shifts pages.</p>
+          <p>The social graph is stored in a relational table sharded by follower_id so that &#x27;who do I follow&#x27; queries are single-shard. The reverse index (&#x27;who follows me&#x27;) is maintained in a separate table or a graph store for fan-out lookups.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Post Service</span><b>&rarr;</b><span class="node accent">Fan-out Workers</span><b>&rarr;</b><span class="node">Redis Feed Cache</span></div><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node accent">Feed Service</span><b>&rarr;</b><span class="node">Cache + Celebrity Pull</span></div><figcaption>Push path for normal users (top); hybrid read path (bottom)</figcaption></figure>
+<figure class="diagram dark"><div class="compare"><div><span class="label">Fan-out on Write</span><p>Fast reads (O(1) cache hit), slow writes for popular users, 30B cache writes/day</p></div><div><span class="label">Fan-out on Read</span><p>Fast writes (just store post), slow reads (merge N followed users), no cache needed</p></div><div><span class="label">Hybrid</span><p>Push for normal users, pull for celebrities (&gt;500K followers), best of both</p></div></div><figcaption>Fan-out strategy comparison</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>The celebrity threshold is the most nuanced parameter in this system. Set it too low (e.g., 1K followers) and too many users go through the expensive pull path at read time. Set it too high (e.g., 10M) and the fan-out service spends minutes pushing a single post. In practice, I&#x27;d start at 500K followers and tune based on fan-out worker queue depth. If the p99 fan-out time exceeds 10 seconds, either lower the threshold or add more workers.</p>
+          <p>Feed cache eviction is subtle. Each user&#x27;s feed sorted set is capped at ~500 entries. When a new post is fanned out, we ZADD it and ZREMRANGEBYRANK to trim old entries. But if a user is inactive for weeks, their feed cache is stale. On their return, we detect the staleness (cache timestamp vs now) and trigger a full feed rebuild: pull recent posts from all followed users, rank, and cache the result. This rebuild is expensive (~100 ms) but only happens once per returning user.</p>
+          <p>Engagement signals for ranking create a feedback loop. Posts that rank higher get more views, which get more likes, which rank them even higher. To avoid this winner-take-all dynamic, I&#x27;d inject an exploration factor: randomly boost 5-10% of new posts from less-engaged-with authors into the top positions. This gives the ranking model fresh signal and keeps the feed from becoming an echo chamber.</p>
+          <p>Consistency matters more than people think. If user A posts and user B (a mutual friend sitting next to them) refreshes and does not see the post, it feels broken even though eventual consistency says it is fine. For mutual friends — users who follow each other — I&#x27;d add a &#x27;read-your-writes&#x27; guarantee by checking a write-ahead notification channel. For non-mutual follows, a few seconds of delay is invisible.</p>
+          <p>Delete propagation is the other consistency concern. When a user deletes a post, we need to remove it from potentially millions of feed caches. Immediate removal is impractical. Instead, the feed service checks each post&#x27;s existence at hydration time — if the post is gone (tombstone or missing), it skips it and backfills from the next candidate. A background cleanup job asynchronously removes deleted post IDs from feed caches over minutes.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Feed fan-out and hybrid merge with ranking</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import heapq
+from dataclasses import dataclass, field
+from time import time
+
+# Users with &gt;= this many followers are &quot;celebrities&quot;;
+# their posts are pulled on read instead of fanned out on write.
+CELEBRITY_THRESHOLD = 500_000
+
+
+@dataclass(order=True)
+class ScoredPost:
+    score: float
+    post_id: int = field(compare=False)
+
+
+class FeedService:
+    def __init__(self, redis, post_store, graph):
+        self.redis = redis
+        self.post_store = post_store
+        self.graph = graph  # social graph service
+
+    def fan_out(self, author_id: int, post_id: int):
+        &quot;&quot;&quot;Push post into each follower&#x27;s precomputed feed (write path).&quot;&quot;&quot;
+        followers = self.graph.get_followers(author_id)
+        if len(followers) &gt;= CELEBRITY_THRESHOLD:
+            return  # celebrities are handled on the read path
+        ts = time()
+        pipe = self.redis.pipeline()
+        for fid in followers:
+            pipe.zadd(f&quot;feed:{fid}&quot;, {post_id: ts})
+            pipe.zremrangebyrank(f&quot;feed:{fid}&quot;, 0, -501)  # cap at 500
+        pipe.execute()
+
+    def get_feed(self, user_id: int, limit: int = 20) -&gt; list[int]:
+        &quot;&quot;&quot;Merge pre-computed feed with on-the-fly celebrity pull.&quot;&quot;&quot;
+        cached_ids = self.redis.zrevrange(f&quot;feed:{user_id}&quot;, 0, limit * 2)
+        celeb_ids = self._pull_celebrity_posts(user_id, limit)
+        merged = self._rank_and_merge(cached_ids, celeb_ids, user_id)
+        return merged[:limit]
+
+    def _pull_celebrity_posts(self, user_id: int, limit: int) -&gt; list[int]:
+        celebs = [
+            uid for uid in self.graph.get_following(user_id)
+            if self.graph.follower_count(uid) &gt;= CELEBRITY_THRESHOLD
+        ]
+        posts = []
+        for cid in celebs:
+            posts.extend(self.post_store.recent_by_author(cid, limit=5))
+        return [p.post_id for p in posts]
+
+    def _rank_and_merge(
+        self, cached: list, celeb: list, user_id: int
+    ) -&gt; list[int]:
+        heap: list[ScoredPost] = []
+        all_ids = set(cached) | set(celeb)
+        for pid in all_ids:
+            post = self.post_store.get(pid)
+            if post is None:
+                continue
+            # Time decay: recent posts score higher
+            recency = 1.0 / (1 + (time() - post.created_at) / 3600)
+            affinity = self.graph.affinity(user_id, post.author_id)
+            # Weighted combination: 60% recency, 30% affinity, 10% engagement
+            score = 0.6 * recency + 0.3 * affinity + 0.1 * post.engagement
+            heapq.heappush(heap, ScoredPost(-score, pid))
+        return [heapq.heappop(heap).post_id for _ in range(min(len(heap), 50))]</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{BinaryHeap, HashSet};
+use std::cmp::Reverse;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const CELEBRITY_THRESHOLD: usize = 500_000;
+
+#[derive(PartialEq)]
+struct ScoredPost { score: f64, post_id: u64 }
+// Ordered by score so BinaryHeap gives max-score first
+impl Eq for ScoredPost {}
+impl PartialOrd for ScoredPost {
+    fn partial_cmp(&amp;self, o: &amp;Self) -&gt; Option&lt;std::cmp::Ordering&gt; {
+        self.score.partial_cmp(&amp;o.score)
+    }
+}
+impl Ord for ScoredPost {
+    fn cmp(&amp;self, o: &amp;Self) -&gt; std::cmp::Ordering {
+        self.partial_cmp(o).unwrap_or(std::cmp::Ordering::Equal)
+    }
+}
+
+fn now_secs() -&gt; f64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()
+}
+
+/// Fan-out on write: push post_id into each follower&#x27;s sorted feed.
+/// Skipped for celebrities (&gt; threshold followers) — they use pull path.
+fn fan_out(author_id: u64, post_id: u64, followers: &amp;[u64], is_celeb: bool,
+           feed_store: &amp;mut std::collections::HashMap&lt;u64, Vec&lt;(f64, u64)&gt;&gt;) {
+    if is_celeb { return; }
+    let ts = now_secs();
+    for &amp;fid in followers {
+        let feed = feed_store.entry(fid).or_default();
+        feed.push((ts, post_id));
+        feed.sort_by(|a, b| b.0.partial_cmp(&amp;a.0).unwrap());
+        feed.truncate(500); // cap feed length
+    }
+}
+
+/// Rank-and-merge cached + celebrity posts using a weighted score
+fn rank_and_merge(cached: &amp;[u64], celeb: &amp;[u64], user_id: u64) -&gt; Vec&lt;u64&gt; {
+    let mut seen = HashSet::new();
+    let mut heap = BinaryHeap::new();
+    let now = now_secs();
+    for &amp;pid in cached.iter().chain(celeb.iter()) {
+        if !seen.insert(pid) { continue; }
+        // In production, fetch post metadata for recency/engagement
+        let recency = 1.0 / (1.0 + (now - now) / 3600.0); // placeholder
+        let score = 0.6 * recency + 0.3 * 0.5 + 0.1 * 0.5;
+        heap.push(ScoredPost { score, post_id: pid });
+    }
+    let mut result = Vec::new();
+    for _ in 0..heap.len().min(50) {
+        result.push(heap.pop().unwrap().post_id);
+    }
+    result
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;vector&gt;
+#include &lt;queue&gt;
+#include &lt;unordered_set&gt;
+#include &lt;ctime&gt;
+
+static const NSUInteger kCelebrityThreshold = 500000;
+
+struct ScoredPost {
+    double score;
+    uint64_t postID;
+    // Max-heap: higher score = higher priority
+    bool operator&lt;(const ScoredPost &amp;o) const { return score &lt; o.score; }
+};
+
+// Fan-out on write: push post into followers&#x27; feeds.
+// Skipped for celebrities — their posts are pulled at read time.
+static void fanOut(uint64_t authorID, uint64_t postID,
+                   NSArray&lt;NSNumber *&gt; *followers,
+                   NSMutableDictionary&lt;NSNumber *, NSMutableArray *&gt; *feeds) {
+    if (followers.count &gt;= kCelebrityThreshold) return;
+    double ts = (double)time(NULL);
+    for (NSNumber *fid in followers) {
+        NSMutableArray *feed = feeds[fid] ?: [NSMutableArray new];
+        [feed insertObject:@(postID) atIndex:0];
+        if (feed.count &gt; 500) [feed removeLastObject]; // cap
+        feeds[fid] = feed;
+    }
+}
+
+// Merge cached + celebrity posts with weighted ranking
+static std::vector&lt;uint64_t&gt; rankAndMerge(
+        const std::vector&lt;uint64_t&gt; &amp;cached,
+        const std::vector&lt;uint64_t&gt; &amp;celeb) {
+    std::unordered_set&lt;uint64_t&gt; seen;
+    std::priority_queue&lt;ScoredPost&gt; heap;
+    double now = (double)time(NULL);
+    for (auto *src : {&amp;cached, &amp;celeb}) {
+        for (uint64_t pid : *src) {
+            if (!seen.insert(pid).second) continue;
+            // Weights: 60% recency, 30% affinity, 10% engagement
+            double recency = 1.0 / (1.0 + (now - now) / 3600.0);
+            double score = 0.6 * recency + 0.3 * 0.5 + 0.1 * 0.5;
+            heap.push({score, pid});
+        }
+    }
+    std::vector&lt;uint64_t&gt; result;
+    size_t n = std::min(heap.size(), (size_t)50);
+    for (size_t i = 0; i &lt; n; ++i) {
+        result.push_back(heap.top().postID);
+        heap.pop();
+    }
+    return result;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">User A</span><p>POST /posts {content: "Hello world"}</p></div><div class="seq-row"><span class="actor">Post Service</span><p>Writes post to DB, enqueues fan-out job (follower count: 300)</p></div><div class="seq-row"><span class="actor">Fan-out Worker</span><p>Reads follower list, ZADD post_id to 300 Redis sorted sets</p></div><div class="seq-row"><span class="actor">User B</span><p>GET /feed &mdash; ZREVRANGE on feed:B returns top 20 post_ids including A's post</p></div><div class="seq-row"><span class="actor">Feed Service</span><p>Hydrates post objects, merges celebrity pull, applies ranking, returns feed</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Fan-out on write vs read</strong>
+              <p>Write gives fast reads but O(followers) write cost; read is cheap writes but expensive reads.</p>
+            </div>
+            <div>
+              <strong>Hybrid threshold</strong>
+              <p>Too low means slow reads for many users; too high means fan-out storms.</p>
+            </div>
+            <div>
+              <strong>Chronological vs ranked</strong>
+              <p>Chrono is simpler and transparent; ranked drives more engagement but risks filter bubbles.</p>
+            </div>
+            <div>
+              <strong>Sorted set vs list in Redis</strong>
+              <p>Sorted set allows score-based ranking but uses 2× memory vs a simple list.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Celebrity posts cause fan-out storm — 10M writes flood Redis and lag follower feeds by minutes.</li>
+            <li>Feed cache eviction drops old but still-relevant posts from inactive users.</li>
+            <li>Ranking feedback loop: highly-ranked posts get more engagement, crowding out new content.</li>
+            <li>Social graph partition lag: a follow takes seconds to propagate, causing missing posts.</li>
+            <li>Deleted post still shows in feeds until background cleanup runs.</li>
+            <li>Redis sorted set memory explosion when users follow thousands of active posters.</li>
+            <li>Clock skew across services makes timestamp-based scoring inconsistent.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you inject ads into the feed without degrading ranking quality?</li>
+            <li>Design real-time push notifications for new posts from close friends.</li>
+            <li>How would you handle multi-region feed consistency?</li>
+            <li>Add a &#x27;stories&#x27; ephemeral feed that auto-expires content after 24 hours.</li>
+            <li>How would you A/B test different ranking algorithms on live traffic?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Explain the push/pull/hybrid fan-out trade-off with a concrete celebrity threshold, sketch the Redis sorted-set feed cache, and describe a simple ranking formula with recency and affinity. Mentioning cursor-based pagination and the delete-propagation problem shows depth. The ML re-ranker and ad injection can be acknowledged without full design.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../url_shortener/">← Design a URL shortener</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../rate_limiter/">Design a rate limiter →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Database | Engineering Notes</title>
+  <meta name="description" content="Interview prompts about correctness under concurrency, migrations that don&#x27;t take the site down, and plans that explain why a query is slow.">
+  <link rel="icon" href="../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../css/tech.css" rel="stylesheet">
+  <script src="../../../assets/js/navigation.js"></script>
+</head>
+<body>
+  <main>
+    <section class="topic-hero">
+      <div class="container">
+        <p class="breadcrumbs"><a href="../../tech-index.html">Engineering Notes</a> / Database</p>
+        <p class="eyebrow">Schemas, transactions, and query plans</p>
+        <h1>Database</h1>
+        <p class="topic-deck">Interview prompts about correctness under concurrency, migrations that don&#x27;t take the site down, and plans that explain why a query is slow.</p>
+      </div>
+    </section>
+
+    <section class="section topic-section">
+      <div class="container">
+        <div class="topic-nav" aria-label="Other topics">
+          <a class="topic-pill" href="../system_design/">System Design</a>
+          <a class="topic-pill" href="../dsa/">DSA</a>
+          <a class="topic-pill is-active" href="../database/">Database</a>
+          <a class="topic-pill" href="../big_data/">Big Data</a>
+          <a class="topic-pill" href="../distributed_systems/">Distributed Systems</a>
+          <a class="topic-pill" href="../cloud/">Cloud</a>
+        </div>
+
+        <div class="problem-list">
+          <a class="problem-card" href="multi_tenant_schema/">
+            <div class="problem-index">01</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Design a schema for multi-tenant SaaS</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Shared tables vs schema-per-tenant vs DB-per-tenant trade-offs.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="slow_order_limit/">
+            <div class="problem-index">02</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Fix a slow ORDER BY + LIMIT query</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Index order, covering indexes, and when filesort still wins.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="idempotent_payments/">
+            <div class="problem-index">03</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Implement idempotent payment writes</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Unique constraints, upsert semantics, and exactly-once side effects.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="isolation_booking/">
+            <div class="problem-index">04</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Choose isolation level for a booking system</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Phantom reads, lost updates, and SELECT FOR UPDATE vs optimistic versions.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="shard_users/">
+            <div class="problem-index">05</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Shard a growing user table</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Key choice, hotspot users, and cross-shard joins you should avoid.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="audit_trail/">
+            <div class="problem-index">06</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Build an audit trail without killing write throughput</h2>
+                <span class="difficulty">Medium</span>
+              </div>
+              <p>Append-only events, CDC, and who owns the source of truth.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="zero_downtime_migrate/">
+            <div class="problem-index">07</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Migrate a live table with zero downtime</h2>
+                <span class="difficulty">Hard</span>
+              </div>
+              <p>Expand/contract pattern, dual writes, and backfill verification.</p>
+            </div>
+          </a>
+          <a class="problem-card" href="explain_plan/">
+            <div class="problem-index">08</div>
+            <div class="problem-body">
+              <div class="problem-top">
+                <h2>Explain a bad EXPLAIN plan</h2>
+                <span class="difficulty">Easy</span>
+              </div>
+              <p>Seq scan vs index scan, row estimates, and selectivity mistakes.</p>
+            </div>
+          </a>
+        </div>
+        <p class="topic-foot">Each write-up is paced for a ~60 minute interview: clarifying questions, estimates, APIs/schemas, diagrams, failure modes, and follow-ups.</p>
+      </div>
+    </section>
+  </main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../tech-index.html">All notes</a>
+        <a href="../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../js/diagram-anim.js" defer></script>
+</body>
+</html>

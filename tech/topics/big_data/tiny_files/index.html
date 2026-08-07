@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compact a tiny-file disaster | Big Data | Engineering Notes</title>
+  <meta name="description" content="Millions of 12KB Parquet files make S3 LIST and Spark planning slower than the actual compute.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Big Data</a> / Compact a tiny-file disaster</p>
+      <p class="eyebrow">Big Data · Medium · ~60 min</p>
+      <h1>Compact a tiny-file disaster</h1>
+      <p class="problem-deck">Millions of 12KB Parquet files make S3 LIST and Spark planning slower than the actual compute.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0-5m</strong><div><strong>Diagnose</strong><p>Quantify the problem: file count, avg size, listing time, query plan time</p></div></div>
+            <div class="stack-step"><strong>5-12m</strong><div><strong>Root cause</strong><p>Identify what creates tiny files: streaming intervals, over-partitioning, reduce parallelism</p></div></div>
+            <div class="stack-step"><strong>12-22m</strong><div><strong>Compaction strategy</strong><p>Batch compaction: read partition, coalesce, rewrite. Iceberg rewriteDataFiles vs manual Spark</p></div></div>
+            <div class="stack-step"><strong>22-30m</strong><div><strong>Incremental approach</strong><p>Compact by partition: oldest/largest partitions first; bounded parallelism to avoid cluster starvation</p></div></div>
+            <div class="stack-step"><strong>30-38m</strong><div><strong>Prevention</strong><p>Fix upstream: increase commit interval, reduce partition granularity, coalesce before write</p></div></div>
+            <div class="stack-step"><strong>38-45m</strong><div><strong>Monitoring</strong><p>Track file count per partition, alert on avg file size &lt; threshold</p></div></div>
+            <div class="stack-step"><strong>45-50m</strong><div><strong>Failure modes</strong><p>Compaction fails mid-way, concurrent reads during rewrite, Iceberg commit conflict</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I have inherited lake tables with 3 million files averaging 12KB each — about 36GB of data stored in files that should have been 256MB each, meaning ~140 files total. The symptom is not disk space — it is query time. Spark spends 8 minutes listing files and building the execution plan before it even reads a byte. Trino times out during metadata loading. Hive metastore crashes under the partition listing load.</p>
+          <p>Tiny files happen for predictable reasons: streaming jobs committing every 5 seconds, over-partitioned tables (partition by minute when hour would suffice), reduce tasks with low parallelism writing many small outputs, and Hive dynamic partitions spreading thin data across hundreds of buckets.</p>
+          <p>The fix has two parts: compact existing files and prevent new tiny files from accumulating. Compaction rewrites small files into larger ones. Prevention means fixing the root cause: right-sizing partitions, adjusting commit intervals, and using coalesce/repartition before writes. Iceberg and Delta have built-in compaction, but with 3 million files you cannot compact them all at once without melting the cluster.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many total files and what is the average file size?</li>
+            <li>What creates the tiny files — streaming, over-partitioning, or small reduce tasks?</li>
+            <li>Table format — Hive, Iceberg, Delta?</li>
+            <li>Can we do in-place compaction or must we rewrite to a new table?</li>
+            <li>What is the query latency impact — how bad is it now?</li>
+            <li>Concurrent read traffic — can we compact while queries run?</li>
+            <li>Partition scheme — too granular (minute/hour) or reasonable (day)?</li>
+            <li>Budget for compaction — how much cluster time can we dedicate?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In scope — Compact existing tiny files to target 256MB, prevent recurrence</li>
+            <li>In scope — Measure impact: file count, listing time, query latency before/after</li>
+            <li>Out of scope — Redesigning the entire data model or partition scheme</li>
+            <li>Defer — Automated continuous compaction service for all tables</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Compact</strong>
+              <p>Rewrite small files into target-size files (128–512MB range)</p>
+            </div>
+            <div>
+              <strong>Preserve partitions</strong>
+              <p>Compacted files stay in the same partition structure</p>
+            </div>
+            <div>
+              <strong>Data integrity</strong>
+              <p>Row count and checksums match before and after compaction</p>
+            </div>
+            <div>
+              <strong>No downtime</strong>
+              <p>Queries continue during compaction with at most brief metadata refresh</p>
+            </div>
+            <div>
+              <strong>Prevention</strong>
+              <p>Fix root cause so new writes produce properly sized files</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>File size target</strong>
+              <p>256MB per file; acceptable range 128–512MB</p>
+            </div>
+            <div>
+              <strong>Compaction time</strong>
+              <p>Process 3M files in under 6 hours without starving production queries</p>
+            </div>
+            <div>
+              <strong>List time</strong>
+              <p>Reduce S3 LIST from 8 minutes to under 5 seconds</p>
+            </div>
+            <div>
+              <strong>Query latency</strong>
+              <p>10× improvement on typical analytical queries</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>One-time compaction cost &lt; $200 in cloud compute; ongoing compaction &lt; $50/month</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Current state</strong>
+              <p>3M files × 12KB avg = 36GB total data</p>
+            </div>
+            <div>
+              <strong>Target state</strong>
+              <p>36GB / 256MB = 141 files (from 3M to 141)</p>
+            </div>
+            <div>
+              <strong>S3 LIST cost</strong>
+              <p>3M files → ~600 LIST requests (5,000/page) → $0.003; but latency is 8 min</p>
+            </div>
+            <div>
+              <strong>Compaction read</strong>
+              <p>36GB read from S3 at 200MB/s = 3 min; write 36GB = 3 min</p>
+            </div>
+            <div>
+              <strong>Overhead</strong>
+              <p>Spark plan for 3M files: ~8 min. For 141 files: 0.3 sec</p>
+            </div>
+            <div>
+              <strong>Streaming root cause</strong>
+              <p>5-sec commit × 18 tasks = 18 files per commit × 12 commits/min = 216 files/min</p>
+            </div>
+            <div>
+              <strong>After fix</strong>
+              <p>60-sec commit × 18 tasks = 18 files/min → compacted hourly to 3 files</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code>-- Before compaction: partition listing
+-- s3://lake/clickstream/dt=2024-06-15/hour=10/
+--   part-00000-abc.parquet   12KB
+--   part-00001-def.parquet   14KB
+--   ... (12,960 files for one hour)
+
+-- After compaction:
+-- s3://lake/clickstream/dt=2024-06-15/hour=10/
+--   part-00000-compacted.parquet   248MB
+--   part-00001-compacted.parquet   256MB
+--   part-00002-compacted.parquet   201MB
+
+-- Iceberg metadata tracks both old and new files
+-- Old files removed by expire_snapshots after retention period
+
+-- Monitoring query
+SELECT
+  partition,
+  COUNT(*) AS file_count,
+  AVG(file_size_in_bytes) AS avg_size,
+  SUM(file_size_in_bytes) / 1024/1024/1024 AS total_gb
+FROM db.clickstream.files
+GROUP BY partition
+HAVING AVG(file_size_in_bytes) &lt; 67108864  -- &lt; 64MB
+ORDER BY file_count DESC;</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The compaction strategy has three phases: assess, compact, and prevent.</p>
+          <p>Assess: query the Iceberg metadata table (or S3 listing for Hive) to identify partitions with the worst file-count-to-size ratio. Sort partitions by file count descending. The top 20% of partitions usually contain 80% of the tiny files — compact those first for maximum impact.</p>
+          <p>Compact: for Iceberg, use rewrite_data_files() with partial-progress enabled. This means the compaction job can commit progress incrementally — if it fails mid-way, the already-compacted partitions stay compacted. Set target-file-size to 256MB, min to 128MB, max to 512MB. The sort strategy (sort by user_id or event_ts within each partition) improves query performance beyond just reducing file count, because related rows are colocated.</p>
+          <p>For Hive tables without Iceberg/Delta: read the partition, coalesce to the target file count, and overwrite. This is riskier because overwrite is not atomic — if the job fails mid-write, the partition has partial data. Mitigation: write to a temp location, verify row count, then swap the partition location.</p>
+          <p>Rate limiting: compact at most 4 partitions in parallel, and only during off-peak hours (02:00–06:00 UTC). The compaction cluster is separate from production query clusters. For 3 million files across ~1,000 partitions, with 4-way parallelism and ~3 minutes per partition, the full compaction takes about 12 hours spread across 3 nights.</p>
+          <p>Prevent: fix the upstream writer. If it is a streaming job, increase commit interval from 5 seconds to 60 seconds. If it is over-partitioned (by minute), change to hourly. If Spark writes with too many reduce tasks, add .coalesce() or .repartition() before .write(). Add an Airflow sensor that checks avg file size after each write and alerts if below 64MB.</p>
+<figure class="diagram dark">
+  <figcaption>Compaction Flow</figcaption>
+  <div class="flow-row">
+    <div class="node">Assess<br><small>file metadata query</small></div>
+    <div class="node">Prioritize<br><small>worst partitions first</small></div>
+    <div class="node accent">Read + Coalesce<br><small>target 256MB</small></div>
+    <div class="node">Rewrite<br><small>atomic commit</small></div>
+    <div class="node">Verify<br><small>row count match</small></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Before vs After</figcaption>
+  <div class="compare">
+    <div class="node"><span class="label">Before</span><p>3M files × 12KB<br>S3 LIST: 8 min<br>Query plan: 8 min</p></div>
+    <div class="node accent"><span class="label">After</span><p>141 files × 256MB<br>S3 LIST: 0.1 sec<br>Query plan: 0.3 sec</p></div>
+  </div>
+</figure>
+<figure class="diagram dark">
+  <figcaption>Tiny File Root Causes</figcaption>
+  <div class="concern-grid">
+    <div class="node">Streaming<br><small>5-sec commits</small></div>
+    <div class="node">Over-partition<br><small>by minute</small></div>
+    <div class="node">Small reduces<br><small>200 tasks, 100KB each</small></div>
+    <div class="node">Dynamic insert<br><small>thin data, many dirs</small></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Why 256MB? This is the sweet spot for Parquet on S3. S3 GET requests have a ~20ms overhead per request, so reading 3 million 12KB files means 60,000 seconds of request overhead alone. At 256MB per file, the overhead is negligible relative to transfer time. Parquet&#x27;s columnar encoding works best when row groups are 64–128MB (which fits nicely in a 256MB file with multiple row groups). Larger files (1GB+) cause problems: single-task reads take too long, and retries on failure waste more work.</p>
+          <p>S3 LIST pagination: S3 returns at most 1,000 keys per LIST request. With 3M files, you need 3,000 LIST requests, each taking ~100ms = 300 seconds = 5 minutes just to list. If the partition scheme has thousands of prefixes, each requiring its own LIST, it compounds. Iceberg avoids this by tracking files in metadata — no S3 LIST needed for query planning. This is a strong argument for migrating Hive tables to Iceberg even if you do nothing else.</p>
+          <p>Compaction during active reads: with Iceberg, compaction is safe — the rewrite creates new files and a new snapshot. Readers on the old snapshot continue reading old files until their query completes. After expire_snapshots removes old snapshots, the old files are garbage collected. With Hive, overwriting a partition while a query reads it causes the query to fail with FileNotFoundException. Schedule compaction when query traffic is low.</p>
+          <p>Coalesce vs repartition: coalesce(N) reduces partitions without a shuffle — it merges adjacent partitions, so task locality is preserved. Repartition(N) does a full shuffle, distributing rows evenly. For compaction, coalesce is preferred because we do not need even distribution — we just need fewer, larger files. The exception: if the data is heavily skewed across the existing partitions, coalesce will produce uneven file sizes. In that case, repartition is worth the shuffle cost.</p>
+          <p>Preventing recurrence with Spark: add .coalesce() or .repartition() before .write(), using estimated output size to calculate the target. Formula: target_files = max(1, estimated_bytes // 256MB). For streaming, increase trigger interval to at least 60 seconds and enable compaction in the table format (Iceberg&#x27;s write.target-file-size-bytes property).</p>
+        </section>
+        <section class="problem-section">
+          <h2>Partition-level compaction with row count verification</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from pyspark.sql import SparkSession
+
+
+def compact_partition(spark: SparkSession, table: str, partition_filter: str,
+                      target_file_size_mb: int = 256):
+    &quot;&quot;&quot;
+    Compact a tiny-file disaster into properly sized files.
+    - Reads the partition, calculates optimal file count based on data size.
+    - Uses coalesce to reduce file count (avoids full shuffle of repartition).
+    - Verifies row count before and after to ensure no data loss.
+    - Returns compaction metrics for monitoring.
+    &quot;&quot;&quot;
+    df = spark.read.format(&#x27;iceberg&#x27;).load(table).filter(partition_filter)
+
+    # Calculate current total size across all input files
+    input_files = df.inputFiles()
+    hadoop_fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+        spark._jsc.hadoopConfiguration()
+    )
+    current_size = sum(
+        hadoop_fs.getContentSummary(
+            spark._jvm.org.apache.hadoop.fs.Path(f)
+        ).getLength()
+        for f in input_files
+    )
+
+    # Target: one file per target_file_size_mb chunk
+    target_files = max(1, int(current_size / (target_file_size_mb * 1024 * 1024)))
+
+    # Verify row count before compaction
+    before_count = df.count()
+
+    # Coalesce to target file count (no shuffle, just merges partitions)
+    compacted = df.coalesce(target_files)
+    compacted.writeTo(table).overwritePartitions()
+
+    # Verify row count after compaction — must match exactly
+    after_count = spark.read.format(&#x27;iceberg&#x27;).load(table).filter(partition_filter).count()
+    assert before_count == after_count, (
+        f&#x27;Row count mismatch: {before_count} -&gt; {after_count}&#x27;
+    )
+
+    return {
+        &#x27;partition&#x27;: partition_filter,
+        &#x27;files_before&#x27;: len(input_files),
+        &#x27;files_after&#x27;: target_files,
+        &#x27;rows&#x27;: after_count,
+    }</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">// Conceptual partition compaction using Polars + object store.
+// In production, you&#x27;d either call Iceberg&#x27;s rewrite_data_files API
+// or use this as a standalone compaction binary.
+
+use polars::prelude::*;
+use object_store::{ObjectStore, path::Path as ObjPath};
+use std::sync::Arc;
+
+pub struct CompactionResult {
+    pub partition: String,
+    pub files_before: usize,
+    pub files_after: usize,
+    pub rows: usize,
+}
+
+/// Compact tiny files in a partition into properly sized files.
+/// - Reads all small files in the partition.
+/// - Calculates optimal output file count based on total data size.
+/// - Rewrites with target file size (~256 MB).
+/// - Verifies row count before and after to ensure no data loss.
+pub async fn compact_partition(
+    store: Arc&lt;dyn ObjectStore&gt;,
+    table_path: &amp;str,
+    partition_filter: &amp;str,
+    target_file_size_mb: usize,
+) -&gt; Result&lt;CompactionResult, Box&lt;dyn std::error::Error&gt;&gt; {
+    let prefix = ObjPath::from(format!(&quot;{}/{}&quot;, table_path, partition_filter));
+
+    // List all files in the partition
+    let files: Vec&lt;_&gt; = store.list(Some(&amp;prefix)).try_collect().await?;
+    let files_before = files.len();
+
+    // Calculate total size
+    let total_bytes: usize = files.iter().map(|f| f.size).sum();
+    let target_files = std::cmp::max(1, total_bytes / (target_file_size_mb * 1024 * 1024));
+
+    // Read all parquet files into a single DataFrame
+    let mut frames = Vec::new();
+    for file_meta in &amp;files {
+        let bytes = store.get(&amp;file_meta.location).await?.bytes().await?;
+        let cursor = std::io::Cursor::new(bytes);
+        let df = ParquetReader::new(cursor).finish()?;
+        frames.push(df);
+    }
+    let combined = concat_df(&amp;frames)?;
+    let before_count = combined.height();
+
+    // Split into target_files chunks and write back
+    let rows_per_file = (before_count + target_files - 1) / target_files;
+    let mut written_rows = 0;
+
+    for i in 0..target_files {
+        let start = i * rows_per_file;
+        let end = std::cmp::min(start + rows_per_file, before_count);
+        let chunk = combined.slice(start as i64, end - start);
+
+        let output_path = ObjPath::from(format!(
+            &quot;{}/{}/compacted_{:04}.parquet&quot;, table_path, partition_filter, i
+        ));
+        let mut buf = Vec::new();
+        ParquetWriter::new(&amp;mut buf).finish(&amp;mut chunk.clone())?;
+        store.put(&amp;output_path, buf.into()).await?;
+        written_rows += chunk.height();
+    }
+
+    // Verify row count — must match exactly
+    assert_eq!(
+        before_count, written_rows,
+        &quot;Row count mismatch: {} -&gt; {}&quot;, before_count, written_rows
+    );
+
+    // Delete old files
+    for file_meta in &amp;files {
+        store.delete(&amp;file_meta.location).await?;
+    }
+
+    Ok(CompactionResult {
+        partition: partition_filter.to_string(),
+        files_before,
+        files_after: target_files,
+        rows: written_rows,
+    })
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Partition compaction orchestrator for a tiny-file disaster.
+// Submits a compaction job to Spark/Iceberg and verifies row counts.
+
+struct CompactionResult {
+    std::string partition;
+    int files_before;
+    int files_after;
+    long long rows;
+};
+
+@interface CompactionService : NSObject
+@property (nonatomic, strong) NSString *sparkEndpoint;
+@property (nonatomic, strong) NSString *icebergCatalog;
+
+- (instancetype)initWithSpark:(NSString *)spark catalog:(NSString *)catalog;
+- (CompactionResult)compactPartition:(NSString *)table
+                              filter:(NSString *)partitionFilter
+                      targetSizeMB:(int)targetSizeMB;
+@end
+
+@implementation CompactionService
+
+- (instancetype)initWithSpark:(NSString *)spark catalog:(NSString *)catalog {
+    self = [super init];
+    if (self) {
+        _sparkEndpoint = spark;
+        _icebergCatalog = catalog;
+    }
+    return self;
+}
+
+/// Compact tiny files in a partition to the target file size.
+/// Verifies row count before and after to ensure no data loss.
+- (CompactionResult)compactPartition:(NSString *)table
+                              filter:(NSString *)partitionFilter
+                      targetSizeMB:(int)targetSizeMB {
+    CompactionResult result;
+    result.partition = std::string([partitionFilter UTF8String]);
+
+    // Step 1: Get current file count and total size via Iceberg metadata
+    NSDictionary *metadata = [self getPartitionMetadata:table filter:partitionFilter];
+    result.files_before = [metadata[@&quot;file_count&quot;] intValue];
+    long long totalBytes = [metadata[@&quot;total_bytes&quot;] longLongValue];
+
+    // Step 2: Calculate target file count
+    result.files_after = (int)std::max(1LL, totalBytes / (targetSizeMB * 1024LL * 1024LL));
+
+    // Step 3: Get row count before compaction
+    long long beforeCount = [self getRowCount:table filter:partitionFilter];
+
+    // Step 4: Submit compaction job
+    // Uses Iceberg&#x27;s rewriteDataFiles action via Spark
+    NSDictionary *jobConfig = @{
+        @&quot;action&quot;: @&quot;rewrite_data_files&quot;,
+        @&quot;table&quot;: table,
+        @&quot;filter&quot;: partitionFilter,
+        @&quot;target_file_size_bytes&quot;: @(targetSizeMB * 1024 * 1024),
+        @&quot;min_input_files&quot;: @2  // only compact if 2+ files exist
+    };
+    [self submitSparkAction:jobConfig];
+
+    // Step 5: Verify row count after compaction
+    long long afterCount = [self getRowCount:table filter:partitionFilter];
+    NSAssert(beforeCount == afterCount,
+        @&quot;Row count mismatch: %lld -&gt; %lld&quot;, beforeCount, afterCount);
+
+    result.rows = afterCount;
+    return result;
+}
+
+- (NSDictionary *)getPartitionMetadata:(NSString *)table filter:(NSString *)filter {
+    // Query Iceberg metadata table for file stats
+    // In production: use Iceberg REST catalog or Spark SQL
+    return @{@&quot;file_count&quot;: @500, @&quot;total_bytes&quot;: @(2LL * 1024 * 1024 * 1024)};
+}
+
+- (long long)getRowCount:(NSString *)table filter:(NSString *)filter {
+    // Query via Spark SQL: SELECT COUNT(*) FROM table WHERE filter
+    return 10000000;  // placeholder
+}
+
+- (void)submitSparkAction:(NSDictionary *)config {
+    NSError *err = nil;
+    NSData *body = [NSJSONSerialization dataWithJSONObject:config options:0 error:&amp;err];
+    NSURL *url = [NSURL URLWithString:
+        [NSString stringWithFormat:@&quot;%@/v1/actions&quot;, _sparkEndpoint]];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    req.HTTPMethod = @&quot;POST&quot;;
+    req.HTTPBody = body;
+    [req setValue:@&quot;application/json&quot; forHTTPHeaderField:@&quot;Content-Type&quot;];
+
+    NSURLResponse *resp = nil;
+    [NSURLConnection sendSynchronousRequest:req returningResponse:&amp;resp error:&amp;err];
+}
+@end</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Operator</span><p>Query Iceberg metadata: 1,200 partitions, 3M files, avg 12KB</p></div>
+    <div class="seq-row"><span class="actor">Prioritizer</span><p>Top 50 partitions have 1.8M files — compact these first</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Read partition dt=2024-01-15: 45,000 files × 12KB = 540MB</p></div>
+    <div class="seq-row"><span class="actor">Spark</span><p>Coalesce to 3 files (540MB / 256MB ≈ 2.1, round to 3)</p></div>
+    <div class="seq-row"><span class="actor">Iceberg</span><p>rewrite_data_files: commit 3 new files, mark 45,000 old files for GC</p></div>
+    <div class="seq-row"><span class="actor">Verify</span><p>Row count: 2,847,312 before = 2,847,312 after ✓</p></div>
+    <div class="seq-row"><span class="actor">GC</span><p>expire_snapshots after 72h → delete old 45,000 files from S3</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Coalesce vs repartition</strong>
+              <p>Coalesce avoids shuffle but may produce uneven file sizes with skewed data. Repartition guarantees even sizing but costs a full shuffle</p>
+            </div>
+            <div>
+              <strong>In-place vs copy-and-swap</strong>
+              <p>In-place (Iceberg rewrite) is atomic and safe. Copy-and-swap (Hive) requires manual verification but works without table format migration</p>
+            </div>
+            <div>
+              <strong>Target file size</strong>
+              <p>256MB is the sweet spot for S3 + Parquet. Larger files reduce file count but increase single-task read time and retry cost</p>
+            </div>
+            <div>
+              <strong>Continuous vs scheduled compaction</strong>
+              <p>Continuous (e.g., Iceberg auto-compaction) keeps files tidy but adds background load. Scheduled (nightly) concentrates cost but allows tiny-file accumulation during the day</p>
+            </div>
+            <div>
+              <strong>Sort during compaction</strong>
+              <p>Sorting by a query-relevant column (user_id) improves query speed via min/max pruning. But sorting adds shuffle cost to compaction</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Compaction job OOMs reading a partition with 100K files — use partial-progress mode to commit incrementally</li>
+            <li>Hive partition overwrite fails mid-write — partition has partial data; write to temp then swap</li>
+            <li>Compaction runs during peak query hours — competing for cluster resources; schedule off-peak</li>
+            <li>Streaming job continues writing tiny files while compaction runs — net file count does not decrease; fix the root cause first</li>
+            <li>expire_snapshots deletes files still referenced by a running query — set retention &gt; max query duration</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you build an automated compaction service that handles all tables in the lake?</li>
+            <li>How does Z-ordering during compaction improve query performance?</li>
+            <li>How would you handle compaction for a table that receives 24/7 streaming writes?</li>
+            <li>What if the table is too large to compact in one pass — how do you prioritize partitions?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>A strong answer covers: diagnosing the problem (file count, listing time, plan time), root cause identification (streaming intervals, over-partitioning), compaction mechanics (coalesce, Iceberg rewrite, target sizing), prevention (fix upstream writers), and monitoring (file count alerts). Show before/after metrics.</p>
+          <p>You do not need to design a universal compaction service or explain Parquet row group internals. The interviewer wants to see: awareness of why tiny files are expensive (S3 LIST, plan time, request overhead), a practical incremental compaction approach, and prevention over cure.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../clickstream_lake/">← Design a near-real-time clickstream lake</a>
+          <a class="problem-nav-link back" href="../">All Big Data problems</a>
+          <a class="problem-nav-link next" href="../large_backfill/">Backfill 18 months without melting the cluster →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

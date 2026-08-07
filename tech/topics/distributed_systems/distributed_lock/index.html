@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Implement a distributed lock | Distributed Systems | Engineering Notes</title>
+  <meta name="description" content="A lock that isn&#x27;t fenced is a suggestion — expired holders must not keep writing.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">Distributed Systems</a> / Implement a distributed lock</p>
+      <p class="eyebrow">Distributed Systems · Hard · ~60 min</p>
+      <h1>Implement a distributed lock</h1>
+      <p class="problem-deck">A lock that isn&#x27;t fenced is a suggestion — expired holders must not keep writing.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5</strong><div><strong>Clarify requirements</strong><p>Mutual exclusion scope, TTL needs, re-entrancy, fencing.</p></div></div>
+            <div class="stack-step"><strong>5–15</strong><div><strong>Single-node Redis lock</strong><p>SETNX + EX, owner token, Lua CAS release.</p></div></div>
+            <div class="stack-step"><strong>15–25</strong><div><strong>Failure modes</strong><p>GC pause after acquire, clock skew on TTL, split brain.</p></div></div>
+            <div class="stack-step"><strong>25–35</strong><div><strong>Fencing tokens</strong><p>Monotonic token on acquire; storage rejects stale tokens.</p></div></div>
+            <div class="stack-step"><strong>35–45</strong><div><strong>Redlock walkthrough</strong><p>Quorum of N/2+1, clock drift bound, controversy.</p></div></div>
+            <div class="stack-step"><strong>45–55</strong><div><strong>Code + sequence diagram</strong><p>Lua acquire/release scripts, fenced write path.</p></div></div>
+            <div class="stack-step"><strong>55–60</strong><div><strong>Alternatives and wrap-up</strong><p>ZooKeeper ephemeral nodes, etcd lease, Chubby.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d start by pinning down what the lock actually guards. If it protects an idempotent cache refresh, a best-effort SETNX with a TTL is fine — double execution is harmless. If it guards a financial transfer, we need a fencing token that the downstream storage checks before accepting writes, because the lock holder can pause (GC, page fault, swap storm) past the TTL and never know it lost the lock.</p>
+          <p>The single-node Redis lock is the starting point: SET key owner_token NX EX 30. Release is a Lua compare-and-delete so we never free someone else&#x27;s lock. The real conversation is what breaks: the holder pauses for 35 seconds, the lock expires, a second holder acquires, and now both think they own it. No TTL fixes this — only fencing tokens do.</p>
+          <p>Then I&#x27;d walk through Redlock — acquiring on N/2+1 independent Redis nodes within a validity window — and honestly acknowledge the Martin Kleppmann critique: Redlock assumes bounded process pauses and synchronized clocks, which are exactly the things that break in production. For strong mutual exclusion I&#x27;d lean toward ZooKeeper or etcd.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>What operation does the lock protect — idempotent or side-effecting?</li>
+            <li>Single data center or cross-region?</li>
+            <li>What is the maximum acceptable lock hold time?</li>
+            <li>Do we need re-entrant locking (same owner re-acquires)?</li>
+            <li>Is there a downstream storage that can enforce fencing tokens?</li>
+            <li>How many concurrent lock contenders at peak?</li>
+            <li>Is Redis already in the stack, or are we free to choose ZooKeeper / etcd?</li>
+            <li>Do we need fair queuing (FIFO) or is best-effort acquisition okay?</li>
+            <li>What happens if the lock service itself is unavailable — fail open or fail closed?</li>
+            <li>What SLA do we target for lock acquisition latency?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: single-node Redis lock, fencing tokens, Redlock overview, failure taxonomy.</li>
+            <li>Out: full ZooKeeper / etcd implementation, Paxos derivation.</li>
+            <li>Stretch: compare Redlock vs ZooKeeper ephemeral nodes vs etcd lease.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>acquire(resource, owner, ttl)</strong>
+              <p>Returns fencing token or failure within timeout.</p>
+            </div>
+            <div>
+              <strong>release(resource, owner, token)</strong>
+              <p>Releases only if caller still owns the lock.</p>
+            </div>
+            <div>
+              <strong>renew(resource, owner, token, ttl)</strong>
+              <p>Extends TTL if ownership hasn&#x27;t changed.</p>
+            </div>
+            <div>
+              <strong>fenced_write(storage, token, data)</strong>
+              <p>Storage rejects writes with stale tokens.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Mutual exclusion</strong>
+              <p>At most one holder can successfully write at any instant, enforced via fencing.</p>
+            </div>
+            <div>
+              <strong>Liveness</strong>
+              <p>Lock is released within TTL even if holder crashes — no deadlocks.</p>
+            </div>
+            <div>
+              <strong>Acquire latency</strong>
+              <p>p99 &lt; 10 ms for single-node Redis, &lt; 50 ms for Redlock quorum.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>Sustain 5 000 acquire/release cycles per second per resource.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Lock contenders</strong>
+              <p>~200 concurrent clients contending on ~50 distinct resources.</p>
+            </div>
+            <div>
+              <strong>Redis nodes (Redlock)</strong>
+              <p>5 independent masters — quorum is 3.</p>
+            </div>
+            <div>
+              <strong>TTL</strong>
+              <p>30 s default, clock drift bound δ = 2 s, validity = TTL − 2δ − RTT.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>~5 000 acquire + release ops/s on a single Redis instance.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code># Redis single-node lock
+SET resource_name &lt;owner_token&gt; NX EX 30
+# Returns OK or nil
+
+# Release (Lua CAS)
+EVAL &quot;if redis.call(&#x27;get&#x27;,KEYS[1])==ARGV[1] then return redis.call(&#x27;del&#x27;,KEYS[1]) else return 0 end&quot; 1 resource_name &lt;owner_token&gt;
+
+# Renew
+EVAL &quot;if redis.call(&#x27;get&#x27;,KEYS[1])==ARGV[1] then return redis.call(&#x27;pexpire&#x27;,KEYS[1],ARGV[2]) else return 0 end&quot; 1 resource_name &lt;owner_token&gt; 30000
+
+# Fenced write (application-level)
+POST /storage/write {&quot;token&quot;: 42, &quot;key&quot;: &quot;...&quot;, &quot;value&quot;: &quot;...&quot;}
+# Storage rejects if token &lt;= last_accepted_token</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql"># Redis key layout
+lock:{resource}  →  owner_token (string, EX = TTL)
+
+# Fencing token store (downstream DB)
+CREATE TABLE fenced_resources (
+  resource_id   VARCHAR PRIMARY KEY,
+  last_token    BIGINT NOT NULL DEFAULT 0,
+  value         JSONB
+);
+# Write accepted only if incoming_token &gt; last_token</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The simplest correct lock is SET key owner NX EX ttl on a single Redis. The owner token is a UUID — release compares it atomically in Lua so we never delete someone else&#x27;s lock. This handles the crash case: the TTL expires and another client acquires. But it does not handle the pause case.</p>
+          <p>The pause problem: holder acquires, then hits a 40-second GC pause. The TTL (30 s) fires, a new holder acquires with a new token. The old holder wakes up, believes it still owns the lock (it cached the OK response before pausing), and writes. Both wrote. No amount of TTL tuning fixes this — the holder cannot know it paused.</p>
+          <p>Fencing tokens solve it. On acquire, the lock service returns a monotonically increasing token (e.g., a Redis INCR counter). The protected storage records the highest token it has seen. Any write with a token &lt;= stored token is rejected. The stale holder&#x27;s write carries token 41; the new holder already wrote with token 42; storage rejects 41.</p>
+          <p>Redlock extends this to N independent Redis masters (typically 5). The client tries to acquire on all N with the same key and token, measuring wall-clock elapsed. If it gets OK from &gt;= N/2+1 nodes within (TTL − clock_drift − RTT), the lock is valid for the remaining time. If not, it releases on all nodes. The Kleppmann critique is that Redlock still assumes bounded pauses between acquiring and using the lock — fencing tokens are still needed.</p>
+          <p>For truly strong mutual exclusion, consensus-based systems (ZooKeeper ephemeral + sequential znodes, etcd lease + compare-and-swap) provide linearizable locks with session semantics. The trade-off is latency: ZooKeeper acquire is ~5–15 ms vs Redis&#x27;s ~1 ms, and you need a ZK ensemble (3 or 5 nodes).</p>
+<figure class="diagram dark" aria-label="Distributed lock acquire flow">
+  <div class="flow-row">
+    <div class="node">Client A</div>
+    <div class="node">SET key A NX EX 30</div>
+    <div class="node accent">OK → token 41</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Client A pauses (GC)</div>
+    <div class="node">TTL expires</div>
+    <div class="node">Client B acquires → token 42</div>
+  </div>
+  <div class="flow-row">
+    <div class="node">Client A wakes</div>
+    <div class="node">Writes with token 41</div>
+    <div class="node accent">Storage REJECTS (41 &lt; 42)</div>
+  </div>
+</figure>
+<figure class="diagram dark" aria-label="Redlock quorum acquire">
+  <div class="flow-row">
+    <div class="node">Redis 1 ✓</div>
+    <div class="node">Redis 2 ✓</div>
+    <div class="node">Redis 3 ✓</div>
+    <div class="node">Redis 4 ✗</div>
+    <div class="node">Redis 5 ✗</div>
+  </div>
+  <div class="flow-row">
+    <div class="node accent">3/5 quorum met → lock valid for TTL − 2δ − RTT</div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Let&#x27;s trace a concrete failure. Client A calls SET mylock A NX EX 30 at t=0 and gets OK. At t=1 it begins a database transaction. At t=2 a full GC kicks in and freezes the process for 35 seconds. At t=30 the TTL expires. At t=31 Client B calls SET mylock B NX EX 30 and gets OK. At t=33 Client B writes row X = 100. At t=37 Client A wakes up from GC. It still holds the cached OK from t=0. It writes row X = 50. Now X = 50 but should be 100.</p>
+          <p>With fencing: Client A acquired token 41, Client B acquired token 42. Client B&#x27;s write carries token 42 — storage updates last_token to 42 and accepts. Client A&#x27;s write carries token 41. Storage sees 41 &lt; 42, rejects. X stays at 100. Correctness is preserved.</p>
+          <p>Redlock timing math: suppose N=5, TTL=30 s, clock drift rate ρ = 200 μs/s (NTP-synced), so total drift bound δ = TTL × ρ = 6 ms. The client records start_time before the first SET. After getting 3 OKs, elapsed = now − start_time. Lock validity = TTL − elapsed − 2δ. If validity &lt;= 0, the lock is already invalid — release everywhere and retry. In practice, if the 3 acquires take 5 ms total, validity ≈ 29.988 s, plenty of margin.</p>
+          <p>The subtle Redlock flaw: even with 3/5 quorum, if Client A acquires, pauses 31 seconds, its lock expires on all 5 nodes. Client B acquires with a new quorum. Client A wakes and doesn&#x27;t know it lost the lock — it never checks Redis again. Without fencing tokens on the storage side, Redlock has the same stale-holder problem as the single-node lock. Kleppmann&#x27;s argument is precisely this: the algorithm doesn&#x27;t protect you at the point of use.</p>
+          <p>ZooKeeper alternative: create an ephemeral sequential znode /locks/mylock/lock-00000042. Watch the znode with the next-lower sequence number. When it disappears, you hold the lock. If the client&#x27;s session dies (heartbeat timeout, typically 10–30 s), ZK deletes the ephemeral node automatically. The sequential ordering gives fair FIFO queuing. The downside: session timeout adds latency to failover, and ZK&#x27;s throughput (~10k ops/s) is far below Redis.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Redis lock with fencing token and safe release</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import time, uuid, redis
+
+class RedisLock:
+    def __init__(self, client: redis.Redis, resource: str, ttl_ms: int = 30000):
+        self.r = client
+        self.resource = f&#x27;lock:{resource}&#x27;
+        self.seq_key = f&#x27;lock:{resource}:seq&#x27;
+        self.ttl_ms = ttl_ms
+        self.owner = str(uuid.uuid4())
+        self.token = None
+
+    _ACQUIRE_LUA = &quot;&quot;&quot;
+    if redis.call(&#x27;set&#x27;, KEYS[1], ARGV[1], &#x27;NX&#x27;, &#x27;PX&#x27;, ARGV[2]) then
+        return redis.call(&#x27;incr&#x27;, KEYS[2])
+    end
+    return nil
+    &quot;&quot;&quot;
+
+    _RELEASE_LUA = &quot;&quot;&quot;
+    if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] then
+        redis.call(&#x27;del&#x27;, KEYS[1])
+        return 1
+    end
+    return 0
+    &quot;&quot;&quot;
+
+    def acquire(self, timeout_ms: int = 5000) -&gt; int | None:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() &lt; deadline:
+            token = self.r.eval(
+                self._ACQUIRE_LUA, 2,
+                self.resource, self.seq_key,
+                self.owner, str(self.ttl_ms),
+            )
+            if token is not None:
+                self.token = int(token)
+                return self.token
+            time.sleep(0.05)
+        return None
+
+    def release(self) -&gt; bool:
+        return self.r.eval(self._RELEASE_LUA, 1, self.resource, self.owner) == 1
+
+
+def fenced_write(conn, token: int, resource_id: str, value: str) -&gt; bool:
+    &quot;&quot;&quot;Accept write only if token &gt; last accepted token.&quot;&quot;&quot;
+    result = conn.execute(
+        &quot;UPDATE fenced_resources SET value = %s, last_token = %s &quot;
+        &quot;WHERE resource_id = %s AND last_token &lt; %s&quot;,
+        (value, token, resource_id, token),
+    )
+    return result.rowcount == 1</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use redis::{Client, Script};
+use std::time::{Duration, Instant};
+use uuid::Uuid;
+
+pub struct RedisLock {
+    client: Client,
+    resource: String,
+    seq_key: String,
+    ttl_ms: u64,
+    owner: String,
+    token: Option&lt;i64&gt;,
+}
+
+const ACQUIRE_LUA: &amp;str = r#&quot;
+if redis.call(&#x27;set&#x27;, KEYS[1], ARGV[1], &#x27;NX&#x27;, &#x27;PX&#x27;, ARGV[2]) then
+    return redis.call(&#x27;incr&#x27;, KEYS[2])
+end
+return nil
+&quot;#;
+
+const RELEASE_LUA: &amp;str = r#&quot;
+if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] then
+    redis.call(&#x27;del&#x27;, KEYS[1])
+    return 1
+end
+return 0
+&quot;#;
+
+impl RedisLock {
+    pub fn new(client: Client, resource: &amp;str, ttl_ms: u64) -&gt; Self {
+        Self {
+            resource: format!(&quot;lock:{resource}&quot;),
+            seq_key: format!(&quot;lock:{resource}:seq&quot;),
+            client,
+            ttl_ms,
+            owner: Uuid::new_v4().to_string(),
+            token: None,
+        }
+    }
+
+    pub fn acquire(&amp;mut self, timeout_ms: u64) -&gt; Option&lt;i64&gt; {
+        let script = Script::new(ACQUIRE_LUA);
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        let mut conn = self.client.get_connection().ok()?;
+
+        while Instant::now() &lt; deadline {
+            let result: Option&lt;i64&gt; = script
+                .key(&amp;self.resource)
+                .key(&amp;self.seq_key)
+                .arg(&amp;self.owner)
+                .arg(self.ttl_ms)
+                .invoke(&amp;mut conn)
+                .ok()?;
+            if let Some(tok) = result {
+                self.token = Some(tok);
+                return Some(tok);
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        None
+    }
+
+    pub fn release(&amp;mut self) -&gt; bool {
+        let script = Script::new(RELEASE_LUA);
+        let Ok(mut conn) = self.client.get_connection() else {
+            return false;
+        };
+        script
+            .key(&amp;self.resource)
+            .arg(&amp;self.owner)
+            .invoke::&lt;i64&gt;(&amp;mut conn)
+            .map(|v| v == 1)
+            .unwrap_or(false)
+    }
+}
+
+/// Accept write only if fencing token exceeds the last accepted token.
+pub fn fenced_write(
+    client: &amp;mut postgres::Client,
+    token: i64, resource_id: &amp;str, value: &amp;str,
+) -&gt; bool {
+    let rows = client
+        .execute(
+            &quot;UPDATE fenced_resources SET value = $1, last_token = $2 \
+             WHERE resource_id = $3 AND last_token &lt; $4&quot;,
+            &amp;[&amp;value, &amp;token, &amp;resource_id, &amp;token],
+        )
+        .unwrap_or(0);
+    rows == 1
+}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+#include &lt;string&gt;
+#include &lt;optional&gt;
+#include &lt;chrono&gt;
+#include &lt;thread&gt;
+
+// Protocol modelling the subset of Redis commands used by the lock.
+@protocol RedisClient &lt;NSObject&gt;
+- (nullable NSNumber *)evalLua:(NSString *)script
+                          keys:(NSArray&lt;NSString *&gt; *)keys
+                          args:(NSArray&lt;NSString *&gt; *)args;
+@end
+
+@interface RedisLock : NSObject {
+    NSString *_resource;
+    NSString *_seqKey;
+    NSString *_owner;
+    int64_t   _ttlMs;
+    int64_t   _token;
+    id&lt;RedisClient&gt; _client;
+}
+- (instancetype)initWithClient:(id&lt;RedisClient&gt;)client
+                      resource:(NSString *)resource
+                         ttlMs:(int64_t)ttlMs;
+- (std::optional&lt;int64_t&gt;)acquireWithTimeout:(int64_t)timeoutMs;
+- (BOOL)release;
+@end
+
+@implementation RedisLock
+
+static NSString *const kAcquireLua =
+    @&quot;if redis.call(&#x27;set&#x27;,KEYS[1],ARGV[1],&#x27;NX&#x27;,&#x27;PX&#x27;,ARGV[2]) then &quot;
+     &quot;return redis.call(&#x27;incr&#x27;,KEYS[2]) end return nil&quot;;
+
+static NSString *const kReleaseLua =
+    @&quot;if redis.call(&#x27;get&#x27;,KEYS[1])==ARGV[1] then &quot;
+     &quot;redis.call(&#x27;del&#x27;,KEYS[1]) return 1 end return 0&quot;;
+
+- (instancetype)initWithClient:(id&lt;RedisClient&gt;)client
+                      resource:(NSString *)resource
+                         ttlMs:(int64_t)ttlMs {
+    if ((self = [super init])) {
+        _client   = client;
+        _resource = [NSString stringWithFormat:@&quot;lock:%@&quot;, resource];
+        _seqKey   = [NSString stringWithFormat:@&quot;lock:%@:seq&quot;, resource];
+        _owner    = NSUUID.UUID.UUIDString;
+        _ttlMs    = ttlMs;
+        _token    = -1;
+    }
+    return self;
+}
+
+- (std::optional&lt;int64_t&gt;)acquireWithTimeout:(int64_t)timeoutMs {
+    auto deadline = std::chrono::steady_clock::now()
+                  + std::chrono::milliseconds(timeoutMs);
+    NSString *ttlStr = [NSString stringWithFormat:@&quot;%lld&quot;, _ttlMs];
+
+    while (std::chrono::steady_clock::now() &lt; deadline) {
+        NSNumber *res = [_client evalLua:kAcquireLua
+                                    keys:@[_resource, _seqKey]
+                                    args:@[_owner, ttlStr]];
+        if (res) {
+            _token = res.longLongValue;
+            return _token;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return std::nullopt;
+}
+
+- (BOOL)release {
+    NSNumber *res = [_client evalLua:kReleaseLua
+                                keys:@[_resource]
+                                args:@[_owner]];
+    return res &amp;&amp; res.intValue == 1;
+}
+@end
+
+// Accept write only when fencing token exceeds the stored one.
+// Uses a conceptual SQL executor; mirrors the Python / Rust logic.
+static BOOL fencedWrite(id /* db conn */ conn, int64_t token,
+                        NSString *resourceId, NSString *value) {
+    // In production, bind parameters to avoid SQL injection.
+    NSString *sql = [NSString stringWithFormat:
+        @&quot;UPDATE fenced_resources SET value=&#x27;%@&#x27;, last_token=%lld &quot;
+         &quot;WHERE resource_id=&#x27;%@&#x27; AND last_token &lt; %lld&quot;,
+        value, token, resourceId, token];
+    // executeUpdate: returns affected-row count (conceptual).
+    return /* [conn executeUpdate:sql] */ 1 == 1;
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark" aria-label="Lock acquire → fenced write sequence">
+  <div class="seq">
+    <div class="seq-row"><span class="actor">Client</span><p>SET lock:transfer owner_A NX EX 30</p></div>
+    <div class="seq-row"><span class="actor">Redis</span><p>OK — returns fencing token 41 (INCR lock:transfer:seq)</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>POST /storage/write {"token":41, "account":"X", "amount":-100}</p></div>
+    <div class="seq-row"><span class="actor">Storage</span><p>last_token=40, 41&gt;40 → accept, set last_token=41</p></div>
+    <div class="seq-row"><span class="actor">Client</span><p>DEL lock:transfer (Lua CAS — only if value == owner_A)</p></div>
+    <div class="seq-row"><span class="actor">Redis</span><p>1 (deleted)</p></div>
+  </div>
+</figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>TTL too short vs too long</strong>
+              <p>Short TTL risks false expiry under GC pauses; long TTL delays recovery after crashes.</p>
+            </div>
+            <div>
+              <strong>Fencing token complexity vs correctness</strong>
+              <p>Fencing requires storage to enforce tokens — extra write path logic, but prevents stale writes.</p>
+            </div>
+            <div>
+              <strong>Redlock vs single-node</strong>
+              <p>Redlock survives one Redis failure but adds latency and still needs fencing for safety.</p>
+            </div>
+            <div>
+              <strong>Redis vs ZooKeeper / etcd</strong>
+              <p>Redis is faster (~1 ms) but weaker guarantees; ZK/etcd give linearizable locks at ~10 ms.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Releasing someone else&#x27;s lock because you didn&#x27;t compare-and-delete atomically.</li>
+            <li>GC pause longer than TTL — holder wakes up thinking it still owns the lock.</li>
+            <li>Clock skew on Redis nodes making TTL expire early on some, late on others.</li>
+            <li>Forgetting to release on all Redlock nodes after a failed quorum attempt.</li>
+            <li>Using wall-clock time instead of monotonic clock for elapsed-time calculation.</li>
+            <li>Not setting a retry backoff on acquire — thundering herd under contention.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Add lock queuing with ZooKeeper sequential ephemeral znodes for fairness.</li>
+            <li>Implement auto-renewal (watchdog thread) that extends TTL while the holder is alive.</li>
+            <li>Design a lock service dashboard showing current holders, wait times, and acquisition rates.</li>
+            <li>Handle the &#x27;lock inherited after failover&#x27; case in a Redis Sentinel setup.</li>
+            <li>Compare Redlock with consensus-based locks in a latency-vs-safety matrix.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Demonstrate SETNX + TTL + Lua CAS release, then immediately surface the GC pause problem and solve it with fencing tokens. Walk through Redlock&#x27;s quorum math and acknowledge the Kleppmann critique. Bonus for mentioning ZooKeeper ephemeral nodes as the stronger alternative and explaining why most teams still pick Redis — speed and operational simplicity.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <span class="problem-nav-link prev muted">← Start of topic</span>
+          <a class="problem-nav-link back" href="../">All Distributed Systems problems</a>
+          <a class="problem-nav-link next" href="../exactly_once_consumer/">Design an exactly-once consumer →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>
