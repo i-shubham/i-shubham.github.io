@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a ride-sharing system | System Design | Engineering Notes</title>
+  <meta name="description" content="Uber-style matching is geo index plus dispatch race — rush hour and GPS jitter will expose every naive nearest-driver query.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a ride-sharing system</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a ride-sharing system</h1>
+      <p class="problem-deck">Uber-style matching is geo index plus dispatch race — rush hour and GPS jitter will expose every naive nearest-driver query.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Cities, ride types, pooling, payments, SLA to match.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Location, matching, trip lifecycle. Defer pooling, food.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>Peak GPS pings, concurrent trips, city shards.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Rider/driver apps, location service, matcher, trip, maps.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>Matching</strong><p>Geo hash / H3, dispatch offers, double-booking.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Scale</strong><p>City partitions, surge, ETA, map tiles.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Failures</strong><p>Stale GPS, matcher crash mid-offer, payment.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Follow-ups — pooling, safety.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Matching + location ingest is the interview, not the fare UI.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d lock geography and product. One city is a different system from a global map. I&#x27;d also ask whether drivers accept offers or the system assigns (Uber-style offer with timeout vs fully automatic dispatch). Pooling and scheduled rides change matching from &quot;nearest idle car&quot; to a combinatorial problem — I&#x27;d defer those unless asked.</p>
+          <p>The hot path is: drivers stream GPS, riders request a trip, a matcher finds nearby eligible drivers, an offer is exclusive for a few seconds, then the trip goes through pickup → en-route → complete → payment. Almost every bug is either stale location or two riders winning the same driver.</p>
+          <p>I&#x27;d sketch location ingest, a geo index sharded by city/cell, a matching service with leases, and a trip state machine — then deep-dive how we avoid double dispatch under retries.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>How many cities and peak concurrent trips?</li>
+            <li>Driver accept/reject, or silent assignment?</li>
+            <li>Vehicle types (bike, XL) and filters (accessibility)?</li>
+            <li>Is ride pooling (shared trips) in scope?</li>
+            <li>Match SLA — p50 seconds to a driver?</li>
+            <li>Do we show nearby cars on the map before request?</li>
+            <li>Payments: in-app card, cash, wallets?</li>
+            <li>Cancellation windows and no-show fees?</li>
+            <li>Cross-city trips and airport queues?</li>
+            <li>Safety: share trip, SOS, background checks — in or out?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: GPS ingest, nearby-driver index, offer-based matching, trip lifecycle, basic surge.</li>
+            <li>In: ETA using a routing service (treat maps as a dependency).</li>
+            <li>Out: food delivery, micromobility IoT, full fraud ML stack.</li>
+            <li>Defer: pooling, scheduled rides, driver incentives marketplace.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Track drivers</strong>
+              <p>Idle/en-route drivers ping location every 2–4s; riders less often during a trip.</p>
+            </div>
+            <div>
+              <strong>Request ride</strong>
+              <p>Pickup/dropoff, product type → match or waitlist with ETA.</p>
+            </div>
+            <div>
+              <strong>Dispatch</strong>
+              <p>Offer to one driver at a time (or small batch) with a timeout; exclusive lock.</p>
+            </div>
+            <div>
+              <strong>Trip</strong>
+              <p>States: matching, assigned, arriving, in_trip, completed, cancelled.</p>
+            </div>
+            <div>
+              <strong>Fare</strong>
+              <p>Quote up front; settle on complete with surge and wait time.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Match latency</strong>
+              <p>p95 &lt; 5s to first offer in a dense city; degrade to waitlist, not silent fail.</p>
+            </div>
+            <div>
+              <strong>Location freshness</strong>
+              <p>Idle driver location &lt; 5s old in the index; drop pings older than that.</p>
+            </div>
+            <div>
+              <strong>Correctness</strong>
+              <p>A driver is in at most one active trip; offers are fenced by a lease.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>Matching can degrade per city; payments must still settle completed trips.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Drivers online</strong>
+              <p>Global 5M online drivers; a large city 50K online at peak.</p>
+            </div>
+            <div>
+              <strong>GPS ingest</strong>
+              <p>5M × 1 ping / 3s ≈ 1.7M pings/sec globally — shard by city, never one Kafka topic.</p>
+            </div>
+            <div>
+              <strong>Ping size</strong>
+              <p>~100 bytes → ~170 MB/s raw; batch and downsample when idle on a highway cell.</p>
+            </div>
+            <div>
+              <strong>Trips</strong>
+              <p>10M trips/day ≈ 115/sec avg, 10× peak in evening; matching QPS is bursty.</p>
+            </div>
+            <div>
+              <strong>Geo index</strong>
+              <p>50K drivers / city in Redis/memory on a cell grid; not a row-per-ping SQL table.</p>
+            </div>
+            <div>
+              <strong>Map ETA</strong>
+              <p>Cache ETAs for hot cells; do not call routing for every map tile refresh.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- Driver location (often gRPC/UDP at the edge; REST shown for the board):
+POST /api/v1/location
+  Body: { driver_id, lat, lng, heading, ts, status: &#x27;idle&#x27;|&#x27;enroute&#x27; }
+
+POST /api/v1/trips
+  Body: { rider_id, pickup, dropoff, product }
+  Response 201: { trip_id, status: &#x27;matching&#x27; }
+
+-- Driver app:
+← offer { trip_id, pickup, eta_sec, expires_at }
+POST /api/v1/trips/{id}/offers/{offer_id}/accept
+POST /api/v1/trips/{id}/offers/{offer_id}/decline
+
+PATCH /api/v1/trips/{id}  { event: &#x27;arrived&#x27;|&#x27;start&#x27;|&#x27;complete&#x27;|&#x27;cancel&#x27; }
+
+GET /api/v1/trips/{id}    { status, driver, eta, polyline? }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE trips (
+  trip_id        BIGINT PRIMARY KEY,
+  rider_id       BIGINT NOT NULL,
+  driver_id      BIGINT,
+  city_id        INT NOT NULL,
+  product        VARCHAR(16),
+  pickup         GEOGRAPHY NOT NULL,
+  dropoff        GEOGRAPHY NOT NULL,
+  status         VARCHAR(16),
+  surge_mult     NUMERIC(4,2) DEFAULT 1,
+  quoted_fare    INT,
+  created_at     TIMESTAMP
+);
+CREATE INDEX idx_trips_city_status ON trips(city_id, status);
+
+CREATE TABLE trip_offers (
+  offer_id       BIGINT PRIMARY KEY,
+  trip_id        BIGINT NOT NULL,
+  driver_id      BIGINT NOT NULL,
+  expires_at     TIMESTAMP NOT NULL,
+  state          VARCHAR(16),  -- pending|accepted|expired|declined
+  UNIQUE (trip_id, driver_id)
+);
+
+-- Hot location is NOT here: city-sharded in-memory / Redis
+-- driver_id → {lat, lng, cell, ts, status}</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Partition the world by city (or metro). Each city owns a location service and a matcher. Drivers connect to the nearest edge; pings update a cell index (geohash or H3). Cells are small enough that &quot;nearby&quot; is k-ring lookup, not a global scan. Idle drivers are indexed; en-route drivers may stay in a lighter map for ETA to rider but are not matchable.</p>
+          <p>On request, the matcher loads candidate cells around pickup, filters by product and rating/constraints, ranks by ETA (routing service or haversine + traffic cache), and sends an exclusive offer. The driver document gets a lease: <code>offer_id</code> + expiry. If they accept, CAS the trip to assigned and the driver to busy. If they timeout, release and try the next candidate. Fan-out to many drivers at once increases match speed but creates more decline noise and thundering races — start with sequential or small batches of 2–3.</p>
+          <p>Trip state lives in a strongly consistent store per city (or a trip-id hash with city affinity). Location pings are eventually consistent and lossy. Payments are a separate idempotent flow on complete. Surge is computed from unmatched demand vs idle supply per cell over a short window and cached for quotes.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Driver ping</span><b>&rarr;</b><span class="node">City ingest</span><b>&rarr;</b><span class="node accent">H3/geohash index</span></div><figcaption>Hot path is memory, not Postgres geography queries</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Rider requests trip in city shard</span><span class="node accent">Matcher: k-ring cells → rank by ETA → lease driver</span><span class="node">Offer timeout or decline → next candidate</span><span class="node accent">Accept: CAS trip+driver; start navigation</span></div><figcaption>Exclusive offers prevent two riders booking one car</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Demand cell</span><b>&rarr;</b><span class="node accent">Surge calc</span><b>&rarr;</b><span class="node">Quote</span><b>&rarr;</b><span class="node">Match pool</span></div><figcaption>Surge is supply/demand per cell, not a global multiplier</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Double-booking is the classic failure. Driver accepts two offers due to retries, or two matchers in a split-brain city. Fence with a version on the driver record: <code>UPDATE drivers SET trip_id=?, version=version+1 WHERE id=? AND status=&#x27;idle&#x27; AND version=?</code>. Offers carry the version. Idempotency keys on accept. Matcher leadership per city (or sticky consistent hash of trip_id to a matcher worker with a lock) so two workers do not dispatch the same trip.</p>
+          <p>Stale GPS: phones sleep, tunnels, spoofing. Treat location as (point, timestamp, accuracy). Ignore pings older than T or with huge jumps (teleport). Map-match to roads if you have the cycles. For matching, slightly stale is OK; for &quot;car arriving&quot; you want the latest ping plus heading.</p>
+          <p>Hot downtown cells: 5K idle drivers in a few hexes. Rank with a heap of size k, not a sort of 5K ETAs. Cache traffic-aware ETA from cell centroid to pickup for a few seconds. Airport queues are a special matching mode (FIFO in a geofence) — mention it so the interviewer knows you have seen the product wart.</p>
+          <p>Failure: if the matcher dies, in-flight offers expire and a new matcher rebuilds from trip=matching plus the live index (index is reconstructible from last pings). If a city ingest partition lags, stop matching on rotten data and show longer ETAs rather than dispatching ghosts.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Geo index and exclusive offer lease</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import math
+import time
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set, Tuple
+
+CELL = 0.01  # ~1km; production: H3 resolution 8/9
+
+
+def cell_key(lat: float, lng: float) -&gt; Tuple[int, int]:
+    return (int(lat / CELL), int(lng / CELL))
+
+
+def neighbors(cell: Tuple[int, int], rings: int = 1) -&gt; List[Tuple[int, int]]:
+    x, y = cell
+    return [(x + dx, y + dy)
+            for dx in range(-rings, rings + 1)
+            for dy in range(-rings, rings + 1)]
+
+
+def haversine_km(a: Tuple[float, float], b: Tuple[float, float]) -&gt; float:
+    r = 6371.0
+    p1, p2 = math.radians(a[0]), math.radians(b[0])
+    dphi = math.radians(b[0] - a[0])
+    dl = math.radians(b[1] - a[1])
+    h = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(h))
+
+
+@dataclass
+class Driver:
+    driver_id: str
+    lat: float
+    lng: float
+    ts: float
+    version: int = 0
+    status: str = &quot;idle&quot;  # idle | offered | busy
+    offer_until: float = 0.0
+
+
+class CityIndex:
+    def __init__(self, stale_s: float = 5.0):
+        self.stale_s = stale_s
+        self.drivers: Dict[str, Driver] = {}
+        self.cells: Dict[Tuple[int, int], Set[str]] = {}
+
+    def upsert_ping(self, driver_id: str, lat: float, lng: float, ts: float):
+        old = self.drivers.get(driver_id)
+        if old:
+            prev = cell_key(old.lat, old.lng)
+            self.cells.get(prev, set()).discard(driver_id)
+        d = old or Driver(driver_id, lat, lng, ts)
+        d.lat, d.lng, d.ts = lat, lng, ts
+        self.drivers[driver_id] = d
+        self.cells.setdefault(cell_key(lat, lng), set()).add(driver_id)
+
+    def _fresh_idle(self, driver_id: str, now: float) -&gt; Optional[Driver]:
+        d = self.drivers.get(driver_id)
+        if not d or d.status != &quot;idle&quot; or now - d.ts &gt; self.stale_s:
+            return None
+        return d
+
+    def lease_nearest(self, pickup: Tuple[float, float], now: float, ttl_s: float = 8.0) -&gt; Optional[Driver]:
+        ranked: List[Tuple[float, Driver]] = []
+        for cell in neighbors(cell_key(*pickup), rings=2):
+            for did in list(self.cells.get(cell, ())):
+                d = self._fresh_idle(did, now)
+                if d:
+                    ranked.append((haversine_km(pickup, (d.lat, d.lng)), d))
+        ranked.sort(key=lambda x: x[0])
+        for _, d in ranked[:20]:
+            if d.status != &quot;idle&quot;:
+                continue
+            d.status = &quot;offered&quot;
+            d.version += 1
+            d.offer_until = now + ttl_s
+            return d
+        return None
+
+    def accept(self, driver_id: str, version: int, now: float) -&gt; bool:
+        d = self.drivers.get(driver_id)
+        if not d or d.version != version or d.status != &quot;offered&quot;:
+            return False
+        if now &gt; d.offer_until:
+            d.status = &quot;idle&quot;
+            return False
+        d.status = &quot;busy&quot;
+        return True
+
+    def expire_offers(self, now: float):
+        for d in self.drivers.values():
+            if d.status == &quot;offered&quot; and now &gt; d.offer_until:
+                d.status = &quot;idle&quot;</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashMap, HashSet};
+
+const CELL: f64 = 0.01;
+const STALE_S: f64 = 5.0;
+
+fn cell_key(lat: f64, lng: f64) -&gt; (i32, i32) {
+    ((lat / CELL) as i32, (lng / CELL) as i32)
+}
+
+fn neighbors(cell: (i32, i32), rings: i32) -&gt; Vec&lt;(i32, i32)&gt; {
+    let mut out = Vec::new();
+    for dx in -rings..=rings {
+        for dy in -rings..=rings {
+            out.push((cell.0 + dx, cell.1 + dy));
+        }
+    }
+    out
+}
+
+fn haversine_km(a: (f64, f64), b: (f64, f64)) -&gt; f64 {
+    let r = 6371.0;
+    let p1 = a.0.to_radians();
+    let p2 = b.0.to_radians();
+    let dphi = (b.0 - a.0).to_radians();
+    let dl = (b.1 - a.1).to_radians();
+    let h = (dphi / 2.0).sin().powi(2)
+        + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
+    2.0 * r * h.sqrt().asin()
+}
+
+#[derive(Clone)]
+struct Driver {
+    driver_id: String,
+    lat: f64,
+    lng: f64,
+    ts: f64,
+    version: u64,
+    status: &amp;&#x27;static str, // idle | offered | busy
+    offer_until: f64,
+}
+
+struct CityIndex {
+    drivers: HashMap&lt;String, Driver&gt;,
+    cells: HashMap&lt;(i32, i32), HashSet&lt;String&gt;&gt;,
+}
+
+impl CityIndex {
+    fn upsert_ping(&amp;mut self, driver_id: &amp;str, lat: f64, lng: f64, ts: f64) {
+        if let Some(old) = self.drivers.get(driver_id) {
+            let prev = cell_key(old.lat, old.lng);
+            if let Some(set) = self.cells.get_mut(&amp;prev) {
+                set.remove(driver_id);
+            }
+        }
+        let mut d = self.drivers.get(driver_id).cloned().unwrap_or(Driver {
+            driver_id: driver_id.into(),
+            lat, lng, ts, version: 0, status: &quot;idle&quot;, offer_until: 0.0,
+        });
+        d.lat = lat; d.lng = lng; d.ts = ts;
+        self.cells.entry(cell_key(lat, lng)).or_default().insert(driver_id.into());
+        self.drivers.insert(driver_id.into(), d);
+    }
+
+    fn lease_nearest(&amp;mut self, pickup: (f64, f64), now: f64, ttl_s: f64) -&gt; Option&lt;Driver&gt; {
+        let mut ranked = Vec::new();
+        for cell in neighbors(cell_key(pickup.0, pickup.1), 2) {
+            if let Some(ids) = self.cells.get(&amp;cell) {
+                for did in ids {
+                    if let Some(d) = self.drivers.get(did) {
+                        if d.status == &quot;idle&quot; &amp;&amp; now - d.ts &lt;= STALE_S {
+                            ranked.push((haversine_km(pickup, (d.lat, d.lng)), did.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        ranked.sort_by(|a, b| a.0.partial_cmp(&amp;b.0).unwrap());
+        for (_, did) in ranked.into_iter().take(20) {
+            if let Some(d) = self.drivers.get_mut(&amp;did) {
+                if d.status != &quot;idle&quot; { continue; }
+                d.status = &quot;offered&quot;;
+                d.version += 1;
+                d.offer_until = now + ttl_s;
+                return Some(d.clone());
+            }
+        }
+        None
+    }
+
+    fn accept(&amp;mut self, driver_id: &amp;str, version: u64, now: f64) -&gt; bool {
+        let d = match self.drivers.get_mut(driver_id) {
+            Some(d) =&gt; d,
+            None =&gt; return false,
+        };
+        if d.version != version || d.status != &quot;offered&quot; { return false; }
+        if now &gt; d.offer_until {
+            d.status = &quot;idle&quot;;
+            return false;
+        }
+        d.status = &quot;busy&quot;;
+        true
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Rider</span><p>POST /trips { pickup, dropoff } → trip matching</p></div><div class="seq-row"><span class="actor">Matcher</span><p>k-ring cells, rank idle drivers, lease version=N, push offer</p></div><div class="seq-row"><span class="actor">Driver</span><p>accept { trip_id, version: N } — CAS idle/offered → busy</p></div><div class="seq-row"><span class="actor">Trip svc</span><p>status=assigned; both apps subscribe to location of the pair</p></div><div class="seq-row"><span class="actor">Driver</span><p>arrived → start → complete → payment intent (idempotent)</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Sequential vs batch offers</strong>
+              <p>Sequential is fairer and simpler locking; batch matches faster in sparse supply.</p>
+            </div>
+            <div>
+              <strong>Haversine vs routed ETA</strong>
+              <p>Haversine is cheap for candidate gen; routing is required before the rider sees a number.</p>
+            </div>
+            <div>
+              <strong>City shard vs global</strong>
+              <p>City affinity keeps GPS local; airport metros that straddle cities need explicit overlay.</p>
+            </div>
+            <div>
+              <strong>SQL geo vs memory index</strong>
+              <p>SQL is durable but too slow for ping storms; rebuild memory from the last known ping stream.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Two matchers dispatch the same idle driver — rider A and rider B both see &quot;assigned.&quot;</li>
+            <li>Stale pings dispatch a driver who went offline in a tunnel two minutes ago.</li>
+            <li>Global GPS topic — one region&#x27;s rush hour drowns another city&#x27;s matcher.</li>
+            <li>Calling the routing engine for every map animation frame — ETA service melts at 6pm.</li>
+            <li>Offer timeout too long — supply looks busy while drivers stare at the screen.</li>
+            <li>Surge computed globally — a stadium event prices the whole city.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>Shared rides: inserting a second pickup onto an in-progress trip.</li>
+            <li>Driver incentives and guaranteed hourly vs marketplace pay.</li>
+            <li>Fraud: GPS spoofing, fake trips, payment chargebacks.</li>
+            <li>Multi-hop airport queueing and geofenced lot matching.</li>
+            <li>How would you add scheduled rides without starving the on-demand pool?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Shard by city, put driver locations in a cell index, and walk exclusive offers with a versioned lease so one car cannot be booked twice. Size ping QPS and say trips are a state machine with idempotent payment. Pooling and maps internals can stay as follow-ups.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../developer_agent/">← Design a Codex-like coding agent</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../hyperscaler/">Design a Google-like hyperscaler →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a Codex-like coding agent | System Design | Engineering Notes</title>
+  <meta name="description" content="A developer agent is a tool loop plus a sandbox — unbounded repo context and runaway tool calls will bankrupt you before the model does.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a Codex-like coding agent</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a Codex-like coding agent</h1>
+      <p class="problem-deck">A developer agent is a tool loop plus a sandbox — unbounded repo context and runaway tool calls will bankrupt you before the model does.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>IDE vs cloud, repo size, write access, network, latency vs quality.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Chat + tools (read/edit/test). Defer multi-agent orgs, fine-tuning.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>1M DAU, p50 20 tool steps/task, GPU vs CPU split.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Orchestrator, model gateway, sandbox workers, repo index.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>Agent loop</strong><p>Planning, tool policy, context packing, streaming.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Sandbox &amp; scale</strong><p>Isolation, timeouts, snapshot cache, GPU pooling.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Safety</strong><p>Secrets, destructive commands, user approval gates.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Cost, evals, follow-ups.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Spend the middle on the tool loop and isolation, not on prompt poetry.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d first lock where the agent runs. A local IDE plugin that reads the user&#x27;s tree is a different product from a cloud agent that clones the repo into a VM and opens a PR. Cloud is the interesting system: you own compute, isolation, and billing. I&#x27;d also ask whether the agent may run tests, install packages, or hit the network — those answers size the sandbox.</p>
+          <p>The core is not &quot;call an LLM.&quot; It is a durable session: user prompt in, a loop of model tokens → structured tool calls → sandbox results → packed context → next model step, until a stop condition. Streaming to the client is UX; persistence of the transcript and workspace snapshot is what makes reconnect and billing possible.</p>
+          <p>I&#x27;d sketch an orchestrator, a model gateway with token accounting, a repo index for retrieval, and a pool of sandboxed workers — then deep-dive context packing and tool policy, which is where these systems actually fail.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Local-only (user machine) or cloud workspace that can open PRs?</li>
+            <li>Max repo size and whether monorepos are in scope?</li>
+            <li>May the agent write files, run tests, and use the network?</li>
+            <li>Human-in-the-loop: auto-apply edits vs approval for every patch?</li>
+            <li>Latency target for first token vs time-to-green-tests?</li>
+            <li>Which models — one frontier model or a router (cheap + strong)?</li>
+            <li>Multi-file refactors spanning hours — resume after disconnect?</li>
+            <li>Enterprise: SSO, VPC, no training on customer code?</li>
+            <li>Languages / runtimes we must support in the sandbox?</li>
+            <li>Do we need evals / regression suites for agent quality?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: cloud coding agent, clone-or-sync workspace, read/search/edit/test tools, streaming UI.</li>
+            <li>In: sandbox isolation, step/time/token budgets, session resume, usage metering.</li>
+            <li>Out: training custom models, IDE pixel-perfect plugin, org-wide multi-agent swarms.</li>
+            <li>Defer: autonomous overnight jobs across hundreds of repos unless interviewer pushes.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Task session</strong>
+              <p>User starts a task against a repo/ref; agent streams thoughts, diffs, and command output.</p>
+            </div>
+            <div>
+              <strong>Tools</strong>
+              <p>Search, read file, apply patch, run tests/linters inside a sandbox with policy.</p>
+            </div>
+            <div>
+              <strong>Context</strong>
+              <p>Retrieve relevant files/symbols; pack a window that fits the model without dumping the repo.</p>
+            </div>
+            <div>
+              <strong>Resume</strong>
+              <p>Reconnect to an in-flight session; persist workspace snapshot + transcript.</p>
+            </div>
+            <div>
+              <strong>Handoff</strong>
+              <p>Produce a branch/PR or a local patch the user can apply.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>First token</strong>
+              <p>p50 &lt; 1s after prompt hits the orchestrator (warm model connection).</p>
+            </div>
+            <div>
+              <strong>Task duration</strong>
+              <p>Seconds to ~20 min typical; hard cap per session (e.g. 45 min wall, 200 tool steps).</p>
+            </div>
+            <div>
+              <strong>Isolation</strong>
+              <p>Untrusted code must not escape the sandbox or steal other tenants&#x27; secrets.</p>
+            </div>
+            <div>
+              <strong>Cost</strong>
+              <p>Token + sandbox-minute budgets per user/org; kill runaway loops.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Sessions</strong>
+              <p>1M DAU × 3 tasks/day × 8 min avg = ~167K concurrent sessions at peak (assume 8h spread, 3× peak).</p>
+            </div>
+            <div>
+              <strong>Model QPS</strong>
+              <p>Each session ~1 model call / 8s → ~20K inflight generations; GPU fleet sized for that plus queue.</p>
+            </div>
+            <div>
+              <strong>Context</strong>
+              <p>Avg 32K tokens in / 2K out per step × 20 steps → ~640K in-tokens/task; retrieval must beat stuffing the repo.</p>
+            </div>
+            <div>
+              <strong>Sandbox</strong>
+              <p>167K sessions cannot each own a fat VM — pool warm snapshots, recycle after idle.</p>
+            </div>
+            <div>
+              <strong>Index</strong>
+              <p>10M repos × incremental embeddings/AST; shard by repo_id, rebuild on push.</p>
+            </div>
+            <div>
+              <strong>Storage</strong>
+              <p>Transcripts + diffs + workspace snapshots (copy-on-write layers) for 7–30 days.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/sessions
+  Body: { repo, ref, prompt, tools: [&#x27;read&#x27;,&#x27;search&#x27;,&#x27;edit&#x27;,&#x27;test&#x27;] }
+  Response 201: { session_id, stream_url }
+
+-- SSE / WebSocket events:
+← { type: &#x27;token&#x27;, text }
+← { type: &#x27;tool_call&#x27;, call_id, name, args }
+← { type: &#x27;tool_result&#x27;, call_id, exit_code, truncated_output }
+← { type: &#x27;diff&#x27;, path, patch }
+← { type: &#x27;need_approval&#x27;, action, reason }
+→ { type: &#x27;approve&#x27;, action_id } | { type: &#x27;reject&#x27; }
+← { type: &#x27;done&#x27;, pr_url? }
+
+POST /api/v1/sessions/{id}/cancel
+GET  /api/v1/sessions/{id}   → { status, steps[], usage }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE sessions (
+  session_id     BIGINT PRIMARY KEY,
+  user_id        BIGINT NOT NULL,
+  repo           VARCHAR(512),
+  git_ref        VARCHAR(128),
+  status         VARCHAR(16),  -- running|waiting_approval|done|failed|cancelled
+  sandbox_id     VARCHAR(64),
+  token_in       BIGINT DEFAULT 0,
+  token_out      BIGINT DEFAULT 0,
+  created_at     TIMESTAMP,
+  ended_at       TIMESTAMP
+);
+
+CREATE TABLE session_steps (
+  session_id     BIGINT,
+  step_no        INT,
+  kind           VARCHAR(16),  -- model|tool|approval
+  payload        JSONB,
+  created_at     TIMESTAMP,
+  PRIMARY KEY (session_id, step_no)
+);
+
+CREATE TABLE repo_index_meta (
+  repo           VARCHAR(512),
+  commit_sha     CHAR(40),
+  indexed_at     TIMESTAMP,
+  PRIMARY KEY (repo, commit_sha)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>The orchestrator owns session state. On start it allocates a sandbox from a warm pool (pre-baked images per language: Python/Node/JVM/etc.), checks out the requested commit, and attaches a network policy. A model gateway streams completions with tool-call JSON. The orchestrator validates each call against a allowlist (path prefixes, command binary allowlist, env without secrets unless injected as scoped tokens), executes in the sandbox, truncates output, appends to the transcript, and packs the next prompt.</p>
+          <p>Repo understanding is retrieval, not &quot;send the whole tree.&quot; A background indexer builds symbol + embedding indexes per commit. At task start the agent searches (ripgrep-in-sandbox plus vector/symbol search) and pins a working set. Context packing drops stale tool output, summarizes old steps, and always keeps the user prompt + latest diffs.</p>
+          <p>Streaming is a fan-out from orchestrator to the client; the source of truth is the step log so a refresh can replay. Long jobs checkpoint the workspace as a copy-on-write snapshot so a crashed worker can resume. Billing meters tokens at the gateway and sandbox-minutes at the worker pool; both have hard kill switches.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node">Orchestrator</span><b>&rarr;</b><span class="node accent">Model GW</span></div><figcaption>Session control plane; model is a stateless token factory</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Model emits tool_call</span><span class="node accent">Policy: allowlist, path jail, timeout, output cap</span><span class="node">Sandbox executes</span><span class="node accent">Pack truncated result into next context window</span></div><figcaption>The agent loop that actually has to be production-grade</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Git push</span><b>&rarr;</b><span class="node">Indexer</span><b>&rarr;</b><span class="node accent">Symbols + embeddings</span><b>&rarr;</b><span class="node">Search tool</span></div><figcaption>Index lags HEAD; sandbox always has the real files</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Tool policy is the difference between a demo and a product. File tools are jailed to the workspace. Shell is not a raw bash pipe — it is an allowlisted runner (pytest, cargo test, linters) with CPU/memory/time cgroups. Network is default-deny except package registries and the user&#x27;s git remote. Destructive git force-push and credential files are blocked or require explicit approval events.</p>
+          <p>Context overflow is the silent quality killer. A naive loop concatenates every tool result until the model degrades or the bill explodes. I&#x27;d keep a sliding window: always include system policy + user goal + current file map; summarize completed steps; store full logs in object storage for debug, not in the prompt. Retrieval should be re-run when the agent changes directories or the task drifts.</p>
+          <p>Sandbox pooling: cold VMs are too slow for first-token UX. Keep a queue of snapshots with common toolchains. After a task, either recycle (if the tree is dirty, discard the layer) or snapshot for resume. Multi-tenant isolation: separate kernel/gVisor/Firecracker-style VMs, not shared Docker-with-hope. Secrets: never bake GitHub tokens into the prompt; inject short-lived tokens into the sandbox env and audit their use.</p>
+          <p>Model routing: cheap model for search/planning, stronger model for patches. Queue fairness so one org cannot starve GPUs. Cache prompt prefixes (policy + repo map) on the inference side when the vendor supports it.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Tool loop with policy and context packing</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Optional
+
+MAX_STEPS = 200
+MAX_TOOL_CHARS = 8_000
+ALLOWED_TOOLS = {&quot;read&quot;, &quot;search&quot;, &quot;edit&quot;, &quot;test&quot;}
+
+
+@dataclass
+class Step:
+    kind: str
+    content: str
+
+
+@dataclass
+class Session:
+    goal: str
+    steps: List[Step] = field(default_factory=list)
+    tokens_in: int = 0
+
+
+def pack_context(session: Session, budget_chars: int = 80_000) -&gt; str:
+    &quot;&quot;&quot;Keep the goal and recent steps; drop old tool dumps first.&quot;&quot;&quot;
+    parts = [f&quot;GOAL:\n{session.goal}&quot;]
+    used = len(parts[0])
+    kept: List[str] = []
+    for step in reversed(session.steps):
+        chunk = f&quot;{step.kind.upper()}:\n{step.content}&quot;
+        if used + len(chunk) &gt; budget_chars:
+            break
+        kept.append(chunk)
+        used += len(chunk)
+    parts.extend(reversed(kept))
+    return &quot;\n\n&quot;.join(parts)
+
+
+def authorize(name: str, args: Dict) -&gt; Optional[str]:
+    if name not in ALLOWED_TOOLS:
+        return f&quot;tool {name} is not allowed&quot;
+    path = str(args.get(&quot;path&quot;, &quot;&quot;))
+    if path.startswith(&quot;/&quot;) or &quot;..&quot; in path.split(&quot;/&quot;):
+        return &quot;path escapes the workspace&quot;
+    return None
+
+
+class AgentLoop:
+    def __init__(self, model, sandbox: Callable[[str, Dict], str]):
+        self.model = model
+        self.sandbox = sandbox
+
+    def run(self, session: Session) -&gt; Session:
+        for _ in range(MAX_STEPS):
+            prompt = pack_context(session)
+            event = self.model.complete(prompt)  # {type, name?, args?, text?}
+            if event[&quot;type&quot;] == &quot;stop&quot;:
+                session.steps.append(Step(&quot;model&quot;, event.get(&quot;text&quot;, &quot;&quot;)))
+                return session
+            if event[&quot;type&quot;] != &quot;tool&quot;:
+                continue
+            err = authorize(event[&quot;name&quot;], event.get(&quot;args&quot;) or {})
+            if err:
+                session.steps.append(Step(&quot;tool&quot;, f&quot;denied: {err}&quot;))
+                continue
+            raw = self.sandbox(event[&quot;name&quot;], event[&quot;args&quot;])
+            session.steps.append(Step(&quot;tool&quot;, raw[:MAX_TOOL_CHARS]))
+        session.steps.append(Step(&quot;model&quot;, &quot;stopped: step budget&quot;))
+        return session</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+const MAX_STEPS: usize = 200;
+const MAX_TOOL_CHARS: usize = 8_000;
+const CTX_BUDGET: usize = 80_000;
+
+struct Step {
+    kind: &amp;&#x27;static str,
+    content: String,
+}
+
+struct Session {
+    goal: String,
+    steps: Vec&lt;Step&gt;,
+}
+
+fn pack_context(session: &amp;Session) -&gt; String {
+    let mut parts = vec![format!(&quot;GOAL:\n{}&quot;, session.goal)];
+    let mut used = parts[0].len();
+    let mut kept = Vec::new();
+    for step in session.steps.iter().rev() {
+        let chunk = format!(&quot;{}:\n{}&quot;, step.kind.to_uppercase(), step.content);
+        if used + chunk.len() &gt; CTX_BUDGET {
+            break;
+        }
+        used += chunk.len();
+        kept.push(chunk);
+    }
+    kept.reverse();
+    parts.extend(kept);
+    parts.join(&quot;\n\n&quot;)
+}
+
+fn authorize(name: &amp;str, args: &amp;HashMap&lt;String, String&gt;) -&gt; Option&lt;String&gt; {
+    match name {
+        &quot;read&quot; | &quot;search&quot; | &quot;edit&quot; | &quot;test&quot; =&gt; {}
+        other =&gt; return Some(format!(&quot;tool {other} is not allowed&quot;)),
+    }
+    if let Some(path) = args.get(&quot;path&quot;) {
+        if path.starts_with(&#x27;/&#x27;) || path.split(&#x27;/&#x27;).any(|p| p == &quot;..&quot;) {
+            return Some(&quot;path escapes the workspace&quot;.into());
+        }
+    }
+    None
+}
+
+struct AgentLoop&lt;M, S&gt;
+where
+    M: Fn(&amp;str) -&gt; HashMap&lt;String, String&gt;,
+    S: Fn(&amp;str, &amp;HashMap&lt;String, String&gt;) -&gt; String,
+{
+    model: M,
+    sandbox: S,
+}
+
+impl&lt;M, S&gt; AgentLoop&lt;M, S&gt;
+where
+    M: Fn(&amp;str) -&gt; HashMap&lt;String, String&gt;,
+    S: Fn(&amp;str, &amp;HashMap&lt;String, String&gt;) -&gt; String,
+{
+    fn run(&amp;self, session: &amp;mut Session) {
+        for _ in 0..MAX_STEPS {
+            let event = (self.model)(&amp;pack_context(session));
+            if event.get(&quot;type&quot;).map(|s| s.as_str()) == Some(&quot;stop&quot;) {
+                session.steps.push(Step {
+                    kind: &quot;model&quot;,
+                    content: event.get(&quot;text&quot;).cloned().unwrap_or_default(),
+                });
+                return;
+            }
+            let name = event.get(&quot;name&quot;).map(|s| s.as_str()).unwrap_or(&quot;&quot;);
+            let args = event.clone();
+            if let Some(err) = authorize(name, &amp;args) {
+                session.steps.push(Step { kind: &quot;tool&quot;, content: format!(&quot;denied: {err}&quot;) });
+                continue;
+            }
+            let mut raw = (self.sandbox)(name, &amp;args);
+            raw.truncate(MAX_TOOL_CHARS);
+            session.steps.push(Step { kind: &quot;tool&quot;, content: raw });
+        }
+        session.steps.push(Step { kind: &quot;model&quot;, content: &quot;stopped: step budget&quot;.into() });
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>POST /sessions { repo, prompt } — opens SSE</p></div><div class="seq-row"><span class="actor">Orchestrator</span><p>Lease warm sandbox, checkout ref, load index hints</p></div><div class="seq-row"><span class="actor">Model GW</span><p>Streams tokens + tool_call {name: search, args}</p></div><div class="seq-row"><span class="actor">Policy</span><p>Allow search; sandbox returns truncated hits</p></div><div class="seq-row"><span class="actor">Orchestrator</span><p>Pack context, next model step; emit diffs; optional PR</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Local vs cloud sandbox</strong>
+              <p>Local is faster and cheaper isolation-wise; cloud is the only way to standardize runtimes and bill usage.</p>
+            </div>
+            <div>
+              <strong>Auto-apply vs approve</strong>
+              <p>Auto-apply feels like Codex; approval is safer for prod repos and slower for flow.</p>
+            </div>
+            <div>
+              <strong>One fat model vs router</strong>
+              <p>Router saves cost on search steps; adds failure modes when the cheap model plans badly.</p>
+            </div>
+            <div>
+              <strong>Full clone vs sparse checkout</strong>
+              <p>Sparse is faster for monorepos; agents then miss files they never fetched.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Unbounded tool loop — agent retries failing tests until the token budget is a rounding error.</li>
+            <li>Prompt stuffed with the whole monorepo — latency and quality collapse together.</li>
+            <li>Shared-kernel containers — one tenant reads another&#x27;s checkout or cloud metadata.</li>
+            <li>Secrets in the prompt or in world-readable sandbox files — leaked in logs and eval traces.</li>
+            <li>Index lagging HEAD — agent edits based on stale symbols while tests run on new code.</li>
+            <li>GPU queue unfairness — a few long sessions starve interactive users.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you run overnight repo-wide migrations with per-PR batching?</li>
+            <li>Multi-agent: planner vs implementer vs reviewer without thrashing the tree.</li>
+            <li>Enterprise VPC: model stays in-region, no code used for training.</li>
+            <li>Eval harness: frozen tasks with hidden tests so you do not overfit demos.</li>
+            <li>IDE plugin that shares the same orchestrator protocol as the cloud agent.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Draw a durable session loop (model ↔ policy ↔ sandbox), explain retrieval + context packing instead of dumping the repo, and size GPU plus warm sandbox pools. Call out step/token kill switches and path/command allowlists. Fine-tuning and multi-agent orgs can stay as follow-ups.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../video_conferencing/">← Design a video conferencing system</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../ride_sharing/">Design a ride-sharing system →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

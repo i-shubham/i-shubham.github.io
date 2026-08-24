@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a Google-like hyperscaler | System Design | Engineering Notes</title>
+  <meta name="description" content="A hyperscaler is a cluster OS plus multi-tenant quota — bin packing and failure domains matter more than a prettier Kubernetes YAML.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a Google-like hyperscaler</p>
+      <p class="eyebrow">System Design · Hard · ~60 min</p>
+      <h1>Design a Google-like hyperscaler</h1>
+      <p class="problem-deck">A hyperscaler is a cluster OS plus multi-tenant quota — bin packing and failure domains matter more than a prettier Kubernetes YAML.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>IaaS vs Borg-like jobs, regions, GPU, SLA, who the tenant is.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Compute + scheduler + identity. Defer global LB product UI.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>Machines, jobs/sec, control-plane size.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Regions, cells, Borgmaster analog, agents, network, storage attach.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>Scheduler</strong><p>Bin packing, preemption, gang scheduling, queueing.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Multi-tenant</strong><p>Quota, isolation, noisy neighbor, hardware failure domains.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Control plane</strong><p>Paxos/etcd, cell blast radius, upgrades.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Follow-ups — Borg vs K8s, TPU pods.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Interviewers want cells + scheduling, not a list of GCP product names.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d ask whether we are designing public IaaS (VMs, disks, VPC like GCE) or an internal cluster OS (Borg/Omega/Kubernetes: jobs, tasks, priorities). The interesting Google-shaped answer is usually both layers: a fabric of machines grouped into <em>cells</em>, a control plane that packs work onto those machines, and product APIs on top. I would not try to design Gmail, Search, and Cloud in one hour.</p>
+          <p>The unit of isolation is the cell: thousands to tens of thousands of machines with one scheduler. Regions contain many cells so a control-plane outage does not take a continent. Tenants get quota (CPU, RAM, disk, GPU, IP) and priorities so batch work yields to serving. Hardware dies constantly — the scheduler, not the app, is responsible for rescheduling tasks off dead nodes.</p>
+          <p>I&#x27;d draw region → cell → machine agent, then deep-dive placement (bin packing + constraints) and how the control plane stays available without becoming a global singleton.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Internal Borg-like jobs, public VM/GKE APIs, or both?</li>
+            <li>How many machines per cell and cells per region?</li>
+            <li>Workloads: latency-sensitive serving vs batch vs ML training?</li>
+            <li>Preemption allowed for low-priority jobs?</li>
+            <li>GPU/TPU pools and gang scheduling (all-or-nothing workers)?</li>
+            <li>Network: tenant VPCs, or a flat datacenter fabric with ACLs?</li>
+            <li>Persistent disks and object storage in or out of scope?</li>
+            <li>Live migration vs kill-and-reschedule on maintenance?</li>
+            <li>Multi-region failover of tenant workloads — our job or theirs?</li>
+            <li>Who owns kernel/runtime: VMs, gVisor, or bare containers?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: multi-tenant compute fabric, cell-based control plane, scheduler with quota and preemption.</li>
+            <li>In: machine agents, health, reschedule on failure, basic identity/IAM for APIs.</li>
+            <li>Out: designing Search ranking, a full SDN from scratch, customer billing UI.</li>
+            <li>Defer: global anycast load balancer product, custom TPU compiler stack.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Admit work</strong>
+              <p>Tenant submits a job/VM spec: image, CPU/RAM, count, constraints, priority.</p>
+            </div>
+            <div>
+              <strong>Place</strong>
+              <p>Scheduler packs tasks onto machines respecting capacity, affinity, and failure domains.</p>
+            </div>
+            <div>
+              <strong>Run</strong>
+              <p>Agent pulls image, starts isolation boundary, reports health and resource use.</p>
+            </div>
+            <div>
+              <strong>Repair</strong>
+              <p>Dead machine or unhealthy task → reschedule elsewhere; drain for maintenance.</p>
+            </div>
+            <div>
+              <strong>Quota</strong>
+              <p>Reject or queue when tenant exceeds CPU/RAM/GPU/disk in a region.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cell size</strong>
+              <p>~10K machines/cell so the scheduler&#x27;s in-memory view stays tractable.</p>
+            </div>
+            <div>
+              <strong>Placement latency</strong>
+              <p>Serving tasks: seconds; batch can queue minutes when the cell is full.</p>
+            </div>
+            <div>
+              <strong>Control plane</strong>
+              <p>Cell master highly available (Paxos/Raft); no single global Borgmaster.</p>
+            </div>
+            <div>
+              <strong>Utilization</strong>
+              <p>Bin packing + overcommit on reclaimable batch; protect serving SLOs.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Fleet</strong>
+              <p>1M machines globally → 100 cells of 10K; ~20 regions × 5 cells.</p>
+            </div>
+            <div>
+              <strong>Scheduling rate</strong>
+              <p>10K machines × 20 tasks churn/hour ≈ 55 tasks/sec/cell peak; burst higher on deploys.</p>
+            </div>
+            <div>
+              <strong>State</strong>
+              <p>Per cell: machine inventory + task objects. Millions of keys, not billions — keep it in the master + watch cache.</p>
+            </div>
+            <div>
+              <strong>Agent QPS</strong>
+              <p>Heartbeat every 5–10s × 10K ≈ 1–2K updates/sec/cell; batch and compress.</p>
+            </div>
+            <div>
+              <strong>Images</strong>
+              <p>Pull-through caches per rack/row or the fabric becomes a disk storm at deploy.</p>
+            </div>
+            <div>
+              <strong>Network</strong>
+              <p>Clos fabric; east-west dominates. Scheduler must know ToR/row for spreading.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/jobs
+  Body: {
+    tenant_id, name, priority,
+    task: { cpu_milli, mem_mb, gpu, image, replicas },
+    constraints: { region, avoid_same_rack: true }
+  }
+  Response 201: { job_id, status: &#x27;pending&#x27; }
+
+GET  /api/v1/jobs/{id}
+PATCH /api/v1/jobs/{id}   { replicas: 30 }   -- rolling scale
+POST /api/v1/jobs/{id}:cancel
+
+-- Machine agent (internal):
+POST /internal/cells/{cell}/heartbeat
+  Body: { machine_id, allocs[], cpu_free, mem_free, failed_disks[] }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">-- Durable cell state (actually Paxos-backed KV; SQL shape for the board)
+CREATE TABLE machines (
+  machine_id     VARCHAR(64) PRIMARY KEY,
+  cell_id        VARCHAR(32) NOT NULL,
+  rack           VARCHAR(32) NOT NULL,
+  cpu_milli      INT NOT NULL,
+  mem_mb         INT NOT NULL,
+  gpu            INT DEFAULT 0,
+  status         VARCHAR(16)  -- ready|drain|dead
+);
+
+CREATE TABLE jobs (
+  job_id         BIGINT PRIMARY KEY,
+  tenant_id      BIGINT NOT NULL,
+  cell_id        VARCHAR(32),
+  priority       INT NOT NULL,
+  spec           JSONB NOT NULL,
+  status         VARCHAR(16)
+);
+
+CREATE TABLE tasks (
+  task_id        BIGINT PRIMARY KEY,
+  job_id         BIGINT NOT NULL,
+  machine_id     VARCHAR(64),
+  cpu_milli      INT,
+  mem_mb         INT,
+  status         VARCHAR(16)  -- pending|running|preempted|failed
+);
+
+CREATE TABLE quotas (
+  tenant_id      BIGINT,
+  region         VARCHAR(32),
+  cpu_milli      BIGINT,
+  mem_mb         BIGINT,
+  PRIMARY KEY (tenant_id, region)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Physical: buildings → rows → racks → machines. Logical: region (latency/legal) → cell (scheduler blast radius) → pool (CPU vs GPU SKU). Tenants talk to a regional frontend that picks a cell with matching SKU and leftover quota, then the cell master owns placement. This is the Borg lesson: do not run one scheduler over a million machines.</p>
+          <p>The cell master holds the source of truth (replicated log). A scheduler process (can be the master or a tightly coupled replica) scores feasible machines: remaining resources, spread across racks, affinity to disks, GPU topology. It writes task→machine bindings atomically. Machine agents apply bindings, run the sandbox (VM or container), and heartbeat. If heartbeat is lost, tasks are marked unknown then rescheduled after a timeout — split-brain is avoided by fencing (power/API lock the old machine) before restarting a task that must be unique.</p>
+          <p>Priorities: serving &gt; production batch &gt; best-effort. Best-effort fills holes and is preempted when serving needs the capacity. Quota is admitted at submit time; bursting uses reclaimable leftover. Identity: every API call is tenant-scoped; agents get machine credentials, not tenant keys.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">API frontend</span><b>&rarr;</b><span class="node">Quota</span><b>&rarr;</b><span class="node accent">Cell master</span><b>&rarr;</b><span class="node">Agent</span></div><figcaption>Work never skips quota or the cell boundary</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Job spec → pending tasks</span><span class="node accent">Feasible machines: CPU/RAM/GPU + constraints</span><span class="node">Score: bin-pack tightness, rack spread, preemption cost</span><span class="node accent">Bind atomically; agent starts; heartbeat</span></div><figcaption>Scheduler loop inside one cell</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Rack</span><b>&rarr;</b><span class="node">Row</span><b>&rarr;</b><span class="node accent">Cell</span><b>&rarr;</b><span class="node">Region</span></div><figcaption>Failure domains the placer must spread across</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Bin packing: first-fit decreasing is a fine interview default — sort tasks largest-first, place on the tightest machine that fits to leave contiguous holes for the next big GPU job. Scoring should penalize packing two replicas of the same serving job onto one rack (correlated power/ToR failure). GPU jobs often need gang scheduling: do not start 7 of 8 workers; hold until a full set of machines is free or timeout to a queue.</p>
+          <p>Control plane HA: 5 replicas with Paxos/Raft, leader does writes. Read-only schedulers can work off a slightly stale cache only for scoring, but binds go through the log. Upgrades: drain a fraction of agents, never &quot;restart all kubelets.&quot; Cell too large → scheduler latency and &quot;one bug pages 10K machines.&quot; Cell too small → stranded GPU inventory and cross-cell scheduling complexity. Quote ~5–20K machines as the working range.</p>
+          <p>Noisy neighbors: CPU hard cgroups, memory without swap for serving, disk IO tokens, network isolation (VPC overlay or hypervisor). Overcommit only memory/CPU on best-effort. Maintenance: mark machine draining, migrate or kill-and-reschedule by priority. Disk-attached VMs need the storage control plane to reattach or to have used replicated disk so the new machine can mount.</p>
+          <p>Multi-region: the hyperscaler places <em>in a region the tenant chose</em>. Global products (Anycast VIP, Spanner-like DBs) are separate systems that consume this fabric. Do not pretend one scheduler places a job &quot;on Earth.&quot;</p>
+        </section>
+        <section class="problem-section">
+          <h2>Cell scheduler: feasibility, spread, preemption</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
+
+
+@dataclass
+class Machine:
+    machine_id: str
+    rack: str
+    cpu_free: int
+    mem_free: int
+    gpu_free: int
+    jobs_on_rack: Set[str] = field(default_factory=set)
+
+
+@dataclass
+class Task:
+    task_id: str
+    job_id: str
+    cpu: int
+    mem: int
+    gpu: int
+    priority: int  # higher wins
+    avoid_racks: Set[str] = field(default_factory=set)
+
+
+def score(m: Machine, t: Task) -&gt; float:
+    # Tight fit preferred (leave fewer stranded leftovers) minus rack clash.
+    leftover = (m.cpu_free - t.cpu) + (m.mem_free - t.mem) * 0.01
+    clash = 50.0 if t.job_id in m.jobs_on_rack else 0.0
+    return leftover + clash
+
+
+class CellScheduler:
+    def __init__(self, machines: List[Machine]):
+        self.machines: Dict[str, Machine] = {m.machine_id: m for m in machines}
+        self.placement: Dict[str, str] = {}  # task → machine
+
+    def place(self, task: Task, allow_preempt: bool = True) -&gt; Optional[str]:
+        feasible = [
+            m for m in self.machines.values()
+            if m.cpu_free &gt;= task.cpu and m.mem_free &gt;= task.mem
+            and m.gpu_free &gt;= task.gpu and m.rack not in task.avoid_racks
+        ]
+        if feasible:
+            m = min(feasible, key=lambda x: score(x, task))
+            self._bind(m, task)
+            return m.machine_id
+        if not allow_preempt:
+            return None
+        # Interview sketch: pick a machine that would fit if we dropped
+        # lower-priority tasks (real Borg scores preemption cost).
+        return None
+
+    def _bind(self, m: Machine, task: Task):
+        m.cpu_free -= task.cpu
+        m.mem_free -= task.mem
+        m.gpu_free -= task.gpu
+        m.jobs_on_rack.add(task.job_id)
+        self.placement[task.task_id] = m.machine_id
+
+    def place_gang(self, tasks: List[Task]) -&gt; bool:
+        &quot;&quot;&quot;All-or-nothing for distributed training workers.&quot;&quot;&quot;
+        snapshot = {
+            mid: (m.cpu_free, m.mem_free, m.gpu_free, set(m.jobs_on_rack))
+            for mid, m in self.machines.items()
+        }
+        bound: List[Task] = []
+        for t in tasks:
+            if not self.place(t, allow_preempt=False):
+                for b in bound:
+                    self._rollback(b, snapshot)
+                return False
+            bound.append(t)
+        return True
+
+    def _rollback(self, task: Task, snapshot):
+        mid = self.placement.pop(task.task_id)
+        m = self.machines[mid]
+        m.cpu_free, m.mem_free, m.gpu_free, jobs = snapshot[mid]
+        m.jobs_on_rack = set(jobs)</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashMap, HashSet};
+
+struct Machine {
+    machine_id: String,
+    rack: String,
+    cpu_free: i32,
+    mem_free: i32,
+    gpu_free: i32,
+    jobs_on_rack: HashSet&lt;String&gt;,
+}
+
+struct Task {
+    task_id: String,
+    job_id: String,
+    cpu: i32,
+    mem: i32,
+    gpu: i32,
+    avoid_racks: HashSet&lt;String&gt;,
+}
+
+fn score(m: &amp;Machine, t: &amp;Task) -&gt; f64 {
+    let leftover = (m.cpu_free - t.cpu) as f64 + (m.mem_free - t.mem) as f64 * 0.01;
+    let clash = if m.jobs_on_rack.contains(&amp;t.job_id) { 50.0 } else { 0.0 };
+    leftover + clash
+}
+
+struct CellScheduler {
+    machines: HashMap&lt;String, Machine&gt;,
+    placement: HashMap&lt;String, String&gt;,
+}
+
+impl CellScheduler {
+    fn place(&amp;mut self, task: &amp;Task) -&gt; Option&lt;String&gt; {
+        let mut best_id: Option&lt;String&gt; = None;
+        let mut best_s = f64::MAX;
+        for m in self.machines.values() {
+            if m.cpu_free &lt; task.cpu || m.mem_free &lt; task.mem || m.gpu_free &lt; task.gpu {
+                continue;
+            }
+            if task.avoid_racks.contains(&amp;m.rack) {
+                continue;
+            }
+            let s = score(m, task);
+            if s &lt; best_s {
+                best_s = s;
+                best_id = Some(m.machine_id.clone());
+            }
+        }
+        let mid = best_id?;
+        self.bind(&amp;mid, task);
+        Some(mid)
+    }
+
+    fn bind(&amp;mut self, machine_id: &amp;str, task: &amp;Task) {
+        let m = self.machines.get_mut(machine_id).unwrap();
+        m.cpu_free -= task.cpu;
+        m.mem_free -= task.mem;
+        m.gpu_free -= task.gpu;
+        m.jobs_on_rack.insert(task.job_id.clone());
+        self.placement.insert(task.task_id.clone(), machine_id.to_string());
+    }
+
+    fn place_gang(&amp;mut self, tasks: &amp;[Task]) -&gt; bool {
+        let snap: Vec&lt;(String, i32, i32, i32, HashSet&lt;String&gt;)&gt; = self
+            .machines
+            .values()
+            .map(|m| {
+                (m.machine_id.clone(), m.cpu_free, m.mem_free, m.gpu_free, m.jobs_on_rack.clone())
+            })
+            .collect();
+        let mut bound = Vec::new();
+        for t in tasks {
+            if self.place(t).is_none() {
+                self.rollback(&amp;bound, &amp;snap);
+                return false;
+            }
+            bound.push(t.task_id.clone());
+        }
+        true
+    }
+
+    fn rollback(&amp;mut self, bound: &amp;[String], snap: &amp;[(String, i32, i32, i32, HashSet&lt;String&gt;)]) {
+        for tid in bound {
+            self.placement.remove(tid);
+        }
+        for (id, cpu, mem, gpu, jobs) in snap {
+            if let Some(m) = self.machines.get_mut(id) {
+                m.cpu_free = *cpu;
+                m.mem_free = *mem;
+                m.gpu_free = *gpu;
+                m.jobs_on_rack = jobs.clone();
+            }
+        }
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Tenant</span><p>POST /jobs { replicas: 12, cpu, image, region }</p></div><div class="seq-row"><span class="actor">Frontend</span><p>Check IAM + regional quota; pick a cell with SKU headroom</p></div><div class="seq-row"><span class="actor">Cell master</span><p>Log job; scheduler binds tasks across racks</p></div><div class="seq-row"><span class="actor">Agents</span><p>Pull image via cache, start sandbox, heartbeat running</p></div><div class="seq-row"><span class="actor">Repair</span><p>Lost heartbeat → fence machine → reschedule tasks</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Cell size</strong>
+              <p>Larger cells pack better and waste less GPU; smaller cells limit blast radius and scheduler lag.</p>
+            </div>
+            <div>
+              <strong>VM vs container</strong>
+              <p>VMs isolate noisy neighbors and custom kernels; containers pack denser for internal serving.</p>
+            </div>
+            <div>
+              <strong>Preempt vs queue</strong>
+              <p>Preempting batch raises serving utilization; too aggressive and ML jobs never finish.</p>
+            </div>
+            <div>
+              <strong>Live migrate vs reschedule</strong>
+              <p>Migration is kinder to stateful VMs; reschedule is how Borg kept serving jobs simple.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>One global scheduler — control-plane latency and correlated outages across the fleet.</li>
+            <li>All replicas of a serving job land on one rack because the scorer ignored failure domains.</li>
+            <li>Image pull storm after a popular deploy saturates ToR links.</li>
+            <li>Best-effort overcommit evicts serving tasks under memory spikes (noisy neighbor).</li>
+            <li>Reschedule without fencing — two copies of a stateful task both think they own the disk.</li>
+            <li>Quota only at VM create, not at GPU — one tenant starves the TPU cell.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How does GKE sit on this fabric vs raw VMs?</li>
+            <li>Design a regional load balancer / Anycast VIP that talks to cell backends.</li>
+            <li>Persistent disk: attach, snapshot, live migrate with the VM.</li>
+            <li>Power and carbon-aware scheduling across buildings.</li>
+            <li>Multi-cell scheduling for jobs that cannot fit in one cell.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Split the fleet into regional cells, put a replicated master + scheduler in each, and explain bin packing with rack spread, quota, and preemption. Show repair as fence-then-reschedule. Naming every Google product is optional; getting blast radius and placement right is not.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../ride_sharing/">← Design a ride-sharing system</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>
