@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a live video streaming platform | System Design | Engineering Notes</title>
+  <meta name="description" content="YouTube Live style streaming is ingest plus transcode plus CDN — and a celebrity going live will melt any single-region plan.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a live video streaming platform</p>
+      <p class="eyebrow">System Design · Hard · ~60 min · Google-style realtime</p>
+      <h1>Design a live video streaming platform</h1>
+      <p class="problem-deck">YouTube Live style streaming is ingest plus transcode plus CDN — and a celebrity going live will melt any single-region plan.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Latency target, VOD archive, chat, max concurrent viewers.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Ingest, ABR packaging, CDN delivery. Defer moderation UI.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>1M concurrent viewers on a hot stream, 5 Mbps avg bitrate.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>RTMP/WebRTC ingest → transcoder → packager → CDN → player.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>Latency &amp; ABR</strong><p>HLS vs LL-HLS vs DASH, segment size, GOP alignment.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Scale hot streams</strong><p>Edge fan-out, origin shields, regional POPs.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Chat &amp; health</strong><p>Realtime chat side-channel, stream health monitoring.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>DVR, recording, failure modes.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Spend most of the middle on the media pipeline, not CRUD around streams.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d nail the latency SLA first. Traditional HLS with 6-second segments sits around 20–30 seconds glass-to-glass — fine for concerts, unacceptable for auctions or sports betting. Low-latency HLS or WebRTC-to-CDN hybrids target 2–5 seconds. That choice changes ingest protocol, segmenter settings, and CDN config.</p>
+          <p>The pipeline is asymmetric: one publisher (or a small multi-cam set) and millions of viewers. So we optimize ingest reliability and encode quality on the left, and massive fan-out on the right. Viewers never talk to the transcoder directly — they pull segments from a CDN, ideally with an origin shield so hot streams do not stampede the packager.</p>
+          <p>I&#x27;d sketch RTMP/SRT ingest → live transcoder ladder → CMAF/HLS packager → CDN, then deep-dive adaptive bitrate and how we survive a 1M-viewer spike when a celebrity goes live.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Target glass-to-glass latency (30s classic vs &lt;5s low-latency)?</li>
+            <li>One-to-many broadcast only, or interactive co-hosts?</li>
+            <li>Do we archive to VOD automatically?</li>
+            <li>Max concurrent viewers on a single stream?</li>
+            <li>Geographic distribution of audience?</li>
+            <li>Is live chat in scope?</li>
+            <li>DRM / signed URLs for paid streams?</li>
+            <li>Mobile uplink quality — assume unstable publisher networks?</li>
+            <li>Multi-bitrate ladder requirements (240p–1080p)?</li>
+            <li>DVR: can viewers scrub back in the live window?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: one-to-many live broadcast, ABR ladder, CDN delivery, stream lifecycle APIs.</li>
+            <li>In: optional live chat as a side system, basic health metrics.</li>
+            <li>Out: full video-on-demand catalog UX, recommendation ranking, ads insertion UI.</li>
+            <li>Defer: WebRTC ultra-low-latency interactive mode unless interviewer pushes sports betting latency.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Start / stop stream</strong>
+              <p>Creator obtains ingest URL + stream key; platform ends session cleanly.</p>
+            </div>
+            <div>
+              <strong>Publish</strong>
+              <p>Encoder pushes media to nearest ingest POP over RTMP/SRT.</p>
+            </div>
+            <div>
+              <strong>Watch</strong>
+              <p>Viewers get a playback URL; player adapts bitrate from CDN segments.</p>
+            </div>
+            <div>
+              <strong>ABR</strong>
+              <p>Multiple renditions packaged so players can switch without glitches.</p>
+            </div>
+            <div>
+              <strong>Archive</strong>
+              <p>Optionally record the live event to VOD object storage.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency</strong>
+              <p>~15–25s standard HLS; ~2–5s with LL-HLS if required.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.9% for ingest; CDN edges absorb regional blips for viewers.</p>
+            </div>
+            <div>
+              <strong>Scale</strong>
+              <p>Hot stream: 1M concurrent viewers without origin collapse.</p>
+            </div>
+            <div>
+              <strong>Quality</strong>
+              <p>Startup &lt; 2s on warm CDN; rebuffering ratio &lt; 1%.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Viewer bandwidth</strong>
+              <p>1M viewers × 3 Mbps avg ABR ≈ 3 Tbps egress — must be CDN, not origin.</p>
+            </div>
+            <div>
+              <strong>Ingest</strong>
+              <p>One publisher at 6–12 Mbps to ingest POP; redundant second ingest optional.</p>
+            </div>
+            <div>
+              <strong>Transcode</strong>
+              <p>Ladder e.g. 1080p/720p/480p/360p → ~4× realtime CPU/GPU per stream.</p>
+            </div>
+            <div>
+              <strong>Segments</strong>
+              <p>2s segments × 4 renditions × 1M viewers cached at edge — origin sees tiny fraction.</p>
+            </div>
+            <div>
+              <strong>Chat</strong>
+              <p>1M viewers × 0.01 msgs/sec = 10K chat msgs/sec — separate WS fleet.</p>
+            </div>
+            <div>
+              <strong>Storage</strong>
+              <p>2-hour 1080p archive ≈ tens of GB per event after packaging.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/streams
+  Body: { title, latency_mode: &#x27;standard&#x27;|&#x27;low&#x27; }
+  Response 201: { stream_id, ingest_url, stream_key, playback_url }
+
+POST /api/v1/streams/{id}/stop
+  Response 200: { status: &#x27;ended&#x27;, vod_asset_id? }
+
+GET /api/v1/streams/{id}
+  Response 200: { status, viewer_count, health: { bitrate, fps, dropped_frames } }
+
+-- Player pulls from CDN:
+GET https://cdn.example/live/{stream_id}/master.m3u8
+GET https://cdn.example/live/{stream_id}/720p/seg_00142.m4s</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE streams (
+  stream_id       BIGINT PRIMARY KEY,
+  creator_id      BIGINT NOT NULL,
+  title           VARCHAR(512),
+  status          VARCHAR(16),  -- scheduled|live|ended
+  latency_mode    VARCHAR(16),
+  ingest_region   VARCHAR(32),
+  playback_path   VARCHAR(512),
+  started_at      TIMESTAMP,
+  ended_at        TIMESTAMP
+);
+
+CREATE TABLE stream_keys (
+  stream_id       BIGINT PRIMARY KEY,
+  key_hash        CHAR(64) NOT NULL,
+  rotated_at      TIMESTAMP
+);
+
+CREATE TABLE stream_metrics (
+  stream_id       BIGINT,
+  ts              TIMESTAMP,
+  ingest_bitrate  INT,
+  fps             REAL,
+  viewers         INT,
+  PRIMARY KEY (stream_id, ts)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Creators authenticate and receive a region-local ingest endpoint plus a stream key. OBS or a mobile encoder pushes RTMP/SRT to an ingest POP. The ingest gateway authenticates the key, terminates the publish session, and forwards elementary streams to a live transcoder worker assigned to that <code>stream_id</code>.</p>
+          <p>The transcoder produces an ABR ladder (aligned GOPs). A packager cuts CMAF segments and updates the media playlist. Segments land in object storage / origin; CDN edges pull through an origin shield. Players request the master playlist and switch renditions based on bandwidth. For low-latency mode, use partial segments (LL-HLS) and shorter playlists — at the cost of less CDN aggregation efficiency and more request QPS.</p>
+          <p>Control plane (stream CRUD, keys, viewer counts) is orthogonal to the media plane. Viewer counts are approximate: edges report samples to a metrics aggregator. Live chat is a separate pub/sub channel keyed by <code>stream_id</code> — reuse patterns from chat messaging, with aggressive fan-out batching for mega-streams.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Encoder</span><b>&rarr;</b><span class="node">Ingest POP</span><b>&rarr;</b><span class="node accent">Transcoder</span><b>&rarr;</b><span class="node">Packager</span><b>&rarr;</b><span class="node">CDN</span><b>&rarr;</b><span class="node">Players</span></div><figcaption>One-to-many live media pipeline</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Hot stream segment written once to origin</span><span class="node accent">Origin shield absorbs concurrent edge misses</span><span class="node">Edges cache seg_N for TTL ≈ segment duration</span><span class="node accent">1M players hit edges, not transcoder</span></div><figcaption>Why CDN + origin shield is non-negotiable at celebrity scale</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">1080p</span><b>&rarr;</b><span class="node">720p</span><b>&rarr;</b><span class="node accent">480p</span><b>&rarr;</b><span class="node">360p</span></div><figcaption>ABR ladder from one ingest</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Latency is mostly buffer. Classic HLS waits for full segments and holds 3 segments in the player buffer. Cutting segment duration from 6s to 2s helps but increases encode overhead and CDN request rate. LL-HLS adds blocking playlist reloads and chunked transfer of partial segments so players start before the segment finishes — explain the trade: more origin/CDN load, harder cache hit ratios.</p>
+          <p>GOP alignment across renditions matters for seamless ABR switches. If keyframes are not aligned, the player must wait or glitch when dropping from 1080p to 480p. Transcoders should force aligned IDR frames on segment boundaries.</p>
+          <p>Failure handling: if the publisher disconnects briefly, keep the stream &#x27;live&#x27; with a slate or last-frame hold for 15–30s before ending — reconnects are common on mobile uplink. Dual ingest (primary + backup) lets the transcoder failover without viewers noticing. Transcoder crash: checkpoint packager state and relaunch on another worker using the still-open ingest session or a short reconnect.</p>
+          <p>Hot-stream protection: never let edges stampede origin. Origin shield (regional mid-tier cache), request collapsing, and longer playlist caching for non-LL modes. Signed playback cookies prevent hotlinking. For chat on mega-streams, switch from push-all to sampled delivery or client-side polling of a rolling window so one viral comment does not fan out to 1M sockets from a single publisher path.</p>
+        </section>
+        <section class="problem-section">
+          <h2>ABR playlist helper and ingest auth sketch</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import hashlib
+import hmac
+import time
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class Rendition:
+    name: str
+    bandwidth: int  # bits/sec
+    path: str
+
+
+def master_playlist(stream_id: str, renditions: List[Rendition]) -&gt; str:
+    lines = [&quot;#EXTM3U&quot;, &quot;#EXT-X-VERSION:3&quot;]
+    for r in renditions:
+        lines.append(
+            f&#x27;#EXT-X-STREAM-INF:BANDWIDTH={r.bandwidth},NAME=&quot;{r.name}&quot;&#x27;
+        )
+        lines.append(f&quot;/live/{stream_id}/{r.path}/index.m3u8&quot;)
+    return &quot;\n&quot;.join(lines) + &quot;\n&quot;
+
+
+class IngestAuth:
+    &quot;&quot;&quot;Validate stream keys on RTMP connect; short-lived publish tokens.&quot;&quot;&quot;
+
+    def __init__(self, secret: bytes, key_store):
+        self.secret = secret
+        self.key_store = key_store  # stream_id → key_hash
+
+    def publish_allowed(self, stream_id: str, stream_key: str) -&gt; bool:
+        expected = self.key_store.get(stream_id)
+        if not expected:
+            return False
+        digest = hashlib.sha256(stream_key.encode()).hexdigest()
+        return hmac.compare_digest(digest, expected)
+
+    def sign_playback(self, stream_id: str, viewer_id: str, ttl_s: int = 3600) -&gt; str:
+        exp = int(time.time()) + ttl_s
+        msg = f&quot;{stream_id}:{viewer_id}:{exp}&quot;.encode()
+        sig = hmac.new(self.secret, msg, hashlib.sha256).hexdigest()
+        return f&quot;{exp}.{sig}&quot;
+
+    def verify_playback(self, stream_id: str, viewer_id: str, token: str) -&gt; bool:
+        try:
+            exp_s, sig = token.split(&quot;.&quot;, 1)
+            exp = int(exp_s)
+        except ValueError:
+            return False
+        if exp &lt; time.time():
+            return False
+        msg = f&quot;{stream_id}:{viewer_id}:{exp}&quot;.encode()
+        expected = hmac.new(self.secret, msg, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+struct Rendition {
+    name: String,
+    bandwidth: u32,
+    path: String,
+}
+
+fn master_playlist(stream_id: &amp;str, renditions: &amp;[Rendition]) -&gt; String {
+    let mut out = String::from(&quot;#EXTM3U\n#EXT-X-VERSION:3\n&quot;);
+    for r in renditions {
+        out.push_str(&amp;format!(
+            &quot;#EXT-X-STREAM-INF:BANDWIDTH={},NAME=\&quot;{}\&quot;\n/live/{}/{}/index.m3u8\n&quot;,
+            r.bandwidth, r.name, stream_id, r.path
+        ));
+    }
+    out
+}
+
+struct IngestAuth {
+    // demo: sha256 hex of raw key; production uses a real keyed MAC crate
+    keys: HashMap&lt;String, String&gt;,
+}
+
+impl IngestAuth {
+    fn publish_allowed(&amp;self, stream_id: &amp;str, stream_key: &amp;str) -&gt; bool {
+        match self.keys.get(stream_id) {
+            Some(expected) =&gt; simple_hash(stream_key) == *expected,
+            None =&gt; false,
+        }
+    }
+
+    fn sign_playback(&amp;self, stream_id: &amp;str, viewer_id: &amp;str, ttl_s: u64) -&gt; String {
+        let exp = now_secs() + ttl_s;
+        let msg = format!(&quot;{}:{}:{}&quot;, stream_id, viewer_id, exp);
+        format!(&quot;{}.{}&quot;, exp, simple_hash(&amp;msg))
+    }
+}
+
+fn now_secs() -&gt; u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+
+fn simple_hash(s: &amp;str) -&gt; String {
+    // Placeholder for interview board — use HMAC-SHA256 in production
+    format!(&quot;{:x}&quot;, s.bytes().fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64)))
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Creator</span><p>POST /streams → ingest_url + stream_key; configures OBS</p></div><div class="seq-row"><span class="actor">Ingest POP</span><p>Auth stream key, accept RTMP, forward to transcoder</p></div><div class="seq-row"><span class="actor">Packager</span><p>Writes CMAF segments + updates media playlists</p></div><div class="seq-row"><span class="actor">Viewer</span><p>GET master.m3u8 from CDN → picks 720p → pulls seg_N</p></div><div class="seq-row"><span class="actor">CDN</span><p>Cache hit on seg_N; origin shield only on miss</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>HLS vs WebRTC</strong>
+              <p>HLS scales via CDN; WebRTC is lower latency but harder to fan out to millions.</p>
+            </div>
+            <div>
+              <strong>Segment duration</strong>
+              <p>Shorter segments lower latency, raise request rate and encode overhead.</p>
+            </div>
+            <div>
+              <strong>GPU vs CPU transcode</strong>
+              <p>GPU packs denser density for live ladders; CPU is simpler ops and fallback.</p>
+            </div>
+            <div>
+              <strong>Exact vs approx viewers</strong>
+              <p>Exact counts need global aggregation; approximate edge sampling is enough for UI.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Celebrity spike without origin shield — packager CPU / disk melts on segment stampedes.</li>
+            <li>Publisher mobile uplink flaps — stream flaps live/offline without reconnect grace.</li>
+            <li>Misaligned GOPs — ABR switches cause freezes or A/V desync.</li>
+            <li>LL-HLS enabled globally — cache hit ratio collapses, CDN bill explodes.</li>
+            <li>Chat fan-out on 1M viewers treated like 1:1 messaging — gateway fleet saturates.</li>
+            <li>Stream key leak — unauthorized publish hijacks the live event.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you add mid-roll ads without breaking player buffers?</li>
+            <li>Design DVR scrubbing over a 4-hour live window.</li>
+            <li>Multi-camera switching and director controls.</li>
+            <li>Geo-fencing and regional blackouts for licensed sports.</li>
+            <li>WebRTC interactive co-host merged into the HLS egress ladder.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Draw the ingest → transcode → package → CDN path, pick a latency mode deliberately, explain ABR with aligned segments, and show how origin shields survive a 1M-viewer stream. Mention chat as a separate realtime system. Ultra-low-latency WebRTC broadcast meshes can stay as a follow-up.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../collaborative_docs/">← Design a collaborative document editor</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../video_conferencing/">Design a video conferencing system →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a collaborative document editor | System Design | Engineering Notes</title>
+  <meta name="description" content="Google Docs style collab is OT or CRDT plus presence — concurrent cursors will surface every race you waved away.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a collaborative document editor</p>
+      <p class="eyebrow">System Design · Hard · ~60 min · Google-style realtime</p>
+      <h1>Design a collaborative document editor</h1>
+      <p class="problem-deck">Google Docs style collab is OT or CRDT plus presence — concurrent cursors will surface every race you waved away.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Max concurrent editors, offline support, rich text vs plain, comments.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Realtime sync, presence, version history. Defer comments UI, ACL UI.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>100M docs, 10M DAU, peak 50 concurrent editors/doc.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Clients, collab server, op log, document store, presence.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>Conflict resolution</strong><p>OT vs CRDT, transform rules, causality, garbage collection.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Persistence &amp; scale</strong><p>Snapshotting, sharding by doc_id, reconnect catch-up.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Presence</strong><p>Cursors, selections, colored avatars without flooding the wire.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Offline edits, access control, follow-ups.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if OT/CRDT deep-dive is going well.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d clarify concurrency first: is this 2–3 editors like a personal doc, or 50+ like a shared meeting notes doc? That choice drives whether we can keep a single authoritative server (Operational Transformation) or need peer-friendly CRDTs. I&#x27;d also ask whether offline editing is in scope — offline means you must converge after arbitrary delay, which pushes hard toward CRDTs.</p>
+          <p>The product surface looks simple — a shared text buffer — but the hard problem is that every keystroke is a concurrent mutation. Two users inserting at the same cursor position must end up with a deterministic order on every client. Presence (cursors, selections) is a separate softer channel: eventually consistent is fine, and we can drop intermediate updates under load.</p>
+          <p>I&#x27;d sketch a collab server that owns the document&#x27;s operation log, clients that apply ops optimistically, and a snapshot + catch-up path for reconnects — then deep-dive OT transforms or CRDT merge depending on the offline requirement.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Max concurrent editors per document?</li>
+            <li>Is offline editing required, or always-online only?</li>
+            <li>Plain text, rich text, or embedded media?</li>
+            <li>Do we need version history / restore to past revision?</li>
+            <li>Comments, suggestions mode, or just direct edit?</li>
+            <li>Document size limits (10 KB notes vs 50 MB specs)?</li>
+            <li>Sharing model — link-based, org ACLs, guest access?</li>
+            <li>Latency target for seeing another user&#x27;s keystroke?</li>
+            <li>Multi-region: can co-editors be continents apart?</li>
+            <li>Mobile clients with flaky networks?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: realtime text sync for up to ~50 concurrent editors, presence cursors, version snapshots.</li>
+            <li>In: reconnect catch-up from op log, optimistic local apply.</li>
+            <li>Out: full comments UI, suggestion mode, OCR/import pipelines.</li>
+            <li>Defer: offline-first CRDT path if interviewer wants always-online OT first.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Edit &amp; sync</strong>
+              <p>Keystrokes and formatting ops propagate to all editors within ~100 ms on a healthy network.</p>
+            </div>
+            <div>
+              <strong>Convergence</strong>
+              <p>All clients eventually show identical document content after ops settle.</p>
+            </div>
+            <div>
+              <strong>Presence</strong>
+              <p>Show other users&#x27; cursors and selections with low-priority updates.</p>
+            </div>
+            <div>
+              <strong>History</strong>
+              <p>Periodic snapshots + op log enable restore and audit.</p>
+            </div>
+            <div>
+              <strong>Reconnect</strong>
+              <p>Client resumes from last known revision without full re-download when possible.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Edit latency</strong>
+              <p>p99 &lt; 150 ms for op echo from collab server to peers in-region.</p>
+            </div>
+            <div>
+              <strong>Consistency</strong>
+              <p>Strong convergence on content; presence may be lossy.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.9% — brief disconnects are expected; edits must not corrupt.</p>
+            </div>
+            <div>
+              <strong>Throughput</strong>
+              <p>10M active docs/day; hot docs ~200 ops/sec during meetings.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Active sessions</strong>
+              <p>10M DAU × 0.3 docs open × avg 2 editors ≈ 6M concurrent sessions peak.</p>
+            </div>
+            <div>
+              <strong>Ops/sec</strong>
+              <p>Typing ≈ 5 chars/sec/user → assume 2M concurrent typists × 5 = 10M ops/sec globally (shard by doc).</p>
+            </div>
+            <div>
+              <strong>Op size</strong>
+              <p>~100 bytes average → ~1 GB/sec ingest before batching/compression.</p>
+            </div>
+            <div>
+              <strong>Hot doc</strong>
+              <p>50 editors × 5 ops/sec = 250 ops/sec on one document shard.</p>
+            </div>
+            <div>
+              <strong>Snapshots</strong>
+              <p>Snapshot every 100 ops or 30s → keeps catch-up short.</p>
+            </div>
+            <div>
+              <strong>Storage</strong>
+              <p>Snapshot + truncated op log per doc; cold docs to object storage.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>-- WebSocket (per document session):
+→ { type: &#x27;join&#x27;, doc_id, from_rev }
+← { type: &#x27;snapshot&#x27;, rev, content, presence[] }
+→ { type: &#x27;op&#x27;, rev, client_op_id, ops: [{type:&#x27;ins&#x27;|&#x27;del&#x27;, pos, text?}] }
+← { type: &#x27;ack&#x27;, client_op_id, server_rev }
+← { type: &#x27;remote_op&#x27;, server_rev, author_id, ops }
+→ { type: &#x27;cursor&#x27;, anchor, head }
+← { type: &#x27;presence&#x27;, user_id, cursor }
+
+-- REST:
+GET /api/v1/docs/{doc_id}?rev=N
+  Response 200: { rev, content, updated_at }
+
+POST /api/v1/docs/{doc_id}/snapshots
+  Response 201: { rev, snapshot_id }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE documents (
+  doc_id        BIGINT PRIMARY KEY,
+  title         VARCHAR(512),
+  owner_id      BIGINT NOT NULL,
+  current_rev   BIGINT NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP
+);
+
+-- Immutable op log (partitioned by doc_id)
+CREATE TABLE doc_ops (
+  doc_id        BIGINT NOT NULL,
+  rev           BIGINT NOT NULL,
+  author_id     BIGINT NOT NULL,
+  op_payload    JSONB NOT NULL,   -- transform-ready ops
+  created_at    TIMESTAMP,
+  PRIMARY KEY (doc_id, rev)
+);
+
+CREATE TABLE doc_snapshots (
+  doc_id        BIGINT NOT NULL,
+  rev           BIGINT NOT NULL,
+  content_blob  BYTEA NOT NULL,   -- or object-store pointer
+  created_at    TIMESTAMP,
+  PRIMARY KEY (doc_id, rev)
+);</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Each open document maps to a sticky collab server (or actor) that serializes the operation log. Clients apply local ops immediately for snappy typing, then send them to the server. The server transforms concurrent ops against the authoritative history, assigns a server revision, persists the op, and broadcasts the transformed op to peers.</p>
+          <p>Operational Transformation (OT) is the classic Google Docs approach: the server is the single source of truth, and clients transform remote ops against unacked local ops before applying. CRDTs (e.g., RGA, Yjs-style) are better when offline edits must merge without a central transformer — each character gets a unique ID and tombstones handle deletes. In a 60-minute Google interview I usually lead with OT for always-online, then mention CRDT for offline.</p>
+          <p>Documents are sharded by <code>doc_id</code>. One hot document never spans multiple writers for the op log — that preserves a total order. Presence rides a separate fan-out path (Redis Pub/Sub or the same WS channel with lower priority) so cursor spam cannot stall content ops. Snapshots every N revisions let reconnecting clients load snapshot + delta instead of replaying millions of keystrokes.</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client A</span><b>&rarr;</b><span class="node">WS</span><b>&rarr;</b><span class="node accent">Collab actor</span><b>&rarr;</b><span class="node">Op log</span></div><figcaption>Authoritative op log per document</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Client applies op locally (optimistic)</span><span class="node accent">Server transforms vs concurrent ops → assigns rev</span><span class="node">Broadcast transformed op to peers</span><span class="node accent">Peers transform against pending local ops, then apply</span></div><figcaption>OT round-trip for a single keystroke</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Reconnect</span><b>&rarr;</b><span class="node">Latest snapshot</span><b>&rarr;</b><span class="node accent">Ops since rev</span><b>&rarr;</b><span class="node">Catch up</span></div><figcaption>Reconnect path: snapshot + delta</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>OT insert/delete transforms are the interview meat. If A inserts at position 5 and B concurrently deletes range [3,6], the server must rewrite A&#x27;s position after B&#x27;s delete (or vice versa) so both sides converge. State that transformation functions <code>T(op1, op2)</code> must satisfy TP1/TP2 properties for correctness under arbitrary concurrency — you do not need to derive full proofs, but naming them shows you know the landmines.</p>
+          <p>Server-side serialization is what makes OT tractable: every op is transformed against the contiguous history from the client&#x27;s known revision to HEAD. Clients keep a bridge of unacked local ops and transform incoming remote ops against that bridge before applying. If the WS disconnects mid-flight, the client re-joins with <code>from_rev</code> and either receives missed ops or a fresh snapshot if the log was compacted.</p>
+          <p>Garbage collection matters: without snapshots, op logs grow forever. Compact by writing a snapshot at rev N and deleting ops older than the oldest connected client&#x27;s base revision (or a retention floor like 24 hours). Presence should be ephemeral — store in memory on the collab actor, expire on disconnect, and throttle cursor events to ~10 Hz per user.</p>
+          <p>Multi-region is painful for OT because you want one primary writer per doc. Pin the document&#x27;s actor to the region of the owner or first editor; remote editors pay cross-region RTT. CRDTs allow multi-master but introduce larger metadata and more complex GC of tombstones — call that out as the offline/multi-region trade.</p>
+        </section>
+        <section class="problem-section">
+          <h2>OT transform sketch for concurrent inserts</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass
+from typing import List, Tuple
+
+
+@dataclass
+class Op:
+    kind: str   # &quot;ins&quot; | &quot;del&quot;
+    pos: int
+    text: str = &quot;&quot;
+    length: int = 0  # for deletes
+
+
+def transform(a: Op, b: Op) -&gt; Tuple[Op, Op]:
+    &quot;&quot;&quot;Transform concurrent ops so both can apply in either order and converge.
+    Simplified: insert/insert and insert/delete only — interview sketch.
+    &quot;&quot;&quot;
+    a2, b2 = Op(**a.__dict__), Op(**b.__dict__)
+
+    if a.kind == &quot;ins&quot; and b.kind == &quot;ins&quot;:
+        if a.pos &lt; b.pos or (a.pos == b.pos and a.text &lt;= b.text):
+            b2.pos += len(a.text)
+        else:
+            a2.pos += len(b.text)
+    elif a.kind == &quot;ins&quot; and b.kind == &quot;del&quot;:
+        if a.pos &lt;= b.pos:
+            b2.pos += len(a.text)
+        elif a.pos &gt;= b.pos + b.length:
+            a2.pos -= b.length
+        else:
+            # insert landed inside delete range → clamp into surviving left edge
+            a2.pos = b.pos
+            b2.length += len(a.text)
+    elif a.kind == &quot;del&quot; and b.kind == &quot;ins&quot;:
+        return tuple(reversed(transform(b, a)))
+    # del/del omitted for brevity — similar position shifting
+    return a2, b2
+
+
+class DocActor:
+    &quot;&quot;&quot;Single-writer actor for one document&#x27;s op log.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.rev = 0
+        self.content = &quot;&quot;
+        self.log: List[Op] = []
+
+    def apply_client_op(self, base_rev: int, op: Op) -&gt; Tuple[int, Op]:
+        # Transform against ops the client has not seen yet
+        transformed = op
+        for prior in self.log[base_rev:]:
+            transformed, _ = transform(transformed, prior)
+        self._apply(transformed)
+        self.rev += 1
+        self.log.append(transformed)
+        return self.rev, transformed
+
+    def _apply(self, op: Op):
+        if op.kind == &quot;ins&quot;:
+            self.content = self.content[:op.pos] + op.text + self.content[op.pos:]
+        else:
+            end = op.pos + op.length
+            self.content = self.content[:op.pos] + self.content[end:]</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">#[derive(Clone, Debug)]
+enum OpKind { Ins, Del }
+
+#[derive(Clone, Debug)]
+struct Op {
+    kind: OpKind,
+    pos: usize,
+    text: String,
+    length: usize,
+}
+
+fn transform(a: &amp;Op, b: &amp;Op) -&gt; (Op, Op) {
+    let mut a2 = a.clone();
+    let mut b2 = b.clone();
+    match (&amp;a.kind, &amp;b.kind) {
+        (OpKind::Ins, OpKind::Ins) =&gt; {
+            if a.pos &lt; b.pos || (a.pos == b.pos &amp;&amp; a.text &lt;= b.text) {
+                b2.pos += a.text.len();
+            } else {
+                a2.pos += b.text.len();
+            }
+        }
+        (OpKind::Ins, OpKind::Del) =&gt; {
+            if a.pos &lt;= b.pos {
+                b2.pos += a.text.len();
+            } else if a.pos &gt;= b.pos + b.length {
+                a2.pos -= b.length;
+            } else {
+                a2.pos = b.pos;
+                b2.length += a.text.len();
+            }
+        }
+        (OpKind::Del, OpKind::Ins) =&gt; {
+            let (b3, a3) = transform(b, a);
+            return (a3, b3);
+        }
+        _ =&gt; {}
+    }
+    (a2, b2)
+}
+
+struct DocActor {
+    rev: u64,
+    content: String,
+    log: Vec&lt;Op&gt;,
+}
+
+impl DocActor {
+    fn apply_client_op(&amp;mut self, base_rev: usize, op: Op) -&gt; (u64, Op) {
+        let mut transformed = op;
+        for prior in &amp;self.log[base_rev..] {
+            let (t, _) = transform(&amp;transformed, prior);
+            transformed = t;
+        }
+        Self::apply_to(&amp;mut self.content, &amp;transformed);
+        self.rev += 1;
+        self.log.push(transformed.clone());
+        (self.rev, transformed)
+    }
+
+    fn apply_to(content: &amp;mut String, op: &amp;Op) {
+        match op.kind {
+            OpKind::Ins =&gt; content.insert_str(op.pos, &amp;op.text),
+            OpKind::Del =&gt; { content.drain(op.pos..op.pos + op.length); }
+        }
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client A</span><p>WS op: insert &quot;x&quot; at pos 5, base_rev=40 (applied locally already)</p></div><div class="seq-row"><span class="actor">Collab actor</span><p>Transforms vs revs 41–42 from Client B, assigns server_rev=43, persists</p></div><div class="seq-row"><span class="actor">Client A</span><p>ack {client_op_id, server_rev: 43}</p></div><div class="seq-row"><span class="actor">Client B</span><p>remote_op rev=43; transforms against unacked local ops; applies</p></div><div class="seq-row"><span class="actor">Both</span><p>Document content identical; cursors updated on presence channel</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>OT vs CRDT</strong>
+              <p>OT needs a central transformer and is proven at Docs scale; CRDT shines offline but costs metadata and GC complexity.</p>
+            </div>
+            <div>
+              <strong>Sticky actor vs multi-writer</strong>
+              <p>Single writer per doc simplifies ordering; multi-writer needs consensus or CRDT.</p>
+            </div>
+            <div>
+              <strong>Snapshot frequency</strong>
+              <p>More snapshots = faster reconnect, more storage write amplification.</p>
+            </div>
+            <div>
+              <strong>Presence QoS</strong>
+              <p>Dropping cursor frames is fine; dropping content ops is not — separate channels or priorities.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Incorrect transform on overlapping delete/insert → permanent divergence between clients.</li>
+            <li>Collab actor failover without replaying unpersisted ops → lost keystrokes.</li>
+            <li>Op log compaction deletes revisions a slow client still needs → forced full snapshot reload storms.</li>
+            <li>Hot meeting doc with 50 typists saturates one shard CPU on transforms.</li>
+            <li>Presence fan-out at 60 Hz × N users dwarfs content bandwidth.</li>
+            <li>Clock-skewed client base_rev causes transform against wrong history.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you support offline editing with CRDTs and tombstone GC?</li>
+            <li>Design suggestion mode (propose edits without mutating until accept).</li>
+            <li>Multi-region primary failover for a document&#x27;s actor.</li>
+            <li>Access control: viewer vs commenter vs editor without leaking ops.</li>
+            <li>How do comments anchor to text that keeps moving underneath them?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Lock scope to always-online collab, explain a sticky per-doc actor with an op log, walk an OT insert/insert transform, and show snapshot + catch-up for reconnect. Mention CRDT as the offline alternative and call out presence as a lossy side channel. Full transform proofs and rich-text schemas can stay as follow-ups.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../search_autocomplete/">← Design a search autocomplete</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <a class="problem-nav-link next" href="../live_streaming/">Design a live video streaming platform →</a>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

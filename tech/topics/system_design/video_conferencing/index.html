@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Design a video conferencing system | System Design | Engineering Notes</title>
+  <meta name="description" content="Google Meet style calls are WebRTC plus an SFU — mesh graphs explode past a handful of participants.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">System Design</a> / Design a video conferencing system</p>
+      <p class="eyebrow">System Design · Hard · ~60 min · Google-style realtime</p>
+      <h1>Design a video conferencing system</h1>
+      <p class="problem-deck">Google Meet style calls are WebRTC plus an SFU — mesh graphs explode past a handful of participants.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+        <section class="problem-section">
+          <h2>60-minute agenda</h2>
+          <figure class="diagram dark" aria-label="60-minute interview agenda">
+            <div class="stack-flow">
+            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Max participants, latency, screen share, recording, dial-in.</p></div></div>
+            <div class="stack-step"><strong>5–10 min</strong><div><strong>Scope</strong><p>Signaling, media via SFU, presence. Defer PSTN, AI notes.</p></div></div>
+            <div class="stack-step"><strong>10–15 min</strong><div><strong>Capacity</strong><p>50-person meetings common; webinars up to 1K view-only.</p></div></div>
+            <div class="stack-step"><strong>15–25 min</strong><div><strong>High-level design</strong><p>Signaling service, TURN/STUN, SFU fleet, meeting state.</p></div></div>
+            <div class="stack-step"><strong>25–40 min</strong><div><strong>SFU deep dive</strong><p>Forwarding vs mixing, simulcast layers, dominant speaker.</p></div></div>
+            <div class="stack-step"><strong>40–50 min</strong><div><strong>Scale &amp; geo</strong><p>SFU region pinning, cascading for large calls.</p></div></div>
+            <div class="stack-step"><strong>50–55 min</strong><div><strong>Reliability</strong><p>ICE restart, SFU failover, bandwidth adaptation.</p></div></div>
+            <div class="stack-step"><strong>55–60 min</strong><div><strong>Wrap-up</strong><p>Recording, encryption, follow-ups.</p></div></div>
+            </div>
+            <figcaption>Rough pacing for a 60-minute round. Mesh vs SFU is the fork interviewers expect you to defend.</figcaption>
+          </figure>
+        </section>
+        <section class="problem-section">
+          <h2>How I&#x27;d open the discussion</h2>
+          <p>I&#x27;d separate signaling from media immediately. Signaling is a small control-plane problem (who joined, SDP offer/answer, mute state). Media is the hard part: realtime audio/video with sub-second latency under lossy networks. For 1:1, a peer-to-peer WebRTC mesh with TURN fallback is fine. For 3+ participants, uplink bandwidth on each client becomes the bottleneck — each peer would otherwise upload N−1 copies of their video.</p>
+          <p>That is why production systems use an SFU (Selective Forwarding Unit): each client uploads once (often with simulcast layers), and the SFU forwards the appropriate streams to subscribers. An MCU mixes into one composite — simpler for clients, much more expensive server-side and adds latency. Google Meet–style designs are SFU-first.</p>
+          <p>I&#x27;d sketch meeting service + signaling WS, STUN/TURN, regional SFUs, then deep-dive simulcast and how we pick which layers to forward under congestion.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Open questions worth asking</h2>
+          <ul class="ask-list">
+            <li>Typical and max participants per meeting (8, 50, 250)?</li>
+            <li>Are large webinars (1K+ view-only) in scope?</li>
+            <li>Target end-to-end audio latency?</li>
+            <li>Screen sharing and simultaneous share?</li>
+            <li>Cloud recording / live streaming egress?</li>
+            <li>Mobile clients and restrictive corporate NATs?</li>
+            <li>End-to-end encryption vs SFU-visible media?</li>
+            <li>Waiting rooms, host controls, breakout rooms?</li>
+            <li>PSTN dial-in required?</li>
+            <li>Multi-region participants — one SFU or cascaded?</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Scope I&#x27;d lock first</h2>
+          <ul class="trade-list">
+            <li>In: meetings up to ~50 interactive participants, WebRTC, SFU media path, screen share.</li>
+            <li>In: signaling, mute/video state, basic host controls.</li>
+            <li>Out: PSTN gateway, AI meeting notes, full calendar integration UI.</li>
+            <li>Defer: webinar mode (SFU cascade / HLS egress) unless interviewer asks.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Functional requirements</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Create / join meeting</strong>
+              <p>Host creates a meeting; participants join via link with auth token.</p>
+            </div>
+            <div>
+              <strong>A/V media</strong>
+              <p>Realtime bidirectional audio/video with adaptive quality.</p>
+            </div>
+            <div>
+              <strong>Screen share</strong>
+              <p>One (or few) screen tracks forwarded like camera tracks.</p>
+            </div>
+            <div>
+              <strong>Controls</strong>
+              <p>Mute self/others, disable video, admit from waiting room.</p>
+            </div>
+            <div>
+              <strong>Presence</strong>
+              <p>Roster of participants with connection health indicators.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Non-functional / rough numbers</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Latency</strong>
+              <p>Mouth-to-ear &lt; 300 ms in-region on healthy networks.</p>
+            </div>
+            <div>
+              <strong>Availability</strong>
+              <p>99.9% join success; media should degrade before dropping call.</p>
+            </div>
+            <div>
+              <strong>Scale</strong>
+              <p>Tens of millions of concurrent call participants globally (sharded by meeting).</p>
+            </div>
+            <div>
+              <strong>Bandwidth</strong>
+              <p>Client uplink ~1–3 Mbps with simulcast; downlink depends on tiles shown.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Capacity estimate (do this on the board)</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Meeting size</strong>
+              <p>50 interactive users; each uploads 1 video + simulcast ≈ 2.5 Mbps uplink.</p>
+            </div>
+            <div>
+              <strong>SFU ingress</strong>
+              <p>50 × 2.5 Mbps ≈ 125 Mbps in per meeting.</p>
+            </div>
+            <div>
+              <strong>SFU egress</strong>
+              <p>If each watches 9 tiles at 500 kbps ≈ 50 × 4.5 Mbps ≈ 225 Mbps out.</p>
+            </div>
+            <div>
+              <strong>SFU packing</strong>
+              <p>~1–2 Gbps NIC ⇒ roughly 4–8 active large meetings per SFU box (leave headroom).</p>
+            </div>
+            <div>
+              <strong>Signaling</strong>
+              <p>Tiny vs media — WS events for join/mute/SDP; thousands of meetings per signaling node.</p>
+            </div>
+            <div>
+              <strong>TURN</strong>
+              <p>~10–20% of clients need relay; size TURN farms for that fraction of bitrate.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>API / interface sketch</h2>
+          <div class="tech-code"><span class="code-lang">http</span><pre><code>POST /api/v1/meetings
+  Body: { title, waiting_room: true }
+  Response 201: { meeting_id, join_url }
+
+POST /api/v1/meetings/{id}/join
+  Body: { display_name }
+  Response 200: { participant_id, signaling_url, ice_servers[] }
+
+-- Signaling WebSocket:
+→ { type: &#x27;offer&#x27;, sdp }
+← { type: &#x27;answer&#x27;, sdp }
+← { type: &#x27;ice_candidate&#x27;, candidate }
+→ { type: &#x27;mute&#x27;, track: &#x27;audio&#x27;|&#x27;video&#x27;, muted: true }
+← { type: &#x27;roster&#x27;, participants[] }
+← { type: &#x27;dominant_speaker&#x27;, participant_id }</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Data model</h2>
+          <div class="tech-code"><span class="code-lang">sql</span><pre><code class="language-sql">CREATE TABLE meetings (
+  meeting_id      BIGINT PRIMARY KEY,
+  host_id         BIGINT NOT NULL,
+  title           VARCHAR(512),
+  status          VARCHAR(16),  -- scheduled|active|ended
+  sfu_region      VARCHAR(32),
+  created_at      TIMESTAMP,
+  ended_at        TIMESTAMP
+);
+
+CREATE TABLE participants (
+  meeting_id      BIGINT,
+  participant_id  BIGINT,
+  user_id         BIGINT,
+  role            VARCHAR(16),  -- host|cohost|member
+  joined_at       TIMESTAMP,
+  left_at         TIMESTAMP,
+  PRIMARY KEY (meeting_id, participant_id)
+);
+
+-- Ephemeral media routing state lives in SFU memory / Redis, not SQL.</code></pre></div>
+        </section>
+        <section class="problem-section">
+          <h2>Approach / design notes</h2>
+          <p>Join flow: client hits the meeting service, receives a short-lived token, signaling WebSocket URL, and ICE server list (STUN + TURN). Signaling exchanges SDP with the assigned SFU (or a signaling gateway that talks to the SFU). ICE connectivity checks establish UDP (preferred) or TURN-relayed paths. Media then flows client ↔ SFU; other participants subscribe to forwarded tracks.</p>
+          <p>Simulcast: the publisher sends multiple encodings (e.g. low/mid/high). The SFU picks layers per subscriber based on their downlink, tile size, and network feedback (REMB/TWCC). When the grid shows 16 tiny faces, forward low layers; when someone is pinned full-screen, forward high. Dominant-speaker detection (audio energy) can boost that participant&#x27;s layer automatically.</p>
+          <p>Geo: pin a meeting to the SFU region closest to the majority of participants (or the host). For cross-ocean calls, cascade SFUs — each region&#x27;s SFU aggregates local publishers and exchanges a smaller set of streams with the remote SFU — reducing transoceanic streams from O(N×M) to O(cascaded feeds).</p>
+<figure class="diagram dark"><div class="flow-row"><span class="node">Client</span><b>&rarr;</b><span class="node">Signaling</span><b>&rarr;</b><span class="node accent">SFU</span><b>&rarr;</b><span class="node">Other clients</span></div><figcaption>Control plane vs media plane</figcaption></figure>
+<figure class="diagram dark"><div class="flow-col"><span class="node">Mesh: each client uploads N−1 copies — dies at ~4–6 people</span><span class="node accent">SFU: upload once, server forwards selectively</span><span class="node">MCU: server mixes — higher CPU/latency, simpler downlink</span></div><figcaption>Topology choice most interviewers want debated</figcaption></figure>
+<figure class="diagram dark"><div class="flow-row"><span class="node">High</span><b>&rarr;</b><span class="node accent">SFU</span><b>&rarr;</b><span class="node">Pinned viewer</span></div><figcaption>Simulcast: same publisher, different layers per subscriber</figcaption></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Deep dive (spend 15–25 minutes here)</h2>
+          <p>Why not mesh? With 10 participants at 1 Mbps video, each client would need ~9 Mbps uplink just for video. Home and mobile uplinks cannot sustain that. SFU keeps uplink constant while server egress scales with subscriptions — and egress is where data-center NICs are provisioned.</p>
+          <p>Congestion control is continuous. Clients and SFUs use transport-wide CC (TWCC) to probe available bandwidth. On loss, shift subscribers to lower simulcast layers before dropping frames harshly. Audio should be prioritized over video in packet scheduling — humans tolerate blurry video better than choppy speech.</p>
+          <p>NAT traversal: STUN discovers public bindings; when symmetric NATs or firewalls block UDP, fall back to TURN relays. Budget TURN capacity explicitly — it is expensive because media hairpins through your servers. Prefer UDP TURN; TCP/TLS TURN is last resort for locked-down networks.</p>
+          <p>SFU failover mid-call: keep meeting state in the control plane. On SFU death, signaling instructs clients to ICE-restart against a warm standby SFU in the same region, renegotiate, and resume. Brief media gap is better than ending the meeting. Recording is a special subscriber (or sidecar) that records forwarded streams — do not force every client to upload a second copy for recording unless E2E encryption requires client-side record.</p>
+        </section>
+        <section class="problem-section">
+          <h2>Simulcast layer selection sketch</h2>
+          <div class="code-tabs" data-code-tabs>
+            <div class="code-tablist" role="tablist" aria-label="Language">
+              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button>
+              <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button>
+              <button type="button" class="code-copy" data-code-copy>Copy</button>
+            </div>
+            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from dataclasses import dataclass
+from typing import Dict, List, Optional
+
+
+@dataclass
+class Layer:
+    name: str          # &quot;low&quot; | &quot;mid&quot; | &quot;high&quot;
+    max_bitrate_kbps: int
+    height: int
+
+
+LAYERS = [
+    Layer(&quot;low&quot;, 150, 180),
+    Layer(&quot;mid&quot;, 500, 360),
+    Layer(&quot;high&quot;, 1200, 720),
+]
+
+
+@dataclass
+class Subscriber:
+    participant_id: str
+    available_kbps: int
+    tile_height: int
+    pinned: bool = False
+
+
+def pick_layer(sub: Subscriber, layers: List[Layer] = LAYERS) -&gt; Layer:
+    &quot;&quot;&quot;Choose the highest layer that fits bandwidth and on-screen tile size.&quot;&quot;&quot;
+    ranked = layers if sub.pinned else list(reversed(layers))
+    # Prefer resolution that matches tile; never exceed estimated downlink
+    candidates = [
+        L for L in layers
+        if L.max_bitrate_kbps &lt;= sub.available_kbps and L.height &lt;= max(sub.tile_height * 2, 180)
+    ]
+    if sub.pinned:
+        candidates = [L for L in layers if L.max_bitrate_kbps &lt;= sub.available_kbps]
+    if not candidates:
+        return layers[0]
+    return max(candidates, key=lambda L: L.max_bitrate_kbps)
+
+
+class SFURouter:
+    &quot;&quot;&quot;Maps publisher → subscribers and selected simulcast layers.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.subscriptions: Dict[str, List[str]] = {}  # publisher → subscriber ids
+        self.subscribers: Dict[str, Subscriber] = {}
+        self.forwarding: Dict[tuple, str] = {}         # (pub, sub) → layer name
+
+    def subscribe(self, publisher_id: str, sub: Subscriber):
+        self.subscribers[sub.participant_id] = sub
+        self.subscriptions.setdefault(publisher_id, []).append(sub.participant_id)
+        self._recompute(publisher_id, sub.participant_id)
+
+    def on_bandwidth_estimate(self, subscriber_id: str, kbps: int):
+        sub = self.subscribers[subscriber_id]
+        sub.available_kbps = kbps
+        for pub, subs in self.subscriptions.items():
+            if subscriber_id in subs:
+                self._recompute(pub, subscriber_id)
+
+    def _recompute(self, publisher_id: str, subscriber_id: str):
+        sub = self.subscribers[subscriber_id]
+        layer = pick_layer(sub)
+        self.forwarding[(publisher_id, subscriber_id)] = layer.name
+        # Production: tell RTP forwarder to switch SSRCs / RID for this pair</code></pre></div>
+            <div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+#[derive(Clone, Copy)]
+struct Layer {
+    name: &amp;&#x27;static str,
+    max_bitrate_kbps: u32,
+    height: u32,
+}
+
+const LAYERS: [Layer; 3] = [
+    Layer { name: &quot;low&quot;, max_bitrate_kbps: 150, height: 180 },
+    Layer { name: &quot;mid&quot;, max_bitrate_kbps: 500, height: 360 },
+    Layer { name: &quot;high&quot;, max_bitrate_kbps: 1200, height: 720 },
+];
+
+struct Subscriber {
+    participant_id: String,
+    available_kbps: u32,
+    tile_height: u32,
+    pinned: bool,
+}
+
+fn pick_layer(sub: &amp;Subscriber) -&gt; Layer {
+    let mut best = LAYERS[0];
+    for layer in LAYERS {
+        let res_ok = sub.pinned || layer.height &lt;= sub.tile_height.saturating_mul(2).max(180);
+        if layer.max_bitrate_kbps &lt;= sub.available_kbps &amp;&amp; res_ok {
+            best = layer;
+        }
+    }
+    best
+}
+
+struct SfuRouter {
+    subscriptions: HashMap&lt;String, Vec&lt;String&gt;&gt;,
+    subscribers: HashMap&lt;String, Subscriber&gt;,
+    forwarding: HashMap&lt;(String, String), &amp;&#x27;static str&gt;,
+}
+
+impl SfuRouter {
+    fn subscribe(&amp;mut self, publisher_id: &amp;str, sub: Subscriber) {
+        let sid = sub.participant_id.clone();
+        self.subscribers.insert(sid.clone(), sub);
+        self.subscriptions
+            .entry(publisher_id.to_string())
+            .or_default()
+            .push(sid.clone());
+        self.recompute(publisher_id, &amp;sid);
+    }
+
+    fn on_bandwidth_estimate(&amp;mut self, subscriber_id: &amp;str, kbps: u32) {
+        if let Some(sub) = self.subscribers.get_mut(subscriber_id) {
+            sub.available_kbps = kbps;
+        }
+        let pubs: Vec&lt;String&gt; = self.subscriptions.keys().cloned().collect();
+        for pub_id in pubs {
+            if self.subscriptions[&amp;pub_id].iter().any(|s| s == subscriber_id) {
+                self.recompute(&amp;pub_id, subscriber_id);
+            }
+        }
+    }
+
+    fn recompute(&amp;mut self, publisher_id: &amp;str, subscriber_id: &amp;str) {
+        let layer = pick_layer(&amp;self.subscribers[subscriber_id]);
+        self.forwarding
+            .insert((publisher_id.to_string(), subscriber_id.to_string()), layer.name);
+    }
+}</code></pre></div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Request path / sequence</h2>
+<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Client</span><p>POST /meetings/{id}/join → signaling_url, ICE servers</p></div><div class="seq-row"><span class="actor">Signaling</span><p>Assigns regional SFU; exchanges SDP offer/answer</p></div><div class="seq-row"><span class="actor">Client</span><p>ICE checks (STUN); TURN relay if direct UDP fails</p></div><div class="seq-row"><span class="actor">SFU</span><p>Receives simulcast; forwards mid layer to grid subscribers</p></div><div class="seq-row"><span class="actor">SFU</span><p>On pin + high bandwidth, switches that subscriber to high layer</p></div></div></figure>
+        </section>
+        <section class="problem-section">
+          <h2>Trade-offs I&#x27;d say out loud</h2>
+          <div class="req-grid">
+            <div>
+              <strong>Mesh vs SFU vs MCU</strong>
+              <p>Mesh for 1:1; SFU for group; MCU only if you need a single mixed layout server-side.</p>
+            </div>
+            <div>
+              <strong>Simulcast vs SVC</strong>
+              <p>Simulcast is widely supported; SVC is more bitrate-efficient but codec/stack harder.</p>
+            </div>
+            <div>
+              <strong>E2E encryption</strong>
+              <p>True E2E limits server recording/moderation; insertable streams add complexity.</p>
+            </div>
+            <div>
+              <strong>One SFU vs cascade</strong>
+              <p>Single SFU is simpler; cascade saves intercontinental bandwidth for large geo-spread calls.</p>
+            </div>
+          </div>
+        </section>
+        <section class="problem-section">
+          <h2>Where it usually breaks</h2>
+          <ul class="trade-list">
+            <li>Forcing mesh for 12-person calls — uplinks saturate, call becomes audio-only chaos.</li>
+            <li>Under-provisioned TURN — enterprise users behind symmetric NAT cannot join.</li>
+            <li>SFU region pinned far from participants — 400 ms+ RTT kills conversation.</li>
+            <li>No simulcast — everyone receives 720p and mobile downlinks collapse.</li>
+            <li>Signaling and media on one process — deploy restart drops in-call media.</li>
+            <li>Recording subscribed at full high layer × N publishers without cap — disk and CPU blow up.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>Follow-ups if time remains</h2>
+          <ul class="ask-list">
+            <li>How would you design webinar mode with 10K view-only attendees?</li>
+            <li>Breakout rooms: remapping SFU subscriptions quickly.</li>
+            <li>End-to-end encryption with authorized recorder keys.</li>
+            <li>Live captions pipeline without adding noticeable audio delay.</li>
+            <li>Cascaded SFUs across three continents for one all-hands.</li>
+          </ul>
+        </section>
+        <section class="problem-section">
+          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
+          <p>Reject mesh for group calls, explain SFU + simulcast, cover signaling vs media, and show ICE/TURN as the NAT story. Estimate SFU ingress/egress for a 50-person meeting. Recording, E2E encryption, and webinar cascade can be follow-ups.</p>
+        </section>
+
+        <nav class="problem-nav" aria-label="Problem navigation">
+          <a class="problem-nav-link prev" href="../live_streaming/">← Design a live video streaming platform</a>
+          <a class="problem-nav-link back" href="../">All System Design problems</a>
+          <span class="problem-nav-link next muted">End of topic →</span>
+        </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>
