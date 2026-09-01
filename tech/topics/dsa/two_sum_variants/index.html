@@ -24,315 +24,529 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Two Sum variants under memory pressure</p>
-      <p class="eyebrow">DSA · Easy · ~60 min</p>
+      <p class="eyebrow">DSA · Easy · ~45 min</p>
       <h1>Two Sum variants under memory pressure</h1>
       <p class="problem-deck">Classic Two Sum, but the interviewer keeps shrinking memory until the hash map answer stops working.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
-            <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Indices vs values vs count; sorted vs unsorted; memory budget.</p></div></div>
-            <div class="stack-step"><strong>5–10 min</strong><div><strong>Enumerate approaches</strong><p>Hash map, two-pointer, bitset, external sort.</p></div></div>
-            <div class="stack-step"><strong>10–20 min</strong><div><strong>Code hash map solution</strong><p>Walk through [2,7,11,15] target=9 line by line.</p></div></div>
-            <div class="stack-step"><strong>20–30 min</strong><div><strong>Code two-pointer variant</strong><p>Sort copy with original indices; handle duplicates.</p></div></div>
-            <div class="stack-step"><strong>30–40 min</strong><div><strong>Edge cases + walkthrough</strong><p>Empty array, single element, all same values, overflow.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>Memory pressure deep dive</strong><p>Bitset for bounded range; external sort for streaming.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>3Sum reduction, BST variant, streaming with fixed memory.</p></div></div>
-            </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
-          </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d start by confirming the variant: return indices, return values, count pairs, or just existence. Then I&#x27;d ask whether the array is sorted. The textbook answer is a hash map — O(n) time, O(n) space — and most candidates stop there.</p>
-          <p>The interesting conversation starts when the interviewer says &#x27;what if you can&#x27;t afford that map?&#x27; If the array is sorted or we&#x27;re allowed to sort, two pointers give O(n log n) time with O(1) extra space. If values live in a small range, a bitset beats the hash map. And if n is truly enormous — streaming input that won&#x27;t fit in RAM — we&#x27;re into external sort or Bloom-filter territory. I&#x27;d sketch all three before writing code, so the interviewer sees I&#x27;m not stuck on one tool.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>Return indices or just boolean existence?</li>
-            <li>Are duplicates allowed — e.g. [3,3] with target 6?</li>
-            <li>Is the input sorted? Can we sort it?</li>
-            <li>Can we mutate the input array?</li>
-            <li>Integer range — small enough for a bitset?</li>
-            <li>Streaming input that doesn&#x27;t fit in RAM?</li>
-            <li>Do we need all pairs or any one pair?</li>
-            <li>32-bit vs 64-bit — overflow on sum?</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: classic Two Sum (indices) + sorted variant + memory-constrained discussion.</li>
-            <li>Out: 3Sum / 4Sum full solutions unless follow-up asks.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>Given nums and target, find i, j where nums[i] + nums[j] == target.</li>
-            <li>0-based indices, i != j enforced.</li>
-            <li>Define behavior when no solution exists (return [] or raise).</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Time</strong>
-              <p>O(n) with hash map; O(n log n) with sort + two pointers.</p>
-            </div>
-            <div>
-              <strong>Space</strong>
-              <p>O(n) hash map path; O(1) extra for two-pointer path.</p>
-            </div>
-            <div>
-              <strong>Stability</strong>
-              <p>If returning indices, sorting destroys them unless you carry (value, original_index) pairs.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>n limit</strong>
-              <p>up to 10^5 elements in the standard LeetCode variant</p>
-            </div>
-            <div>
-              <strong>Hash map</strong>
-              <p>O(n) entries — fine up to ~10^7 before GC pressure matters</p>
-            </div>
-            <div>
-              <strong>Sort path</strong>
-              <p>O(n log n) ≈ 1.7×10^6 comparisons at n=10^5 — well within 1 s</p>
-            </div>
-            <div>
-              <strong>Bitset path</strong>
-              <p>If value range ≤ 10^6, bitset costs ~125 KB vs ~4 MB for a dict</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>def twoSum(nums: List[int], target: int) -&gt; List[int]:</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>hash_map: {value -&gt; index}
-sorted copy if two-pointer variant: List[Tuple[value, original_index]]</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>Hash map path: iterate i from 0 to n-1. Compute complement = target - nums[i]. If complement is in the map, return [map[complement], i]. Otherwise store nums[i] → i. The classic bug is using the same element twice when 2*x == target — checking &#x27;complement in map&#x27; before inserting nums[i] prevents it.</p>
-          <p>Two-pointer path: create pairs [(val, original_index)] and sort by val. Set lo=0, hi=n-1. If sum &lt; target, lo++. If sum &gt; target, hi--. If equal, return original indices (sorted). This preserves index information that raw sorting destroys.</p>
-          <p>Memory-constrained path: if values are in [0, 10^6], a boolean array costs ~125 KB instead of a hash map&#x27;s overhead per entry. For truly huge n, external sort the file, then scan with two file pointers from each end. I&#x27;d mention Bloom filters for probabilistic existence checks on streams.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">nums[i]</span><b>→</b><span class="node accent">complement = target − nums[i]</span><b>→</b><span class="node">lookup in hash map</span></div><figcaption>Hash map: O(n) time, O(n) space — check complement before inserting current value</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">lo →</span><b>sum &lt; target? lo++</b><span class="node accent">sum == target? return</span><b>sum &gt; target? hi--</b><span class="node">← hi</span></div><figcaption>Two-pointer on sorted copy: O(n log n) time, O(1) extra space</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>Walk through nums = [3, 3] with target = 6.</p>
-          <p>Hash map approach — i=0: complement = 6-3 = 3, map is empty so 3 is not found. Insert {3: 0}. i=1: complement = 6-3 = 3, map has 3 → 0. Return [0, 1]. This works because we check before inserting.</p>
-          <p>Now consider nums = [1, 5, 3, 7, 4, 2] with target = 7. Walk through:
-i=0: comp=6, map={1:0}. i=1: comp=2, map={1:0,5:1}. i=2: comp=4, map={1:0,5:1,3:2}. i=3: comp=0, map adds 7:3. i=4: comp=3, map has 3→2 — return [2, 4] (nums[2]+nums[4] = 3+4 = 7).</p>
-          <p>Two-pointer on same array: sort with indices → [(1,0),(2,5),(3,2),(4,4),(5,1),(7,3)]. lo=0 hi=5: 1+7=8 &gt; 7 → hi--. lo=0 hi=4: 1+5=6 &lt; 7 → lo++. lo=1 hi=4: 2+5=7 → return sorted([5,1]) = [1,5]. But wait — we wanted the original problem&#x27;s indices, which are (5) and (1) → return [1, 5]. This is why carrying original indices matters.</p>
-          <p>Edge case: nums = [0, 0, 0] target = 0. Hash map returns [0, 1] on second iteration. If the problem asks for all pairs, we need to continue scanning and collect [0,1], [0,2], [1,2]. This is where the variant question at the start saves you from writing the wrong code.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Hash map, two-pointer, and bitset implementations</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from typing import List, Tuple
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: O(1) extra space</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 45 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–5 min</strong><div><strong>Sections 1–2</strong><p>Restate the problem, pin down input/output, ask the clarifying questions.</p></div></div>
+        <div class="stack-step"><strong>5–12 min</strong><div><strong>Section 3</strong><p>State the brute force, give its complexity, say out loud why it is not the final answer.</p></div></div>
+        <div class="stack-step"><strong>12–30 min</strong><div><strong>Section 4</strong><p>Derive the hash-map insight, code it, dry-run it, then handle the memory constraint.</p></div></div>
+        <div class="stack-step"><strong>30–45 min</strong><div><strong>Section 5</strong><p>Follow-ups: 3Sum, duplicates, streaming input, data larger than RAM.</p></div></div>
+      </div>
+      <figcaption>Pacing for a 45-minute coding round. Never spend more than 5 minutes on the brute force.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return the <em>indices</em> of the two numbers that add up to <code>target</code>. You may not use the same element twice. Assume exactly one valid answer exists.</p>
+      <p>Read literally this is a one-liner. The reason it survives as an interview question is the second half of the conversation: <strong>the interviewer shrinks your memory budget</strong>. First you get the hash map. Then they say &ldquo;the array has 10 billion entries and you have 8 MB of RAM&rdquo; and the hash map dies. Every good answer to this problem is really an answer to <em>&ldquo;what do I trade for space?&rdquo;</em></p>
+      <p>The structural insight to voice early: you are searching for a <em>complement</em>. For each element <code>x</code>, you need to know whether <code>target - x</code> exists elsewhere in the array. Everything after this is a decision about which data structure answers &ldquo;does this value exist?&rdquo; fast enough within the space you are allowed.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>two_sum(nums: List[int], target: int) -&gt; List[int]   # exactly two indices, ascending</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — answer at the front</span><pre><code>Input:  nums = [2, 7, 11, 15], target = 9
+Output: [0, 1]
+Why:    nums[0] + nums[1] = 2 + 7 = 9</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — repeated value</span><pre><code>Input:  nums = [3, 2, 4], target = 6
+Output: [1, 2]
+Why:    3 + 3 = 6 would need index 0 twice, which is forbidden.
+        2 + 4 = 6 uses two distinct indices.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — duplicates are legal</span><pre><code>Input:  nums = [3, 3], target = 6
+Output: [0, 1]
+Why:    the same *value* twice is fine as long as the *indices* differ.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 4 — negatives</span><pre><code>Input:  nums = [-1, -2, -3, -4, -5], target = -8
+Output: [2, 4]
+Why:    -3 + -5 = -8. No assumption of positivity anywhere in the algorithm.</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>2 &le; nums.length &le; 10^4</code> in the textbook version; the interesting variant pushes this to <code>10^10</code>.</li>
+        <li><code>-10^9 &le; nums[i], target &le; 10^9</code> &mdash; so <code>target - nums[i]</code> can reach <code>2 &times; 10^9</code> and <strong>overflows signed 32-bit</strong>. Widen the complement to 64-bit.</li>
+        <li>Exactly one valid pair exists; the array is not sorted; values may repeat.</li>
+        <li>Output is a pair of <em>indices</em>, not values &mdash; this single word decides whether sorting is allowed.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <p>Ask these before writing a line. Each one changes the code you would write, which is exactly what makes them worth asking out loud.</p>
+      <ul class="ask-list">
+        <li><strong>Indices or values?</strong> If values are acceptable, sorting becomes legal and O(1) extra space is reachable. If indices are required, sorting must carry the original position.</li>
+        <li><strong>Is the array sorted?</strong> If yes, skip straight to two pointers: O(n) time, O(1) space, no hash map at all.</li>
+        <li><strong>Exactly one answer, or all answers?</strong> &ldquo;All pairs&rdquo; changes the output size to O(n&sup2;) in the worst case and rules out early return.</li>
+        <li><strong>Can the input be mutated?</strong> In-place sorting is only allowed if the caller does not need the original order.</li>
+        <li><strong>How large is <code>n</code>, and what is my memory budget?</strong> This is the question the problem is actually about. Ask it explicitly.</li>
+        <li><strong>Are duplicates allowed, and can a pair reuse one index?</strong> Confirm <code>[3,3]</code> with <code>target = 6</code> returns <code>[0,1]</code>.</li>
+        <li><strong>Integer width?</strong> 32-bit or 64-bit values; does the sum need to be checked for overflow.</li>
+        <li><strong>What if no pair exists?</strong> Return empty, return a sentinel, or raise &mdash; pick one and be consistent.</li>
+        <li><strong>Is the data in memory or streaming from disk / network?</strong> A stream forbids random access and kills the two-pointer solution.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not jump to the answer.</strong> Everyone in the room knows the hash map. Blurting &ldquo;use a dictionary, O(n)&rdquo; in the first ten seconds skips the part being graded: problem framing. Spend 60&ndash;90 seconds restating the problem and asking clarifications first.</li>
+        <li><strong>Do not open with the optimal solution either.</strong> Say the brute force out loud, give its complexity, and explicitly name what is wasteful about it (&ldquo;I rescan the same suffix for every <code>i</code>&rdquo;). The optimal solution then arrives as a <em>consequence</em> of that observation rather than as a memorised fact.</li>
+        <li><strong>Narrate the invariant, not the syntax.</strong> &ldquo;When I reach index <code>i</code>, the map holds every value strictly before <code>i</code>&rdquo; is worth more than any amount of clean typing.</li>
+        <li><strong>Write one worked example on the board and keep it.</strong> Use it later to dry-run your code line by line. Candidates who trace their own code catch their own bugs, which reads far better than the interviewer catching them.</li>
+        <li><strong>Say the trade-off in one sentence before you code.</strong> &ldquo;I will spend O(n) space to buy O(n) time; if space is the constraint I will sort instead and pay O(n log n) time.&rdquo; That sentence is the whole signal of this question.</li>
+        <li><strong>Do not silently assume the array is sorted.</strong> It is the single most common wrong assumption here, and the two-pointer solution is invalid without it.</li>
+        <li><strong>Handle the &ldquo;insert after lookup&rdquo; ordering deliberately.</strong> Mention that writing to the map before checking it would let an element pair with itself when <code>target = 2 * nums[i]</code>.</li>
+        <li><strong>Keep talking while you think.</strong> Silence is unscorable. If you need to think, say what you are weighing.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Enumerate every unordered pair and test its sum. This is the definition of the problem transcribed into two loops, which is exactly why it is the right thing to say first: it is obviously correct, so it fixes the target behaviour that every later optimisation must reproduce.</p>
+      <ol class="step-list">
+        <li>For each index <code>i</code> from <code>0</code> to <code>n-1</code>.</li>
+        <li>For each index <code>j</code> from <code>i+1</code> to <code>n-1</code> &mdash; starting at <code>i+1</code> is what enforces &ldquo;two distinct indices&rdquo; and avoids testing the same pair twice.</li>
+        <li>If <code>nums[i] + nums[j] == target</code>, return <code>[i, j]</code>.</li>
+        <li>If the loops finish, no pair exists.</li>
+      </ol>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">fix i</span><b>&rarr;</b>
+          <span class="node accent">rescan the whole suffix i+1 &hellip; n-1</span><b>&rarr;</b>
+          <span class="node">n&minus;1&minus;i comparisons</span>
+        </div>
+        <figcaption>The waste is visible: the suffix is re-read n times. Total comparisons = n(n&minus;1)/2.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ts-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ts-bf-py" data-lang="python"><pre><code class="language-python">from typing import List
 
 
-def two_sum_hashmap(nums: List[int], target: int) -&gt; List[int]:
-    &quot;&quot;&quot;O(n) time, O(n) space — single pass with complement lookup.&quot;&quot;&quot;
-    seen = {}
-    for i, v in enumerate(nums):
-        comp = target - v
-        if comp in seen:
-            return [seen[comp], i]
-        seen[v] = i
+def two_sum_brute(nums: List[int], target: int) -&gt; List[int]:
+    """Test every unordered pair (i, j) with i &lt; j.
+
+    Obviously correct, obviously quadratic. Stated first so the optimal
+    version has something to be measured against.
+    """
+    n = len(nums)
+    for i in range(n):
+        for j in range(i + 1, n):          # j &gt; i keeps the indices distinct
+            if nums[i] + nums[j] == target:
+                return [i, j]
+    return []                              # no pair; caller decides what this means</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Test every unordered pair (i, j) with i &lt; j.
+/// Returns the indices, or `None` when no pair sums to `target`.
+pub fn two_sum_brute(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
+    for i in 0..nums.len() {
+        for j in (i + 1)..nums.len() {          // j &gt; i keeps the indices distinct
+            // Widen to i64: two i32 values can sum past i32::MAX.
+            if nums[i] as i64 + nums[j] as i64 == target as i64 {
+                return Some((i, j));
+            }
+        }
+    }
+    None
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-bf-java" data-lang="java" hidden><pre><code class="language-java">class Solution {
+
+    /**
+     * Test every unordered pair (i, j) with i &lt; j.
+     * Returns the two indices, or an empty array when no pair exists.
+     */
+    public int[] twoSumBrute(int[] nums, int target) {
+        for (int i = 0; i &lt; nums.length; i++) {
+            for (int j = i + 1; j &lt; nums.length; j++) {   // j &gt; i: distinct indices
+                // Widen to long: two ints can sum past Integer.MAX_VALUE.
+                if ((long) nums[i] + nums[j] == target) {
+                    return new int[] {i, j};
+                }
+            }
+        }
+        return new int[0];
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Test every unordered pair (i, j) with i &lt; j.
+// Returns the two indices, or an empty vector when no pair exists.
+std::vector&lt;int&gt; twoSumBrute(const std::vector&lt;int&gt;&amp; nums, int target) {
+    const int n = static_cast&lt;int&gt;(nums.size());
+    for (int i = 0; i &lt; n; ++i) {
+        for (int j = i + 1; j &lt; n; ++j) {          // j &gt; i: distinct indices
+            // Widen to 64-bit: two ints can sum past INT_MAX.
+            if (static_cast&lt;std::int64_t&gt;(nums[i]) + nums[j] == target) {
+                return {i, j};
+            }
+        }
+    }
+    return {};
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n&sup2;)</span>
+          <p>n(n&minus;1)/2 pair tests in the worst case. At n = 10&#8309; that is 5 &times; 10&#185;&#8313; comparisons &mdash; roughly an hour of CPU.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(1)</span>
+          <p>Two loop counters. Nothing allocated, input untouched &mdash; this is the one dimension where brute force wins.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>The quadratic term comes from re-reading the suffix for every <code>i</code>. But we do not need to <em>search</em> the array &mdash; for a fixed <code>i</code> there is exactly one value that would work, namely <code>target - nums[i]</code>. Replacing a linear scan with a membership test is the entire optimisation.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> the inner loop answers a membership question &mdash; &ldquo;is <code>target - nums[i]</code> somewhere in the array?&rdquo; A hash map answers that in expected O(1). And we do not even need two passes: if a pair exists, the <em>later</em> of its two indices will find the earlier one already recorded. So one pass suffices, as long as we look up before we insert.</p>
+      <ol class="step-list">
+        <li>Create an empty map <code>seen: value &rarr; index</code>.</li>
+        <li>Walk <code>i = 0 &hellip; n-1</code>. Compute <code>need = target - nums[i]</code> in 64-bit.</li>
+        <li>If <code>need</code> is a key in <code>seen</code>, return <code>[seen[need], i]</code> &mdash; both indices are distinct because <code>seen</code> only holds elements strictly before <code>i</code>.</li>
+        <li>Otherwise store <code>seen[nums[i]] = i</code> and continue.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariant to say out loud</span>
+        <p>At the top of iteration <code>i</code>, <code>seen</code> contains exactly the values at indices <code>0 &hellip; i-1</code>. Lookup-before-insert is what makes that true, and it is also what prevents an element pairing with itself when <code>target == 2 * nums[i]</code>.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">i = 0</span><p>nums[0] = 2, need = 7. seen = {} &rarr; miss. Store {2: 0}.</p></div>
+          <div class="seq-row"><span class="actor">i = 1</span><p>nums[1] = 7, need = 2. seen = {2: 0} &rarr; <strong>hit</strong>. Return [0, 1].</p></div>
+        </div>
+        <figcaption>nums = [2, 7, 11, 15], target = 9. Two iterations, two hash operations, done.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ts-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ts-op-py" data-lang="python"><pre><code class="language-python">from typing import Dict, List
+
+
+def two_sum(nums: List[int], target: int) -&gt; List[int]:
+    """One pass, hash map of everything already walked past.
+
+    Invariant: at the top of iteration i, `seen` holds the values at
+    indices 0 .. i-1 -- never index i itself.
+    """
+    seen: Dict[int, int] = {}                  # value -&gt; index
+    for i, x in enumerate(nums):
+        need = target - x
+        if need in seen:                       # complement appeared earlier
+            return [seen[need], i]
+        seen[x] = i                            # insert AFTER the lookup
     return []
 
 
-def two_sum_two_ptr(nums: List[int], target: int) -&gt; List[int]:
-    &quot;&quot;&quot;O(n log n) time, O(1) extra space — requires sorted input.
-    We sort with original indices to recover positions.&quot;&quot;&quot;
-    indexed = sorted((v, i) for i, v in enumerate(nums))
-    lo, hi = 0, len(indexed) - 1
-    while lo &lt; hi:
-        s = indexed[lo][0] + indexed[hi][0]
-        if s == target:
-            return sorted([indexed[lo][1], indexed[hi][1]])
-        elif s &lt; target:
-            lo += 1
-        else:
-            hi -= 1
-    return []
+# Keeping the FIRST index for a repeated value is deliberate: it is the only
+# one that can ever be the earlier half of a pair. `seen.setdefault(x, i)`
+# would make that explicit if the interviewer asks about duplicates.</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
 
-
-def two_sum_bitset(nums: List[int], target: int, max_val: int = 10**6) -&gt; bool:
-    &quot;&quot;&quot;Existence-only variant for bounded non-negative values.
-    O(n) time, O(max_val) space — trades index info for memory efficiency.&quot;&quot;&quot;
-    bits = bytearray(max_val + 1)
-    for v in nums:
-        comp = target - v
-        if 0 &lt;= comp &lt;= max_val and bits[comp]:
-            return True
-        if 0 &lt;= v &lt;= max_val:
-            bits[v] = 1
-    return False</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
-
-/// O(n) hash-map approach: store each value&#x27;s index, look up complement.
-fn two_sum_hashmap(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
-    let mut seen: HashMap&lt;i32, usize&gt; = HashMap::new();
-    for (i, &amp;v) in nums.iter().enumerate() {
-        let comp = target - v;
-        if let Some(&amp;j) = seen.get(&amp;comp) {
+/// One pass, hash map of everything already walked past.
+///
+/// Invariant: at the top of iteration `i`, `seen` holds the values at
+/// indices `0..i` -- never index `i` itself.
+///
+/// Keys are widened to i64 so `target - x` cannot overflow.
+pub fn two_sum(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
+    let mut seen: HashMap&lt;i64, usize&gt; = HashMap::with_capacity(nums.len());
+    for (i, &amp;x) in nums.iter().enumerate() {
+        let need = target as i64 - x as i64;
+        if let Some(&amp;j) = seen.get(&amp;need) {         // complement appeared earlier
             return Some((j, i));
         }
-        seen.insert(v, i);
+        // entry().or_insert keeps the FIRST index of a repeated value,
+        // which is the only one that can be the earlier half of a pair.
+        seen.entry(x as i64).or_insert(i);          // insert AFTER the lookup
     }
     None
-}
-
-/// O(n log n) two-pointer on sorted (value, original_index) pairs.
-fn two_sum_two_ptr(nums: &amp;[i32], target: i32) -&gt; Option&lt;(usize, usize)&gt; {
-    let mut indexed: Vec&lt;(i32, usize)&gt; = nums.iter()
-        .copied().enumerate().map(|(i, v)| (v, i)).collect();
-    indexed.sort_unstable();
-    let (mut lo, mut hi) = (0, indexed.len().saturating_sub(1));
-    while lo &lt; hi {
-        let s = indexed[lo].0 + indexed[hi].0;
-        if s == target {
-            let (a, b) = (indexed[lo].1, indexed[hi].1);
-            return Some((a.min(b), a.max(b)));
-        } else if s &lt; target { lo += 1; }
-        else { hi -= 1; }
-    }
-    None
-}
-
-/// Bitset variant (existence-only): O(n) time, O(max_val) space.
-fn two_sum_bitset(nums: &amp;[i32], target: i32, max_val: usize) -&gt; bool {
-    let mut bits = vec![false; max_val + 1];
-    for &amp;v in nums {
-        let comp = target - v;
-        if comp &gt;= 0 &amp;&amp; (comp as usize) &lt;= max_val &amp;&amp; bits[comp as usize] {
-            return true;
-        }
-        if v &gt;= 0 &amp;&amp; (v as usize) &lt;= max_val {
-            bits[v as usize] = true;
-        }
-    }
-    false
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
-#include &lt;vector&gt;
-#include &lt;unordered_map&gt;
-#include &lt;algorithm&gt;
-
-// O(n) hash-map approach: store each value&#x27;s index, look up complement
-static std::vector&lt;int&gt; twoSumHashMap(const std::vector&lt;int&gt; &amp;nums, int target) {
-    std::unordered_map&lt;int, int&gt; seen;
-    for (int i = 0; i &lt; (int)nums.size(); i++) {
-        int comp = target - nums[i];
-        auto it = seen.find(comp);
-        if (it != seen.end())
-            return {it-&gt;second, i};
-        seen[nums[i]] = i;
-    }
-    return {};
-}
-
-// O(n log n) two-pointer on sorted (value, original_index) pairs
-static std::vector&lt;int&gt; twoSumTwoPtr(const std::vector&lt;int&gt; &amp;nums, int target) {
-    std::vector&lt;std::pair&lt;int,int&gt;&gt; indexed;
-    for (int i = 0; i &lt; (int)nums.size(); i++)
-        indexed.push_back({nums[i], i});
-    std::sort(indexed.begin(), indexed.end());
-    int lo = 0, hi = (int)indexed.size() - 1;
-    while (lo &lt; hi) {
-        int s = indexed[lo].first + indexed[hi].first;
-        if (s == target) {
-            int a = indexed[lo].second, b = indexed[hi].second;
-            return {std::min(a,b), std::max(a,b)};
-        }
-        s &lt; target ? lo++ : hi--;
-    }
-    return {};
-}
-
-// Bitset variant (existence-only): bounded non-negative values
-static bool twoSumBitset(const std::vector&lt;int&gt; &amp;nums, int target, int maxVal) {
-    std::vector&lt;bool&gt; bits(maxVal + 1, false);
-    for (int v : nums) {
-        int comp = target - v;
-        if (comp &gt;= 0 &amp;&amp; comp &lt;= maxVal &amp;&amp; bits[comp]) return true;
-        if (v &gt;= 0 &amp;&amp; v &lt;= maxVal) bits[v] = true;
-    }
-    return false;
 }</code></pre></div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">i=0</span><p>nums[0]=2, comp=7, map empty → store {2:0}</p></div><div class="seq-row"><span class="actor">i=1</span><p>nums[1]=7, comp=2, found 2→0 in map → return [0,1]</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Hash map vs sort</strong>
-              <p>O(n)/O(n) vs O(n log n)/O(1) — choose based on memory budget.</p>
-            </div>
-            <div>
-              <strong>Indices vs values</strong>
-              <p>Returning indices prevents in-place sort; forces copy + original index tracking.</p>
-            </div>
-            <div>
-              <strong>Single vs all pairs</strong>
-              <p>Single pair exits early; all pairs requires full scan or sorted dedup.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Using the same element twice when 2*x == target (insert-after-check fixes it).</li>
-            <li>Integer overflow if the language uses fixed-width ints and target is near max.</li>
-            <li>Sorting in place and losing original indices.</li>
-            <li>Assuming uniqueness when duplicates exist (e.g. [3, 3] target 6).</li>
-            <li>Returning unsorted index pair when the spec says &#x27;i &lt; j&#x27;.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
-          <ul class="ask-list">
-            <li>Extend to 3Sum — sort + fix one, two-pointer the rest, skip duplicates.</li>
-            <li>Two Sum in a BST — in-order iterator + reverse in-order iterator as two pointers.</li>
-            <li>Streaming Two Sum with 64 MB memory budget — Bloom filter for probabilistic check.</li>
-            <li>Count pairs modulo 1e9+7 — frequency map, watch double-counting same-value pairs.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>State both hash map and two-pointer approaches, explain when each wins, handle the duplicate and index edge cases cleanly. Bonus for mentioning bitset under bounded range and external sort for streaming — that shows you think past the leetcode sandbox.</p>
-        </section>
+        <div class="code-panel" role="tabpanel" data-panel="ts-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashMap;
+import java.util.Map;
 
-        <nav class="problem-nav" aria-label="Problem navigation">
-          <span class="problem-nav-link prev muted">← Start of topic</span>
-          <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <a class="problem-nav-link next" href="../longest_substring/">Longest substring without repeating characters →</a>
-        </nav>
+class Solution {
+
+    /**
+     * One pass, hash map of everything already walked past.
+     *
+     * Invariant: at the top of iteration i, `seen` holds the values at
+     * indices 0 .. i-1 -- never index i itself.
+     *
+     * Keys are Long so that `target - nums[i]` cannot overflow.
+     */
+    public int[] twoSum(int[] nums, int target) {
+        Map&lt;Long, Integer&gt; seen = new HashMap&lt;&gt;(nums.length * 2);
+        for (int i = 0; i &lt; nums.length; i++) {
+            long need = (long) target - nums[i];
+            Integer j = seen.get(need);                  // complement seen earlier?
+            if (j != null) {
+                return new int[] {j, i};
+            }
+            // putIfAbsent keeps the FIRST index of a repeated value.
+            seen.putIfAbsent((long) nums[i], i);         // insert AFTER the lookup
+        }
+        return new int[0];
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;cstdint&gt;
+#include &lt;unordered_map&gt;
+#include &lt;vector&gt;
+
+// One pass, hash map of everything already walked past.
+//
+// Invariant: at the top of iteration i, `seen` holds the values at
+// indices 0 .. i-1 -- never index i itself.
+//
+// Keys are 64-bit so that `target - nums[i]` cannot overflow.
+std::vector&lt;int&gt; twoSum(const std::vector&lt;int&gt;&amp; nums, int target) {
+    std::unordered_map&lt;std::int64_t, int&gt; seen;
+    seen.reserve(nums.size() * 2);                  // avoid rehashing mid-pass
+
+    for (int i = 0; i &lt; static_cast&lt;int&gt;(nums.size()); ++i) {
+        const std::int64_t need = static_cast&lt;std::int64_t&gt;(target) - nums[i];
+        auto it = seen.find(need);                  // complement seen earlier?
+        if (it != seen.end()) {
+            return {it-&gt;second, i};
+        }
+        // emplace is a no-op if the key exists, so the FIRST index wins.
+        seen.emplace(static_cast&lt;std::int64_t&gt;(nums[i]), i);  // insert AFTER lookup
+    }
+    return {};
+}</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n) expected</span>
+          <p>One pass, one lookup and at most one insert per element. Worst case O(n&sup2;) if every key collides &mdash; only reachable with an adversarial hash, which is why Rust and Java randomise or tree-ify buckets.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n)</span>
+          <p>Up to n entries. Concretely: ~48&ndash;64 bytes per entry in a Java <code>HashMap</code>, so 10&#8310; elements is tens of MB &mdash; the number that breaks under a memory cap.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p>Duplicates (<code>[3,3]</code>), negatives, zero, <code>target = 2 * nums[i]</code>, and the two-element minimum. It does <em>not</em> handle the array being larger than RAM &mdash; that is section 4.3.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: O(1) extra space</h3>
+      <p>This is the pivot the page is named for. When the interviewer caps memory, drop the map and buy the same membership test with <em>order</em> instead: sort the array, then converge two pointers from both ends. The sum is monotone in each pointer, so every move eliminates a whole row or column of the pair matrix.</p>
+      <ol class="step-list">
+        <li>Sort in place. <code>lo = 0</code>, <code>hi = n - 1</code>.</li>
+        <li>While <code>lo &lt; hi</code>, look at <code>s = nums[lo] + nums[hi]</code>.</li>
+        <li><code>s == target</code> &rarr; found. <code>s &lt; target</code> &rarr; <code>lo++</code> (only a bigger small end can help). <code>s &gt; target</code> &rarr; <code>hi--</code>.</li>
+      </ol>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">sum too small<br><small>lo++</small></span><b>&rarr;</b>
+          <span class="node accent">nums[lo] + nums[hi]</span><b>&larr;</b>
+          <span class="node">sum too big<br><small>hi--</small></span>
+        </div>
+        <figcaption>Each step discards one candidate permanently, so the pointers meet after at most n moves.</figcaption>
+      </figure>
+      <div class="callout warn">
+        <span class="tag">The catch, stated before the interviewer says it</span>
+        <p>Sorting destroys the original indices. If indices are required you must sort <code>(value, index)</code> pairs &mdash; which reintroduces O(n) space and defeats the purpose. So this variant is honest only when the caller wants <em>values</em>, or when the input was already sorted.</p>
+      </div>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ts-tp-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-tp-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-tp-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ts-tp-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ts-tp-py" data-lang="python"><pre><code class="language-python">from typing import List, Optional, Tuple
+
+
+def two_sum_sorted(nums: List[int], target: int) -&gt; Optional[Tuple[int, int]]:
+    """Sort in place, then converge two pointers. Returns the two VALUES.
+
+    Note: CPython's Timsort needs O(n) auxiliary space in the worst case,
+    so "O(1) space" here is really "O(1) space given an in-place sort"
+    (heapsort, or C++ std::sort / Java Arrays.sort on primitives).
+    """
+    nums.sort()
+    lo, hi = 0, len(nums) - 1
+    while lo &lt; hi:
+        s = nums[lo] + nums[hi]
+        if s == target:
+            return nums[lo], nums[hi]
+        if s &lt; target:
+            lo += 1                    # small end is too small: raise it
+        else:
+            hi -= 1                    # big end is too big: lower it
+    return None</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-tp-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::Ordering;
+
+/// Sort in place, then converge two pointers. Returns the two VALUES.
+/// `sort_unstable` is an in-place pattern-defeating quicksort: no heap buffer.
+pub fn two_sum_sorted(nums: &amp;mut [i32], target: i32) -&gt; Option&lt;(i32, i32)&gt; {
+    if nums.len() &lt; 2 {
+        return None;                        // guard: `len() - 1` would underflow
+    }
+    nums.sort_unstable();
+
+    let (mut lo, mut hi) = (0usize, nums.len() - 1);
+    while lo &lt; hi {
+        let sum = nums[lo] as i64 + nums[hi] as i64;
+        match sum.cmp(&amp;(target as i64)) {
+            Ordering::Equal =&gt; return Some((nums[lo], nums[hi])),
+            Ordering::Less =&gt; lo += 1,      // small end too small: raise it
+            Ordering::Greater =&gt; hi -= 1,   // big end too big: lower it
+        }
+    }
+    None
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-tp-java" data-lang="java" hidden><pre><code class="language-java">import java.util.Arrays;
+
+class Solution {
+
+    /**
+     * Sort in place, then converge two pointers. Returns the two VALUES.
+     * Arrays.sort on an int[] is dual-pivot quicksort: in place, no O(n) buffer.
+     */
+    public int[] twoSumSorted(int[] nums, int target) {
+        if (nums.length &lt; 2) {
+            return new int[0];
+        }
+        Arrays.sort(nums);
+
+        int lo = 0, hi = nums.length - 1;
+        while (lo &lt; hi) {
+            long sum = (long) nums[lo] + nums[hi];
+            if (sum == target) {
+                return new int[] {nums[lo], nums[hi]};
+            }
+            if (sum &lt; target) {
+                lo++;                      // small end too small: raise it
+            } else {
+                hi--;                      // big end too big: lower it
+            }
+        }
+        return new int[0];
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ts-tp-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Sort in place, then converge two pointers. Returns the two VALUES.
+// std::sort is introsort: in place, no O(n) scratch buffer.
+std::vector&lt;int&gt; twoSumSorted(std::vector&lt;int&gt;&amp; nums, int target) {
+    if (nums.size() &lt; 2) {
+        return {};
+    }
+    std::sort(nums.begin(), nums.end());
+
+    int lo = 0;
+    int hi = static_cast&lt;int&gt;(nums.size()) - 1;
+    while (lo &lt; hi) {
+        const std::int64_t sum =
+            static_cast&lt;std::int64_t&gt;(nums[lo]) + nums[hi];
+        if (sum == target) {
+            return {nums[lo], nums[hi]};
+        }
+        if (sum &lt; target) {
+            ++lo;                          // small end too small: raise it
+        } else {
+            --hi;                          // big end too big: lower it
+        }
+    }
+    return {};
+}</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n log n)</span>
+          <p>Dominated by the sort; the two-pointer sweep is O(n). Slower than the hash map, and that is the price of the space saving.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(1)</span>
+          <p>Two indices, assuming an in-place sort. Nothing scales with n &mdash; this is the version that survives the memory cap.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">The comparison table to say out loud</span>
+        <p>Brute force: O(n&sup2;) / O(1). Hash map: O(n) / O(n). Sort + two pointers: O(n log n) / O(1). Already sorted input: O(n) / O(1) &mdash; strictly the best of all three, which is why &ldquo;is it sorted?&rdquo; was question two in section 2.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>Return all pairs, not just one.</strong> Drop the early return and keep counts instead of indices: <code>count[v]</code> lets you emit each pair once, with the <code>v == target - v</code> case handled as <code>C(count[v], 2)</code>.</li>
+        <li><strong>3Sum.</strong> Sort, fix index <code>i</code>, then run the section-4.3 two-pointer sweep on the suffix: O(n&sup2;) time, O(1) space. The reduction to Two Sum is the whole answer &mdash; say it that way.</li>
+        <li><strong>4Sum / k-Sum.</strong> Either recurse down to Two Sum (O(n^(k-1))) or hash all pair sums (O(n&sup2;) time and space for k = 4). Discuss which side of the space/time trade you are on.</li>
+        <li><strong>Two Sum on a stream.</strong> No random access, so no sorting. Maintain the seen-values set incrementally &mdash; O(1) amortised per element, O(n) space, and a Bloom filter turns that into a bounded-memory approximation with a false-positive re-check.</li>
+        <li><strong>Data larger than RAM.</strong> External sort into runs on disk, then one sequential two-pointer pass over the head and tail of the sorted file. Or hash-partition by <code>hash(v) mod m</code> so that <code>v</code> and <code>target - v</code> land in the same pass &mdash; partition on <code>min(v, target-v)</code> to guarantee it.</li>
+        <li><strong>Two sorted arrays, find a cross pair.</strong> Two pointers starting at the head of one and the tail of the other: O(n + m) time, O(1) space, no merge required.</li>
+        <li><strong>Closest pair to target instead of exact.</strong> Two pointers again, tracking the best absolute difference; the same monotonicity argument holds.</li>
+        <li><strong>Concurrency.</strong> Shard the array, build per-shard maps in parallel, then check complements across shards. Ask whether the answer must be deterministic, because &ldquo;any valid pair&rdquo; and &ldquo;the lexicographically smallest pair&rdquo; are different problems once you parallelise.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Clarify indices-vs-values, state the brute force and discard it with a reason, write the one-pass map correctly on the first try, dry-run it on <code>[3,3]</code>, then pivot to sort + two pointers when memory is capped and name the index-loss caveat yourself.</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <span class="problem-nav-link prev muted">&larr; Start of topic</span>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <a class="problem-nav-link next" href="../longest_substring/">Longest substring without repeating characters &rarr;</a>
+    </nav>
   </div>
 </main>
 

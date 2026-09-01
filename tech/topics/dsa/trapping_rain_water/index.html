@@ -24,341 +24,673 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Trapping rain water</p>
-      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <p class="eyebrow">DSA · Hard · ~45 min</p>
       <h1>Trapping rain water</h1>
       <p class="problem-deck">Water at i is limited by the shorter of the tallest bars to the left and right — two pointers make that O(1) space.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: monotonic stack</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 45 minutes break down">
             <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Input type, edge behavior, 1D vs 2D.</p></div></div>
-            <div class="stack-step"><strong>5–15 min</strong><div><strong>Build intuition</strong><p>Water at i = min(left_max, right_max) - height[i]. Draw example.</p></div></div>
-            <div class="stack-step"><strong>15–25 min</strong><div><strong>Prefix/suffix approach</strong><p>Precompute left_max[] and right_max[], sum the water.</p></div></div>
-            <div class="stack-step"><strong>25–40 min</strong><div><strong>Two-pointer approach</strong><p>Why processing the shorter side works; code it.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>Trace through example</strong><p>[0,1,0,2,1,0,1,3,2,1,2,1] step by step.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>Stack-based approach, 2D trapping water, container with most water.</p></div></div>
+        <div class="stack-step"><strong>0–6 min</strong><div><strong>Sections 1–2</strong><p>Derive the per-index formula on the board. Everything else follows from it.</p></div></div>
+        <div class="stack-step"><strong>6–12 min</strong><div><strong>Section 3</strong><p>Brute force: scan both directions per index. O(n&sup2;), O(1) space.</p></div></div>
+        <div class="stack-step"><strong>12–20 min</strong><div><strong>Section 4 (part 1)</strong><p>Prefix/suffix maxima to remove the rescan &mdash; O(n) time, O(n) space.</p></div></div>
+        <div class="stack-step"><strong>20–34 min</strong><div><strong>Section 4 (part 2)</strong><p>Two pointers to remove the arrays too. Prove why the shorter side is safe to commit.</p></div></div>
+        <div class="stack-step"><strong>34–45 min</strong><div><strong>Sections 4.3 &amp; 5</strong><p>Monotonic stack as a second model, then 2D water and streaming variants.</p></div></div>
             </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
+      <figcaption>Unusually for a Hard, this problem has a clean three-step optimisation ladder. Walk all three &mdash; each step is a separate signal.</figcaption>
           </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d say the key insight is: water at position i equals min(max_left[i], max_right[i]) - height[i], clamped to zero. The brute force scans left and right for every i — O(n²). Precomputing prefix-max and suffix-max arrays brings it to O(n) time and O(n) space.</p>
-          <p>The real prize is the two-pointer approach: O(n) time and O(1) space. Start with pointers at both ends. Track left_max and right_max. If left_max &lt;= right_max, the water at the left pointer is determined by left_max (the right side is at least as tall, so it&#x27;s not the bottleneck). Process left and move inward. Otherwise process right. This works because we always process the side with the lower known max, and the other side can only be &gt;= that — so we have enough information.</p>
-          <p>I&#x27;d draw the height array [0,1,0,2,1,0,1,3,2,1,2,1] and walk through both approaches before coding.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>Can heights be zero? Negative?</li>
-            <li>Is the array guaranteed non-empty?</li>
-            <li>Integer heights or floating-point?</li>
-            <li>Do we return total water or water at each position?</li>
-            <li>Array length — can it be 10^5 or 10^6?</li>
-            <li>Is this a 1D problem (elevation map) or 2D grid?</li>
-            <li>Any follow-up about trapping between buildings in 2D?</li>
-            <li>Do we count water on the edges (leftmost/rightmost bars)?</li>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Given <code>n</code> non-negative integers where <code>height[i]</code> is the height of a bar of width 1, compute how much rain water is trapped between the bars after it rains.</p>
+      <p>Do not think about the total volume. Think about <strong>one column at a time</strong>: how much water sits directly above index <code>i</code>? Water at <code>i</code> is held in place by the tallest bar somewhere to its left and the tallest bar somewhere to its right. It rises to whichever of those two is <em>shorter</em> &mdash; any higher and it would spill over the shorter side. Then subtract the bar itself, since the bar occupies space the water cannot:</p>
+      <div class="tech-code"><span class="code-lang">the whole problem, in one line</span><pre><code>water[i] = min( max(height[0..i]), max(height[i..n-1]) ) - height[i]
+
+total = sum of water[i] for all i</code></pre></div>
+      <p>Two things worth noting out loud. First, both maxima are taken over ranges that <em>include</em> <code>i</code> itself, so <code>min(...) &ge; height[i]</code> always and the term can never go negative &mdash; no <code>max(0, &hellip;)</code> guard is needed. Second, once you have this formula, every solution to the problem is just a different way of computing those two maxima cheaply. That reframing is the whole interview: the algorithms are consequences of it.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>trap(height: List[int]) -&gt; int      # total trapped units of water</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the canonical case</span><pre><code>Input:  height = [0,1,0,2,1,0,1,3,2,1,2,1]
+Output: 6
+
+index :  0  1  2  3  4  5  6  7  8  9 10 11
+height:  0  1  0  2  1  0  1  3  2  1  2  1
+water :  0  0  1  0  1  2  1  0  0  1  0  0   -&gt; sum = 6
+
+Check index 5: tallest to its left (incl.) = 2, tallest to its right = 3.
+min(2, 3) = 2, minus height[5] = 0, so 2 units sit above index 5.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — a deep single basin</span><pre><code>Input:  height = [4,2,0,3,2,5]
+Output: 9
+
+index :  0  1  2  3  4  5
+height:  4  2  0  3  2  5
+water :  0  2  4  1  2  0   -&gt; sum = 9
+
+Note index 2: min(left max 4, right max 5) = 4, minus 0 = 4 units.
+The far-away 5 on the right is what makes the left 4 the binding wall.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — everything that traps nothing</span><pre><code>height = []            -&gt; 0    (no bars)
+height = [5]           -&gt; 0    (one bar: nothing to trap against)
+height = [3,3]         -&gt; 0    (no dip between them)
+height = [5,4,3,2,1]   -&gt; 0    (monotonic: water always spills right)
+height = [1,2,3,4,5]   -&gt; 0    (monotonic the other way)
+height = [0,0,0]       -&gt; 0    (flat ground, no walls)
+You need at least THREE bars, with a dip strictly between two taller ones.</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>n == height.length</code>, <code>1 &le; n &le; 2 &times; 10^4</code>. So O(n&sup2;) is ~4 &times; 10&#8312; operations &mdash; borderline-to-too-slow, which means the optimisation is required, not cosmetic.</li>
+        <li><code>0 &le; height[i] &le; 10^5</code>. All non-negative, so no sign handling.</li>
+        <li><strong>Overflow check:</strong> the total is bounded by <code>n &times; max_height = 2 &times; 10^9</code>, which <em>exceeds</em> the signed 32-bit maximum of 2 147 483 647. Accumulate in 64-bit. Almost nobody mentions this &mdash; do.</li>
+        <li>Water spills freely off both ends of the array; there are no implicit walls at the boundaries. That is why index 0 and index <code>n-1</code> always hold zero water.</li>
           </ul>
         </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: 1D trapping rain water, O(n) time O(1) space two-pointer solution.</li>
-            <li>Out: 2D trapping water (grid) unless follow-up; container with most water (different problem).</li>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>Is this 1D or 2D?</strong> The 2D version (a height <em>map</em>, Trapping Rain Water II) is a completely different algorithm &mdash; a priority-queue flood inward from the border. Confirm which one before designing.</li>
+        <li><strong>Total volume, or the per-index water profile?</strong> Per-index output rules out the two-pointer version's O(1) space, because you must materialise <code>n</code> values anyway.</li>
+        <li><strong>Do the boundaries act as walls?</strong> Standard reading: no, water spills off the ends. Worth one sentence of confirmation because the answer changes completely if there are container walls.</li>
+        <li><strong>May I mutate the input array?</strong> Some space-saving variants write the prefix maxima back into <code>height</code>. If the caller needs the original, that is off the table.</li>
+        <li><strong>What is the expected <code>n</code>, and what is the accumulator width?</strong> This is where you raise the 2 &times; 10&#8313; overflow. It signals that you read the constraints rather than skimmed them.</li>
+        <li><strong>Are heights integers or floats?</strong> Only affects the accumulator type, but a one-line question.</li>
+        <li><strong>Is the array available all at once, or streaming?</strong> A single forward pass cannot know the future right-hand maximum, so a true stream needs either buffering or the stack-based approach in 4.3, which finalises basins as their right wall arrives.</li>
+        <li><strong>Will this be called repeatedly on the same array with updates?</strong> Point updates plus range queries push you towards a segment tree of maxima rather than recomputing from scratch.</li>
+        <li><strong>Do I need to <em>show</em> the water level, e.g. for rendering?</strong> That is the per-index profile again, and it makes the O(n)-space DP version the right answer.</li>
+          </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not start coding, and do not start with two pointers.</strong> Derive <code>water[i] = min(leftMax, rightMax) - height[i]</code> on the board first, with numbers from example 1. Everything that follows is a way of computing those maxima. A candidate who states the formula and then produces a brute force is ahead of a candidate who produces two pointers with no explanation.</li>
+        <li><strong>Do not jump to the optimal solution.</strong> This problem has a rare three-rung ladder: O(n&sup2;)/O(1) &rarr; O(n)/O(n) &rarr; O(n)/O(1). Climbing it out loud is three separate positive signals. Skipping to the top gets you one, and invites &ldquo;how did you know that?&rdquo;</li>
+        <li><strong>Think per-column, not per-basin.</strong> Trying to identify basins and their boundaries leads to nested-basin case analysis and usually to a wrong answer. Summing vertical slices has no cases at all.</li>
+        <li><strong>Justify the two-pointer move; do not just assert it.</strong> The claim is: <em>if <code>leftMax &le; rightMax</code>, then the water level at <code>left</code> is determined by <code>leftMax</code> alone</em> &mdash; because whatever the true tallest bar to the right is, it is at least <code>rightMax</code>, which is at least <code>leftMax</code>. This is the one proof the interviewer is waiting for. Say it in those words.</li>
+        <li><strong>Mention the 64-bit accumulator.</strong> <code>2 &times; 10&#8308; &times; 10&#8309; = 2 &times; 10&#8313;</code> overflows a signed 32-bit int. It takes five seconds and it is a genuine correctness bug in most submitted solutions.</li>
+        <li><strong>Test the monotonic arrays.</strong> <code>[1,2,3]</code> and <code>[3,2,1]</code> must both return 0. They catch sign errors and boundary mistakes instantly.</li>
+        <li><strong>Pick one pointer-update style and keep it.</strong> Either move the pointer first and then update the max, or update then move. Mixing them is the standard source of double-counting index <code>left</code>.</li>
+        <li><strong>If you offer the stack solution, say what it is <em>for</em>.</strong> It is not faster; it computes water in horizontal layers rather than vertical slices, and it is the same skeleton as Largest Rectangle in Histogram. Framing it as a transferable pattern is worth more than presenting it as a third answer.</li>
           </ul>
         </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>Input: height[] — non-negative integer elevation map.</li>
-            <li>Output: total units of water trapped.</li>
-            <li>Edges cannot trap water (nothing beyond the boundary to hold it).</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Apply the formula literally. For each index, scan left to find the tallest bar and scan right to find the tallest bar, then add <code>min(leftMax, rightMax) - height[i]</code>.</p>
+      <ol class="step-list">
+        <li>For each index <code>i</code> from 0 to <code>n-1</code>.</li>
+        <li>Scan <code>j = 0 &hellip; i</code> tracking the maximum &rarr; <code>leftMax</code>. Include <code>i</code> itself.</li>
+        <li>Scan <code>j = i &hellip; n-1</code> tracking the maximum &rarr; <code>rightMax</code>. Include <code>i</code> itself.</li>
+        <li>Add <code>min(leftMax, rightMax) - height[i]</code> to the running total. Because both scans include <code>i</code>, this is never negative.</li>
+      </ol>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">scan left for the tallest wall</span><b>&rarr;</b>
+          <span class="node accent">index i<br><small>water = min(walls) &minus; height[i]</small></span><b>&larr;</b>
+          <span class="node">scan right for the tallest wall</span>
+        </div>
+        <figcaption>Correct and requires no extra memory. But every index re-derives maxima that its neighbour just computed.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tr-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="tr-bf-py" data-lang="python"><pre><code class="language-python">from typing import List
+
+
+def trap_brute(height: List[int]) -&gt; int:
+    """For every bar, rescan both directions for the tallest wall.
+
+    Direct transcription of water[i] = min(leftMax, rightMax) - height[i].
+    """
+    n = len(height)
+    total = 0
+
+    for i in range(n):
+        left_max = 0
+        for j in range(i + 1):             # inclusive of i
+            left_max = max(left_max, height[j])
+
+        right_max = 0
+        for j in range(i, n):              # inclusive of i
+            right_max = max(right_max, height[j])
+
+        # Both scans include height[i], so min(...) &gt;= height[i] and this
+        # term is never negative -- no max(0, ...) guard needed.
+        total += min(left_max, right_max) - height[i]
+
+    return total</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">/// For every bar, rescan both directions for the tallest wall.
+///
+/// Direct transcription of water[i] = min(leftMax, rightMax) - height[i].
+/// The total is accumulated in i64: n * max_height can reach 2e9, which
+/// overflows i32.
+pub fn trap_brute(height: &amp;[i32]) -&gt; i64 {
+    let n = height.len();
+    let mut total: i64 = 0;
+
+    for i in 0..n {
+        let mut left_max = 0;
+        for j in 0..=i {                   // inclusive of i
+            left_max = left_max.max(height[j]);
+        }
+
+        let mut right_max = 0;
+        for j in i..n {                    // inclusive of i
+            right_max = right_max.max(height[j]);
+        }
+
+        // Both scans include height[i], so this term is never negative.
+        total += (left_max.min(right_max) - height[i]) as i64;
+    }
+
+    total
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-bf-java" data-lang="java" hidden><pre><code class="language-java">class Solution {
+
+    /**
+     * For every bar, rescan both directions for the tallest wall.
+     *
+     * Direct transcription of water[i] = min(leftMax, rightMax) - height[i].
+     * The total is accumulated in long: n * maxHeight can reach 2e9, which
+     * overflows int.
+     */
+    public long trapBrute(int[] height) {
+        int n = height.length;
+        long total = 0;
+
+        for (int i = 0; i &lt; n; i++) {
+            int leftMax = 0;
+            for (int j = 0; j &lt;= i; j++) {         // inclusive of i
+                leftMax = Math.max(leftMax, height[j]);
+            }
+
+            int rightMax = 0;
+            for (int j = i; j &lt; n; j++) {          // inclusive of i
+                rightMax = Math.max(rightMax, height[j]);
+            }
+
+            // Both scans include height[i], so this is never negative.
+            total += Math.min(leftMax, rightMax) - height[i];
+        }
+
+        return total;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// For every bar, rescan both directions for the tallest wall.
+//
+// Direct transcription of water[i] = min(leftMax, rightMax) - height[i].
+// The total is accumulated in int64: n * maxHeight can reach 2e9, which
+// overflows int.
+std::int64_t trapBrute(const std::vector&lt;int&gt;&amp; height) {
+    const int n = static_cast&lt;int&gt;(height.size());
+    std::int64_t total = 0;
+
+    for (int i = 0; i &lt; n; ++i) {
+        int leftMax = 0;
+        for (int j = 0; j &lt;= i; ++j) {             // inclusive of i
+            leftMax = std::max(leftMax, height[j]);
+        }
+
+        int rightMax = 0;
+        for (int j = i; j &lt; n; ++j) {              // inclusive of i
+            rightMax = std::max(rightMax, height[j]);
+        }
+
+        // Both scans include height[i], so this is never negative.
+        total += std::min(leftMax, rightMax) - height[i];
+    }
+
+    return total;
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
             <div>
               <strong>Time</strong>
-              <p>O(n) — single pass with two pointers.</p>
+          <span class="big">O(n&sup2;)</span>
+          <p>Two O(n) scans per index. At n = 2 &times; 10&#8308; that is ~4 &times; 10&#8312; comparisons &mdash; seconds of runtime, past the point where a judge or a reviewer accepts it.</p>
             </div>
             <div>
               <strong>Space</strong>
-              <p>O(1) extra — just pointers and running maxes.</p>
-            </div>
-            <div>
-              <strong>Prefix/suffix alternative</strong>
-              <p>O(n) time, O(n) space — easier to reason about.</p>
+          <span class="big">O(1)</span>
+          <p>Three scalars. Worth stating clearly, because the first optimisation actually makes space <em>worse</em>, and the target is to get back to O(1) with O(n) time.</p>
             </div>
           </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>n limit</strong>
-              <p>up to 2×10^4 in the LeetCode constraint</p>
-            </div>
-            <div>
-              <strong>Time target</strong>
-              <p>O(n) single pass — 2×10^4 iterations, well under 1 ms</p>
-            </div>
-            <div>
-              <strong>Space target</strong>
-              <p>O(1) with two-pointer; O(n) ≈ 80 KB with prefix arrays at n=2×10^4</p>
-            </div>
-            <div>
-              <strong>Scaling note</strong>
-              <p>at n=10^8, two-pointer finishes in ~0.3 s; prefix arrays need 800 MB</p>
-            </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p><code>leftMax</code> for index <code>i</code> is just <code>max(leftMax for i-1, height[i])</code> &mdash; it can be carried forward in constant time instead of recomputed in linear time. Symmetrically for <code>rightMax</code> from the right. That single observation removes the inner loops entirely.</p>
           </div>
         </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>def trap(height: List[int]) -&gt; int:</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>lo, hi: int            # two pointers converging from both ends
-left_max, right_max: int  # running maximums from each side
-water: int             # accumulated answer</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>Prefix/suffix: left_max[i] = max(height[0..i]). right_max[i] = max(height[i..n-1]). Water at i = max(0, min(left_max[i], right_max[i]) - height[i]). Sum it up. O(n) time, O(n) space.</p>
-          <p>Two-pointer: lo=0, hi=n-1, left_max=0, right_max=0. While lo &lt; hi:
-  If height[lo] &lt; height[hi]:
-    If height[lo] &gt;= left_max: update left_max.
-    Else: water += left_max - height[lo].
-    lo++.
-  Else:
-    If height[hi] &gt;= right_max: update right_max.
-    Else: water += right_max - height[hi].
-    hi--.</p>
-          <p>Why the two-pointer works: when height[lo] &lt; height[hi], we know right_max &gt;= height[hi] &gt; height[lo], so the water at lo is determined entirely by left_max. We don&#x27;t need to know the exact right_max — we only need to know it&#x27;s not the bottleneck. Symmetric argument for the other side.</p>
-          <p>Stack-based alternative: process bars left to right. For each bar, while it&#x27;s taller than the stack top, pop the top (it&#x27;s a valley), compute trapped water between the new top and current bar. This is O(n) time and O(n) space but harder to get right under pressure.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">lo →</span><b>left_max</b><span class="node accent">water = min(left_max, right_max) − h[i]</span><b>right_max</b><span class="node">← hi</span></div><figcaption>Two-pointer: process the shorter side — it determines the waterline at that position</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">Prefix/suffix: O(n) space</span><b>vs</b><span class="node accent">Two-pointer: O(1) space</span><b>vs</b><span class="node">Stack: O(n) space</span></div><figcaption>All three are O(n) time — choose by space budget and code clarity preference</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>height = [0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]. Expected answer: 6.</p>
-          <p>Two-pointer walkthrough:
-lo=0, hi=11, left_max=0, right_max=0, water=0.</p>
-          <p>h[0]=0 &lt; h[11]=1: h[0]=0, 0 &gt;= left_max=0 → left_max stays 0. lo=1.
-h[1]=1 &gt;= h[11]=1: else branch. h[11]=1 &gt;= right_max=0 → right_max=1. hi=10.
-h[1]=1 &lt; h[10]=2: h[1]=1 &gt;= left_max=0 → left_max=1. lo=2.
-h[2]=0 &lt; h[10]=2: h[2]=0 &lt; left_max=1 → water += 1-0=1. lo=3. (water=1)
-h[3]=2 &gt;= h[10]=2: else branch. h[10]=2 &gt;= right_max=1 → right_max=2. hi=9.
-h[3]=2 &gt;= h[9]=1: else branch. h[9]=1 &lt; right_max=2 → water += 2-1=1. hi=8. (water=2)
-h[3]=2 &gt;= h[8]=2: else branch. h[8]=2 &gt;= right_max=2 → right_max stays 2. hi=7.
-h[3]=2 &lt; h[7]=3: h[3]=2 &gt;= left_max=1 → left_max=2. lo=4.
-h[4]=1 &lt; h[7]=3: h[4]=1 &lt; left_max=2 → water += 2-1=1. lo=5. (water=3)
-h[5]=0 &lt; h[7]=3: h[5]=0 &lt; left_max=2 → water += 2-0=2. lo=6. (water=5)
-h[6]=1 &lt; h[7]=3: h[6]=1 &lt; left_max=2 → water += 2-1=1. lo=7. (water=6)
-lo=7, hi=7 → lo &lt; hi fails. Stop. Answer: 6. Correct.</p>
-          <p>Verify with prefix/suffix:
-left_max  = [0,1,1,2,2,2,2,3,3,3,3,3]
-right_max = [3,3,3,3,3,3,3,3,2,2,2,1]
-water[i]  = [0,0,1,0,1,2,1,0,0,1,0,0] → sum = 6. Matches.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Two-pointer O(1) space + prefix/suffix O(n) space</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from typing import List
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Step one &mdash; precompute the maxima (O(n) time, O(n) space).</strong> One forward pass fills <code>leftMax[i]</code>, one backward pass fills <code>rightMax[i]</code>, then a third pass sums the formula. This is worth writing on the board because it is the honest intermediate step and it is the version you want if the interviewer asks for the per-index water profile:</p>
+      <div class="tech-code"><span class="code-lang">python — the O(n) space stepping stone</span><pre><code>def trap_dp(height):
+    n = len(height)
+    if n == 0:
+        return 0
+
+    left_max = [0] * n
+    left_max[0] = height[0]
+    for i in range(1, n):                       # carry the running max forward
+        left_max[i] = max(left_max[i - 1], height[i])
+
+    right_max = [0] * n
+    right_max[-1] = height[-1]
+    for i in range(n - 2, -1, -1):              # and backward
+        right_max[i] = max(right_max[i + 1], height[i])
+
+    return sum(min(left_max[i], right_max[i]) - height[i] for i in range(n))</code></pre></div>
+      <p><strong>Step two &mdash; the key insight that removes the arrays.</strong> We never need both full arrays at once. Walk two pointers inward and keep only the running maxima seen so far from each side. The claim that makes it work:</p>
+      <div class="callout">
+        <span class="tag">The proof to say out loud</span>
+        <p>Suppose <code>leftMax &le; rightMax</code>, where <code>leftMax = max(height[0..left])</code> and <code>rightMax = max(height[right..n-1])</code>. The <em>true</em> tallest bar to the right of <code>left</code> is at least <code>rightMax</code> (it includes that whole suffix), and therefore at least <code>leftMax</code>. So <code>min(trueLeftMax, trueRightMax) = leftMax</code> exactly &mdash; we can finalise the water at <code>left</code> using <code>leftMax</code> alone, <strong>without knowing what the right side actually contains</strong>. Then advance <code>left</code>. The mirrored argument holds when <code>rightMax &lt; leftMax</code>.</p>
+      </div>
+      <ol class="step-list">
+        <li><code>left = 0</code>, <code>right = n-1</code>, <code>leftMax = height[0]</code>, <code>rightMax = height[n-1]</code>, <code>total = 0</code>.</li>
+        <li>While <code>left &lt; right</code>: if <code>leftMax &le; rightMax</code>, advance <code>left</code>, refresh <code>leftMax</code>, and add <code>leftMax - height[left]</code>.</li>
+        <li>Otherwise retreat <code>right</code>, refresh <code>rightMax</code>, and add <code>rightMax - height[right]</code>.</li>
+        <li>Each index is finalised exactly once, so the pointers meet after <code>n-1</code> steps.</li>
+      </ol>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">leftMax<br><small>max seen from the left</small></span><b>&rarr;</b>
+          <span class="node accent">shorter side is safe<br><small>commit its water, then move it</small></span><b>&larr;</b>
+          <span class="node">rightMax<br><small>max seen from the right</small></span>
+        </div>
+        <figcaption>The taller side is a guaranteed lower bound on the far wall, which is why the shorter side can be resolved without any information about the other end.</figcaption>
+      </figure>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">start</span><p>height = [4,2,0,3,2,5]. left=0, right=5, leftMax=4, rightMax=5, total=0</p></div>
+          <div class="seq-row"><span class="actor">4 &le; 5</span><p>left&rarr;1, leftMax=max(4,2)=4, add 4&minus;2=<strong>2</strong>. total=2</p></div>
+          <div class="seq-row"><span class="actor">4 &le; 5</span><p>left&rarr;2, leftMax=4, add 4&minus;0=<strong>4</strong>. total=6</p></div>
+          <div class="seq-row"><span class="actor">4 &le; 5</span><p>left&rarr;3, leftMax=max(4,3)=4, add 4&minus;3=<strong>1</strong>. total=7</p></div>
+          <div class="seq-row"><span class="actor">4 &le; 5</span><p>left&rarr;4, leftMax=4, add 4&minus;2=<strong>2</strong>. total=9</p></div>
+          <div class="seq-row"><span class="actor">4 &le; 5</span><p>left&rarr;5, leftMax=max(4,5)=5, add 5&minus;5=0. left==right, stop. <strong>total = 9</strong></p></div>
+        </div>
+        <figcaption>Six steps, no arrays, one pass. Notice the far-right 5 was never examined in detail &mdash; only its role as a lower bound mattered.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tr-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="tr-op-py" data-lang="python"><pre><code class="language-python">from typing import List
 
 
 def trap(height: List[int]) -&gt; int:
-    &quot;&quot;&quot;Two-pointer O(1) space: converge from both ends,
-    always advancing the side with the smaller max.&quot;&quot;&quot;
-    if not height:
-        return 0
-    lo, hi = 0, len(height) - 1
-    left_max = right_max = 0
-    water = 0
-    while lo &lt; hi:
-        if height[lo] &lt; height[hi]:
-            if height[lo] &gt;= left_max:
-                left_max = height[lo]
-            else:
-                # Water trapped = left_max - current bar height
-                water += left_max - height[lo]
-            lo += 1
+    """Two pointers converging inward. O(n) time, O(1) space.
+
+    Invariant: left_max  == max(height[0 .. left])
+               right_max == max(height[right .. n-1])
+    Whichever of the two is smaller is the TRUE water level for its pointer,
+    because the other side guarantees a wall at least that tall.
+    """
+    if len(height) &lt; 3:
+        return 0                           # need two walls and a dip between
+
+    left, right = 0, len(height) - 1
+    left_max, right_max = height[left], height[right]
+    total = 0
+
+    while left &lt; right:
+        if left_max &lt;= right_max:
+            left += 1                      # move FIRST, then refresh the max
+            left_max = max(left_max, height[left])
+            total += left_max - height[left]
         else:
-            if height[hi] &gt;= right_max:
-                right_max = height[hi]
-            else:
-                water += right_max - height[hi]
-            hi -= 1
-    return water
+            right -= 1
+            right_max = max(right_max, height[right])
+            total += right_max - height[right]
 
+    return total</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-op-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Two pointers converging inward. O(n) time, O(1) space.
+///
+/// Invariant: left_max  == max(height[0 ..= left])
+///            right_max == max(height[right ..])
+/// Whichever is smaller is the TRUE water level for its pointer, because
+/// the other side guarantees a wall at least that tall.
+///
+/// Accumulates in i64: n * max_height can reach 2e9 and overflow i32.
+pub fn trap(height: &amp;[i32]) -&gt; i64 {
+    if height.len() &lt; 3 {
+        return 0;                          // need two walls and a dip between
+    }
 
-def trap_prefix_suffix(height: List[int]) -&gt; int:
-    &quot;&quot;&quot;O(n) space variant: precompute left-max and right-max arrays,
-    then water at each position = min(left_max, right_max) - height.&quot;&quot;&quot;
-    n = len(height)
-    if n &lt; 3:
-        return 0
-    left_max = [0] * n
-    right_max = [0] * n
-    left_max[0] = height[0]
-    for i in range(1, n):
-        left_max[i] = max(left_max[i - 1], height[i])
-    right_max[-1] = height[-1]
-    for i in range(n - 2, -1, -1):
-        right_max[i] = max(right_max[i + 1], height[i])
-    return sum(
-        min(left_max[i], right_max[i]) - height[i]
-        for i in range(n)
-    )</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">/// Two-pointer O(1) space: converge from both ends,
-/// always advancing the side with the smaller max.
-fn trap(height: &amp;[i32]) -&gt; i32 {
-    if height.is_empty() { return 0; }
-    let (mut lo, mut hi) = (0usize, height.len() - 1);
-    let (mut left_max, mut right_max) = (0i32, 0i32);
-    let mut water = 0i32;
-    while lo &lt; hi {
-        if height[lo] &lt; height[hi] {
-            if height[lo] &gt;= left_max {
-                left_max = height[lo];
-            } else {
-                water += left_max - height[lo]; // trapped between bars
-            }
-            lo += 1;
+    let (mut left, mut right) = (0usize, height.len() - 1);
+    let mut left_max = height[left];
+    let mut right_max = height[right];
+    let mut total: i64 = 0;
+
+    while left &lt; right {
+        if left_max &lt;= right_max {
+            left += 1;                     // move FIRST, then refresh the max
+            left_max = left_max.max(height[left]);
+            total += (left_max - height[left]) as i64;
         } else {
-            if height[hi] &gt;= right_max {
-                right_max = height[hi];
-            } else {
-                water += right_max - height[hi];
-            }
-            hi -= 1;
+            right -= 1;
+            right_max = right_max.max(height[right]);
+            total += (right_max - height[right]) as i64;
         }
     }
-    water
-}
 
-/// O(n) space variant: precompute prefix-max and suffix-max arrays.
-fn trap_prefix_suffix(height: &amp;[i32]) -&gt; i32 {
-    let n = height.len();
-    if n &lt; 3 { return 0; }
-    let mut left_max = vec![0i32; n];
-    let mut right_max = vec![0i32; n];
-    left_max[0] = height[0];
-    for i in 1..n {
-        left_max[i] = left_max[i - 1].max(height[i]);
+    total
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-op-java" data-lang="java" hidden><pre><code class="language-java">class Solution {
+
+    /**
+     * Two pointers converging inward. O(n) time, O(1) space.
+     *
+     * Invariant: leftMax  == max(height[0 .. left])
+     *            rightMax == max(height[right .. n-1])
+     * Whichever is smaller is the TRUE water level for its pointer, because
+     * the other side guarantees a wall at least that tall.
+     *
+     * Accumulates in long: n * maxHeight can reach 2e9 and overflow int.
+     */
+    public long trap(int[] height) {
+        if (height.length &lt; 3) {
+            return 0;                      // need two walls and a dip between
+        }
+
+        int left = 0, right = height.length - 1;
+        int leftMax = height[left], rightMax = height[right];
+        long total = 0;
+
+        while (left &lt; right) {
+            if (leftMax &lt;= rightMax) {
+                left++;                    // move FIRST, then refresh the max
+                leftMax = Math.max(leftMax, height[left]);
+                total += leftMax - height[left];
+            } else {
+                right--;
+                rightMax = Math.max(rightMax, height[right]);
+                total += rightMax - height[right];
+            }
+        }
+
+        return total;
     }
-    right_max[n - 1] = height[n - 1];
-    for i in (0..n - 1).rev() {
-        right_max[i] = right_max[i + 1].max(height[i]);
-    }
-    // Water at each bar = min(left_max, right_max) - height
-    (0..n).map(|i| left_max[i].min(right_max[i]) - height[i]).sum()
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cstdint&gt;
 #include &lt;vector&gt;
-#include &lt;algorithm&gt;
 
-// Two-pointer O(1) space: converge from both ends
-static int trap(const std::vector&lt;int&gt; &amp;height) {
-    if (height.empty()) return 0;
-    int lo = 0, hi = (int)height.size() - 1;
-    int leftMax = 0, rightMax = 0, water = 0;
-    while (lo &lt; hi) {
-        if (height[lo] &lt; height[hi]) {
-            if (height[lo] &gt;= leftMax) leftMax = height[lo];
-            else water += leftMax - height[lo]; // trapped between bars
-            lo++;
+// Two pointers converging inward. O(n) time, O(1) space.
+//
+// Invariant: leftMax  == max(height[0 .. left])
+//            rightMax == max(height[right .. n-1])
+// Whichever is smaller is the TRUE water level for its pointer, because the
+// other side guarantees a wall at least that tall.
+//
+// Accumulates in int64: n * maxHeight can reach 2e9 and overflow int.
+std::int64_t trap(const std::vector&lt;int&gt;&amp; height) {
+    if (height.size() &lt; 3) {
+        return 0;                          // need two walls and a dip between
+    }
+
+    int left = 0;
+    int right = static_cast&lt;int&gt;(height.size()) - 1;
+    int leftMax = height[left];
+    int rightMax = height[right];
+    std::int64_t total = 0;
+
+    while (left &lt; right) {
+        if (leftMax &lt;= rightMax) {
+            ++left;                        // move FIRST, then refresh the max
+            leftMax = std::max(leftMax, height[left]);
+            total += leftMax - height[left];
         } else {
-            if (height[hi] &gt;= rightMax) rightMax = height[hi];
-            else water += rightMax - height[hi];
-            hi--;
+            --right;
+            rightMax = std::max(rightMax, height[right]);
+            total += rightMax - height[right];
         }
     }
-    return water;
-}
 
-// O(n) space: precompute prefix-max and suffix-max arrays
-static int trapPrefixSuffix(const std::vector&lt;int&gt; &amp;height) {
-    int n = (int)height.size();
-    if (n &lt; 3) return 0;
-    std::vector&lt;int&gt; leftMax(n), rightMax(n);
-    leftMax[0] = height[0];
-    for (int i = 1; i &lt; n; i++)
-        leftMax[i] = std::max(leftMax[i-1], height[i]);
-    rightMax[n-1] = height[n-1];
-    for (int i = n-2; i &gt;= 0; i--)
-        rightMax[i] = std::max(rightMax[i+1], height[i]);
-    // Water at each bar = min(leftMax, rightMax) - height
-    int water = 0;
-    for (int i = 0; i &lt; n; i++)
-        water += std::min(leftMax[i], rightMax[i]) - height[i];
-    return water;
-}
+    return total;
+}</code></pre></div>
+      </div>
 
-// NSArray convenience wrapper
-static NSInteger trapWater(NSArray&lt;NSNumber *&gt; *heights) {
-    std::vector&lt;int&gt; h;
-    for (NSNumber *n in heights) h.push_back(n.intValue);
-    return trap(h);
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n)</span>
+          <p>Exactly <code>n-1</code> iterations: every iteration finalises one index and moves one pointer, and the pointers only ever move toward each other. Single pass, sequential access, cache friendly.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(1)</span>
+          <p>Four scalars plus the accumulator. Strictly better than the O(n)-space DP version at the same time complexity &mdash; which is why this is the answer to give.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p><code>n &lt; 3</code> &rarr; early return 0. Monotonic input &rarr; one pointer walks the whole way and every term is 0. All-equal input &rarr; every term is 0. A single deep well &rarr; example 2 traces to 9. Boundary indices &rarr; never assigned water, since the loop finalises only interior positions.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: monotonic stack</h3>
+      <p>Same O(n) time, a completely different mental model: instead of vertical slices, compute water in <strong>horizontal layers</strong>, closing each basin when its right wall arrives. Keep a stack of indices with non-increasing heights. When a taller bar appears, it is the right wall for everything shorter on the stack &mdash; pop each such bar as a basin floor, look at the new stack top as the left wall, and add <code>width &times; depth</code>.</p>
+      <p>It is not faster and it uses O(n) space, so it is not the answer to give first. Its value is that <em>this exact skeleton</em> solves Largest Rectangle in Histogram, Next Greater Element, and Daily Temperatures &mdash; presenting it as a transferable pattern rather than a third solution is what makes it worth the airtime.</p>
+      <ol class="step-list">
+        <li>Iterate <code>i</code> left to right. While the stack is non-empty and <code>height[stack.top] &lt; height[i]</code>:</li>
+        <li>Pop the top as <code>bottom</code> &mdash; the floor of a basin. If the stack is now empty there is no left wall, so the water spills out: stop.</li>
+        <li>Otherwise the new top is the left wall. <code>width = i - left - 1</code>, <code>depth = min(height[left], height[i]) - height[bottom]</code>, add <code>width &times; depth</code>.</li>
+        <li>Push <code>i</code> and continue. Bars never popped simply never trapped anything above them.</li>
+      </ol>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">stack: decreasing heights</span><b>&rarr;</b>
+          <span class="node accent">taller bar arrives<br><small>it is the right wall</small></span><b>&rarr;</b>
+          <span class="node">pop floors, add<br>width &times; depth per layer</span>
+        </div>
+        <figcaption>Each index is pushed once and popped at most once, so the total work is O(n) despite the inner <code>while</code>.</figcaption>
+      </figure>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tr-st-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-st-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-st-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tr-st-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="tr-st-py" data-lang="python"><pre><code class="language-python">from typing import List
+
+
+def trap_stack(height: List[int]) -&gt; int:
+    """Monotonic (non-increasing) stack of indices. Water in HORIZONTAL layers.
+
+    Same skeleton as Largest Rectangle in Histogram and Next Greater Element.
+    """
+    stack: List[int] = []                  # indices, heights non-increasing
+    total = 0
+
+    for i, h in enumerate(height):
+        while stack and height[stack[-1]] &lt; h:
+            bottom = stack.pop()           # this bar is a basin FLOOR
+            if not stack:
+                break                      # no left wall: the water spills out
+            left = stack[-1]               # nearest taller bar on the left
+            width = i - left - 1
+            depth = min(height[left], h) - height[bottom]
+            total += width * depth         # one horizontal layer
+        stack.append(i)
+
+    return total</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-st-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Monotonic (non-increasing) stack of indices. Water in HORIZONTAL layers.
+///
+/// Same skeleton as Largest Rectangle in Histogram and Next Greater Element.
+pub fn trap_stack(height: &amp;[i32]) -&gt; i64 {
+    let mut stack: Vec&lt;usize&gt; = Vec::new(); // indices, heights non-increasing
+    let mut total: i64 = 0;
+
+    for i in 0..height.len() {
+        let h = height[i];
+        while let Some(&amp;top) = stack.last() {
+            if height[top] &gt;= h {
+                break;
+            }
+            let bottom = stack.pop().unwrap();   // this bar is a basin FLOOR
+            match stack.last() {
+                None =&gt; break,                   // no left wall: water spills
+                Some(&amp;left) =&gt; {
+                    let width = (i - left - 1) as i64;
+                    let depth =
+                        (height[left].min(h) - height[bottom]) as i64;
+                    total += width * depth;      // one horizontal layer
+                }
+            }
+        }
+        stack.push(i);
+    }
+
+    total
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-st-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayDeque;
+import java.util.Deque;
+
+class Solution {
+
+    /**
+     * Monotonic (non-increasing) stack of indices. Water in HORIZONTAL layers.
+     *
+     * Same skeleton as Largest Rectangle in Histogram and Next Greater Element.
+     */
+    public long trapStack(int[] height) {
+        Deque&lt;Integer&gt; stack = new ArrayDeque&lt;&gt;();   // indices, non-increasing
+        long total = 0;
+
+        for (int i = 0; i &lt; height.length; i++) {
+            while (!stack.isEmpty() &amp;&amp; height[stack.peek()] &lt; height[i]) {
+                int bottom = stack.pop();            // this bar is a FLOOR
+                if (stack.isEmpty()) {
+                    break;                           // no left wall: spills out
+                }
+                int left = stack.peek();             // nearest taller on left
+                int width = i - left - 1;
+                int depth = Math.min(height[left], height[i]) - height[bottom];
+                total += (long) width * depth;       // one horizontal layer
+            }
+            stack.push(i);
+        }
+
+        return total;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="tr-st-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Monotonic (non-increasing) stack of indices. Water in HORIZONTAL layers.
+//
+// Same skeleton as Largest Rectangle in Histogram and Next Greater Element.
+std::int64_t trapStack(const std::vector&lt;int&gt;&amp; height) {
+    std::vector&lt;int&gt; stack;                // indices, heights non-increasing
+    std::int64_t total = 0;
+
+    for (int i = 0; i &lt; static_cast&lt;int&gt;(height.size()); ++i) {
+        while (!stack.empty() &amp;&amp; height[stack.back()] &lt; height[i]) {
+            const int bottom = stack.back();        // this bar is a FLOOR
+            stack.pop_back();
+            if (stack.empty()) {
+                break;                              // no left wall: spills out
+            }
+            const int left = stack.back();          // nearest taller on left
+            const std::int64_t width = i - left - 1;
+            const std::int64_t depth =
+                std::min(height[left], height[i]) - height[bottom];
+            total += width * depth;                 // one horizontal layer
+        }
+        stack.push_back(i);
+    }
+
+    return total;
 }</code></pre></div>
           </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Init</span><p>lo=0, hi=11, left_max=0, right_max=0, water=0</p></div><div class="seq-row"><span class="actor">Step 1-3</span><p>process lo=0,1 and hi=11 → left_max=1, right_max=1</p></div><div class="seq-row"><span class="actor">Step 4</span><p>lo=2, h=0 &lt; left_max=1 → water += 1 (water=1)</p></div><div class="seq-row"><span class="actor">Step 5-8</span><p>process hi side and lo=3 → left_max=2, right_max=2, water=2</p></div><div class="seq-row"><span class="actor">Step 9-11</span><p>lo=4,5,6 all below left_max=2 → water += 1+2+1 = 4 (water=6)</p></div><div class="seq-row"><span class="actor">Done</span><p>lo=hi=7 → stop. Total water = 6 ✓</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
+      <div class="verdict">
             <div>
-              <strong>Two-pointer vs prefix/suffix</strong>
-              <p>Same O(n) time; two-pointer saves O(n) space but is harder to explain.</p>
+          <strong>Time</strong>
+          <span class="big">O(n)</span>
+          <p>Amortised: each index is pushed exactly once and popped at most once, so the inner <code>while</code> runs O(n) times across the entire outer loop &mdash; not O(n) times per iteration.</p>
             </div>
             <div>
-              <strong>Proof of correctness</strong>
-              <p>Two-pointer relies on &#x27;shorter side determines water&#x27; — draw the argument if interviewer asks.</p>
-            </div>
-            <div>
-              <strong>Stack approach</strong>
-              <p>Processes valleys as units rather than columns — useful mental model for 2D extension.</p>
+          <strong>Space</strong>
+          <span class="big">O(n)</span>
+          <p>The stack holds up to n indices &mdash; worst case a strictly decreasing array, where nothing is ever popped. Strictly worse than two pointers, which is why this is the alternative and not the answer.</p>
             </div>
           </div>
+      <div class="callout">
+        <span class="tag">Which one would I ship?</span>
+        <p>Two pointers: O(n) time, O(1) space, one pass, no allocation. The stack version earns its place when you need the water <em>per basin</em> rather than a single total, or when the input is streaming &mdash; because it finalises each basin the moment its right wall arrives, without needing the rest of the array. Say that distinction rather than presenting it as an equal alternative.</p>
+      </div>
         </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Off-by-one: processing lo == hi position (not needed, but forgetting causes double-count).</li>
-            <li>Updating max after computing water instead of before — gives wrong max for current position.</li>
-            <li>Confusing this with &#x27;container with most water&#x27; — different problem, same two-pointer template.</li>
-            <li>Negative heights not handled (problem guarantees non-negative, but say it).</li>
-            <li>Empty array crash — check len(height) &lt; 3 early.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
           <ul class="ask-list">
-            <li>2D trapping rain water — BFS from boundary inward with a min-heap of border heights.</li>
-            <li>Container with most water — two pointers, but max area instead of sum of trapped water.</li>
-            <li>Trapping rain water with holes — what if some bars have gaps? Changes the model.</li>
-            <li>Largest rectangle in histogram — related but different; monotonic stack pattern.</li>
+        <li><strong>Trapping Rain Water II (2D height map).</strong> Genuinely different: push all border cells into a min-heap, repeatedly pop the lowest, and flood to its unvisited neighbours &mdash; water level at a neighbour is <code>max(popped level, neighbour height)</code>. O(mn log(mn)) time, O(mn) space. The reason two pointers do not generalise is that in 2D water can escape in any direction, so &ldquo;the shorter of two walls&rdquo; becomes &ldquo;the lowest point on the entire escape boundary&rdquo;.</li>
+        <li><strong>Return the per-index water profile, not the total.</strong> The output is O(n) regardless, so the prefix/suffix DP is now the right answer &mdash; the two-pointer version's O(1) space advantage disappears. Good demonstration that the &ldquo;best&rdquo; algorithm depends on the output contract.</li>
+        <li><strong>Streaming heights, unbounded length.</strong> The monotonic stack works online: it emits a basin's water as soon as the right wall appears, and its memory is bounded by the length of the current decreasing run rather than by the total input.</li>
+        <li><strong>Point updates plus repeated queries.</strong> Recomputing is O(n) per update. A segment tree over maxima answers range-max in O(log n), so a single index's water is O(log n) &mdash; though a full-total recompute is still O(n log n), so this only pays off for point queries.</li>
+        <li><strong>Bars of non-unit width, or non-integer heights.</strong> Multiply by width in the area term; the algorithm is unchanged. With floats, discuss accumulation error and consider summing per-basin rather than per-column to reduce it.</li>
+        <li><strong>Water that evaporates / a finite amount of rain.</strong> Turns into a simulation or a binary search on the fill level. Worth naming to show you can spot when a closed-form answer stops existing.</li>
+        <li><strong>Container With Most Water.</strong> Different problem, same two-pointer <em>shape</em>: move the pointer at the shorter wall because it is the binding constraint. Naming the shared principle &mdash; <em>advance the side that limits the answer</em> &mdash; is stronger than naming the problem.</li>
+        <li><strong>Can it be parallelised?</strong> Yes: prefix and suffix maxima are both scans, which parallelise in O(log n) depth, then the summation is a reduction. The two-pointer version is inherently sequential, so at large scale the &ldquo;worse&rdquo; O(n)-space DP is actually the parallel-friendly one.</li>
+        <li><strong>Testing this.</strong> Property-based: assert the result equals the O(n&sup2;) brute force on random arrays, assert it is 0 for monotonic and constant inputs, and assert reversing the input leaves the total unchanged &mdash; the last one is a cheap, powerful invariant that catches most asymmetry bugs.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Derive the per-index formula before writing anything, climb all three rungs of the ladder with complexities stated, prove the two-pointer move rather than asserting it, mention the 64-bit accumulator, verify the monotonic cases, and offer the monotonic stack as a transferable pattern rather than a fourth answer.</li>
           </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>Explain the min(left_max, right_max) - height[i] formula, implement the two-pointer version with correct max updates, trace through the classic 12-bar example showing every step, and articulate why processing the shorter side is safe. Mentioning the stack approach and 2D extension shows breadth beyond the single problem.</p>
         </section>
 
         <nav class="problem-nav" aria-label="Problem navigation">
-          <a class="problem-nav-link prev" href="../word_ladder/">← Word ladder</a>
+      <a class="problem-nav-link prev" href="../word_ladder/">&larr; Word ladder</a>
           <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <span class="problem-nav-link next muted">End of topic →</span>
+      <a class="problem-nav-link next" href="../minimum_window_substring/">Minimum window substring &rarr;</a>
         </nav>
   </div>
 </main>

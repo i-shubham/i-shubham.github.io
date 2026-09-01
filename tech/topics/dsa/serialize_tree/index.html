@@ -24,329 +24,955 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Serialize and deserialize a binary tree</p>
-      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <p class="eyebrow">DSA · Hard · ~50 min</p>
       <h1>Serialize and deserialize a binary tree</h1>
       <p class="problem-deck">The trick isn’t JSON — it’s preserving shape when nulls matter and leaves aren’t evenly balanced.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
-            <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>General vs BST, value type, format flexibility.</p></div></div>
-            <div class="stack-step"><strong>5–15 min</strong><div><strong>Why nulls matter</strong><p>Draw a tree where preorder without nulls is ambiguous.</p></div></div>
-            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code DFS serialize + deserialize</strong><p>Preorder with &#x27;#&#x27; markers, iterator-based deserialize.</p></div></div>
-            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through example</strong><p>Build string from a 5-node tree, reconstruct it.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>BFS alternative + edge cases</strong><p>Level-order with null markers; empty tree; single node.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>BST preorder without nulls, n-ary tree, compact binary encoding.</p></div></div>
-            </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
-          </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d say the hard part isn&#x27;t picking a format — it&#x27;s preserving the tree&#x27;s shape including where nulls are. A BST can be reconstructed from preorder alone because the BST property constrains placement. A general binary tree can&#x27;t — you need null markers or you lose structural information.</p>
-          <p>I&#x27;d discuss two approaches: preorder DFS with null markers, and level-order BFS with null markers. Both work, both are O(n). I&#x27;d default to preorder DFS because the code is shorter and the recursion mirrors how we think about trees. But if the interviewer cares about streaming or partial deserialization, level-order is better because you can reconstruct top-down without a stack.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>General binary tree or BST? (BST doesn&#x27;t need null markers.)</li>
-            <li>Node values — integers, strings, can they contain the delimiter?</li>
-            <li>Any constraint on serialized format (JSON, custom string)?</li>
-            <li>Do we need to handle very deep trees (stack overflow concern)?</li>
-            <li>Single tree or a forest (multiple roots)?</li>
-            <li>Is the tree mutable after deserialization?</li>
-            <li>Compression — do we care about serialized size?</li>
-            <li>Should serialize → deserialize be a perfect round-trip?</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: serialize and deserialize a general binary tree with integer values.</li>
-            <li>Out: n-ary trees, BST-specific optimization unless follow-up.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>serialize(root) → string that encodes the full tree shape.</li>
-            <li>deserialize(data) → TreeNode root identical to original.</li>
-            <li>Round-trip: deserialize(serialize(tree)) produces a structurally identical tree.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Time</strong>
-              <p>O(n) for both serialize and deserialize — visit each node once.</p>
-            </div>
-            <div>
-              <strong>Space</strong>
-              <p>O(n) for the output string; O(h) recursion stack for DFS, O(w) queue for BFS.</p>
-            </div>
-            <div>
-              <strong>Null marker</strong>
-              <p>Use a sentinel like &#x27;#&#x27; or &#x27;null&#x27; that won&#x27;t collide with valid values.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>n limit</strong>
-              <p>up to 10^4 nodes in the LeetCode constraint</p>
-            </div>
-            <div>
-              <strong>Depth limit</strong>
-              <p>up to 10^4 — DFS recursion stack fits in most default limits (~10^4 frames)</p>
-            </div>
-            <div>
-              <strong>String size</strong>
-              <p>≤ 10^4 values + 2×10^4 nulls ≈ 30K tokens, each ≤ 5 chars → ~150 KB</p>
-            </div>
-            <div>
-              <strong>BFS width</strong>
-              <p>worst-case complete binary tree level has n/2 ≈ 5×10^3 nodes in queue</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>def serialize(root: Optional[TreeNode]) -&gt; str:
-def deserialize(data: str) -&gt; Optional[TreeNode]:</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>tokens: List[str]      # serialized token stream (values and &#x27;#&#x27; markers)
-iterator: Iterator     # used during deserialization to walk through tokens
-Encoding: preorder DFS with &#x27;#&#x27; for null children, comma-delimited</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>DFS preorder: visit root, write its value and a delimiter, recurse left, recurse right. For null children, write &#x27;#&#x27;. Example: tree [1, 2, 3, null, null, 4, 5] serializes to &#x27;1,2,#,#,3,4,#,#,5,#,#&#x27;.</p>
-          <p>Deserialize: split the string by delimiter into a list. Use an iterator (or index). Read the next token: if &#x27;#&#x27;, return None. Otherwise create a node, recurse for left child, recurse for right child. The iterator naturally advances through the preorder sequence.</p>
-          <p>BFS level-order: use a queue. Enqueue root. For each node, write its value and enqueue children (writing &#x27;#&#x27; for null children but not enqueueing them). Deserialize by reading tokens in pairs for each non-null node&#x27;s children.</p>
-          <p>The preorder DFS approach is more common in interviews because the recursive code is ~15 lines and the iterator trick is elegant. The BFS approach is more lines but easier to debug.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">root</span><b>→</b><span class="node accent">preorder DFS: val, left, right</span><b>→</b><span class="node">"1,2,#,#,3,4,#,#,5,#,#"</span></div><figcaption>Null markers (#) preserve tree shape — without them, "1,2" is ambiguous (left-child vs right-child)</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">Tree A: root=1, left=2</span><b>→ "1,2,#,#,#"</b><span class="node accent">Tree B: root=1, right=2</span><b>→ "1,#,2,#,#"</b></div><figcaption>Without null markers both trees produce "1,2" — ambiguous and unrecoverable</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>Tree:     1
-         / \
-        2   3
-           / \
-          4   5</p>
-          <p>Serialize (preorder DFS):
-Visit 1 → write &#x27;1&#x27;. Go left.
-Visit 2 → write &#x27;2&#x27;. Go left → null → write &#x27;#&#x27;. Go right → null → write &#x27;#&#x27;. Back to 1.
-Go right. Visit 3 → write &#x27;3&#x27;. Go left.
-Visit 4 → write &#x27;4&#x27;. Left null → &#x27;#&#x27;. Right null → &#x27;#&#x27;. Back to 3.
-Go right. Visit 5 → write &#x27;5&#x27;. Left null → &#x27;#&#x27;. Right null → &#x27;#&#x27;.
-Result: &#x27;1,2,#,#,3,4,#,#,5,#,#&#x27;</p>
-          <p>Deserialize: tokens = [&#x27;1&#x27;,&#x27;2&#x27;,&#x27;#&#x27;,&#x27;#&#x27;,&#x27;3&#x27;,&#x27;4&#x27;,&#x27;#&#x27;,&#x27;#&#x27;,&#x27;5&#x27;,&#x27;#&#x27;,&#x27;#&#x27;], iterator at 0.
-Read &#x27;1&#x27; → create node(1). Recurse left: read &#x27;2&#x27; → node(2). Recurse left: read &#x27;#&#x27; → None. Recurse right: read &#x27;#&#x27; → None. Return node(2). Recurse right for node(1): read &#x27;3&#x27; → node(3). Recurse left: read &#x27;4&#x27; → node(4). Left &#x27;#&#x27;→None. Right &#x27;#&#x27;→None. Return node(4). Recurse right: read &#x27;5&#x27; → node(5). Left &#x27;#&#x27;→None. Right &#x27;#&#x27;→None. Return node(5). Return node(3). Return node(1). Tree reconstructed.</p>
-          <p>Edge case: empty tree → serialize returns &#x27;#&#x27;. Deserialize reads &#x27;#&#x27;, returns None.</p>
-        </section>
-        <section class="problem-section">
-          <h2>DFS preorder serialize / deserialize (Codec class)</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">from typing import Optional
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: iterative BFS codec (no recursion)</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 50 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–8 min</strong><div><strong>Sections 1–2</strong><p>Establish the round-trip contract, whether the format must be human-readable, and the value range vs the delimiter.</p></div></div>
+        <div class="stack-step"><strong>8–15 min</strong><div><strong>Section 3</strong><p>Complete-array (heap index) encoding. Show that a skewed tree makes the output exponential.</p></div></div>
+        <div class="stack-step"><strong>15–36 min</strong><div><strong>Section 4</strong><p>Preorder with explicit null markers. Code both directions; prove the token stream is consumed in the same order it was written.</p></div></div>
+        <div class="stack-step"><strong>36–43 min</strong><div><strong>Section 4.3</strong><p>Iterative BFS codec — the answer to "your recursion is 10&#8308; frames deep".</p></div></div>
+        <div class="stack-step"><strong>43–50 min</strong><div><strong>Section 5</strong><p>Follow-ups: BSTs need no markers, bit-packing, N-ary trees, schema evolution.</p></div></div>
+      </div>
+      <figcaption>The hidden difficulty is not the algorithm, it is the format contract. Spend the first eight minutes there.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Design an algorithm to <strong>serialize</strong> a binary tree to a string and <strong>deserialize</strong> that string back into a tree. There is no prescribed format &mdash; you only have to guarantee the round trip: <code>deserialize(serialize(root))</code> must produce a tree structurally identical to <code>root</code>, with the same values in the same positions.</p>
+      <p>The one thing that makes this Hard: <strong>a binary tree's shape is not recoverable from its values alone.</strong> The trees <code>1&rarr;left 2</code> and <code>1&rarr;right 2</code> both contain the values <code>{1, 2}</code> and both have a preorder traversal of <code>1, 2</code>. So any correct format must encode <em>absence</em> as well as presence. Every viable answer boils down to one of two choices: emit explicit markers for missing children, or emit positions that make absence implicit.</p>
+      <p>That framing is what the interviewer is listening for. Say it in the first minute and the rest of the hour is implementation. Miss it and you will produce a codec that passes on balanced trees and silently corrupts skewed ones.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>class TreeNode:
+    val: int
+    left: Optional[TreeNode]
+    right: Optional[TreeNode]
+
+serialize(root: Optional[TreeNode]) -&gt; str
+deserialize(data: str) -&gt; Optional[TreeNode]
+
+# Required property, for every tree T:
+#     structurally_equal(deserialize(serialize(T)), T) == True</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Tree:            1
+                / \
+               2   3
+                  / \
+                 4   5
+
+serialize(root) = "1,2,#,#,3,4,#,#,5,#,#"     (preorder, '#' = absent child)
+Token count     = 11 = 2n + 1 for n = 5 nodes.
+
+Read it as: 1, then left subtree (2 with two absent children),
+then right subtree (3, its left 4 with two absent, its right 5 with two absent).</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — why markers are mandatory</span><pre><code>Tree A:   1        Tree B:   1
+         /                     \
+        2                       2
+
+Values:   {1, 2} for both.  Preorder values: "1,2" for both.
+With markers:  A -&gt; "1,2,#,#,#"      B -&gt; "1,#,2,#,#"
+                     ^ 2 is the LEFT child      ^ 2 is the RIGHT child
+
+Without markers the two trees are indistinguishable. This example is the
+whole reason the problem is not trivial.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — degenerate inputs</span><pre><code>root = None            -&gt; "#"              -&gt; None
+root = [1]             -&gt; "1,#,#"          -&gt; single node
+root = [1,2,null,3]    -&gt; "1,2,3,#,#,#,#"  -&gt; left-skewed chain of 3
+root = [-1000]         -&gt; "-1000,#,#"      -&gt; negatives need a sign, so '-'
+                                              must not be the delimiter</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>0 &le; number of nodes &le; 10^4</code> &mdash; the empty tree is legal, and 10&#8308; nodes in a straight line means <strong>recursion depth 10&#8308;</strong>. Python's default limit is 1000; the JVM default stack fails somewhere in the low tens of thousands. This is a real constraint, not a theoretical one.</li>
+        <li><code>-1000 &le; node.val &le; 1000</code> &mdash; values are small but <em>signed</em>, so the format must tolerate a leading <code>-</code>.</li>
+        <li>Values may repeat, so no format may rely on values being unique (this rules out preorder+inorder pairing).</li>
+        <li>Output is a single string; any encoding is acceptable as long as your own <code>deserialize</code> can read it. Nothing is promised about interoperability with other implementations unless you ask.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>Does the format need to be human-readable or interoperable?</strong> If a different language must read it, I would use JSON or protobuf and discuss schema. If it is opaque and only my own pair of functions touches it, I can pick the most compact encoding.</li>
+        <li><strong>Is this a general binary tree or a BST?</strong> Big difference: a BST is fully determined by its preorder sequence, so <em>no null markers are needed at all</em> &mdash; the value bounds tell you where each subtree ends. Roughly halves the output.</li>
+        <li><strong>What is the value type and range?</strong> Integers let me use a simple delimiter. Arbitrary strings mean the payload could itself contain the delimiter, so I need escaping or length-prefixing. This is the classic injection bug in a serializer.</li>
+        <li><strong>Can values repeat?</strong> If they are guaranteed unique, preorder + inorder is a valid (if inferior) encoding. If not, that approach is simply wrong.</li>
+        <li><strong>How deep can the tree be?</strong> Decides recursion vs explicit stack/queue. At 10&#8308; nodes, a skewed tree overflows Python's recursion limit outright.</li>
+        <li><strong>Is output size a constraint?</strong> Are we writing to disk or over a network at scale? That is what motivates bit-packing the structure separately from the values.</li>
+        <li><strong>Do nodes carry payloads beyond <code>val</code>?</strong> Parent pointers, sibling links, or extra fields change what &ldquo;identical&rdquo; means.</li>
+        <li><strong>Must <code>deserialize</code> handle malformed or truncated input?</strong> Production answer: yes, validate and fail loudly. Interview answer: ask, then state the assumption you are coding to.</li>
+        <li><strong>Must the two functions be stateless?</strong> A codec that stashes the tree in an instance field and returns a lookup key technically passes the round-trip test and is a well-known cheat. Confirm it is out of scope &mdash; and mention that you know it exists.</li>
+        <li><strong>Is streaming required?</strong> Can I hold the whole string in memory, or must I write incrementally to a socket?</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not start writing a traversal.</strong> Start by stating the shape problem: &ldquo;values alone do not determine the tree, so I must encode absence.&rdquo; Draw the two-node counterexample from 1.1. This is the insight being graded and it takes 45 seconds.</li>
+        <li><strong>Do not open with the optimal encoding.</strong> Describe the fixed-position array encoding first &mdash; it is the format most people picture &mdash; then <em>demolish it yourself</em> with the skewed-tree argument. Being the one who finds your own solution's flaw is a strong signal.</li>
+        <li><strong>Write the format down before writing code.</strong> Literally on the board: <code>"1,2,#,#,3,4,#,#,5,#,#"</code>. Then write the parser against that string. Nearly all bugs here are format/parser disagreements, and a written example prevents them.</li>
+        <li><strong>Say the symmetry rule out loud.</strong> &ldquo;<code>deserialize</code> must consume tokens in exactly the order <code>serialize</code> produced them &mdash; value, then left subtree, then right subtree.&rdquo; If you write left before right in one and right before left in the other, the tree comes back mirrored on some inputs and correct on others, which is the worst kind of bug.</li>
+        <li><strong>Do not use an index variable you forget to advance.</strong> Use a real iterator, queue, or stream so consumption is structural. Shared mutable indices across recursive calls are where candidates lose ten minutes.</li>
+        <li><strong>Choose the delimiter deliberately and justify it.</strong> A comma works because values are integers; say &ldquo;if values were arbitrary strings I would length-prefix instead of delimit.&rdquo;</li>
+        <li><strong>Raise the recursion depth issue before the interviewer does.</strong> &ldquo;10&#8308; nodes in a chain is 10&#8308; stack frames, so for production I would use the iterative BFS version.&rdquo; Then show it if time allows.</li>
+        <li><strong>Test the empty tree and the single node explicitly.</strong> They are the two inputs that break naive implementations, and they cost one line each to verify.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Encode by <em>position</em> instead of by markers. Give the root index 0 and store the children of index <code>i</code> at <code>2i+1</code> and <code>2i+2</code> &mdash; the standard heap layout. Emit every slot from 0 up to the largest occupied index, writing <code>#</code> for the empty ones. Deserialization is then a single linear pass wiring index <code>i</code> to <code>2i+1</code> and <code>2i+2</code>.</p>
+      <ol class="step-list">
+        <li>Walk the tree, recording <code>slots[index] = val</code> for each node at its heap index.</li>
+        <li>Emit <code>slots[0 &hellip; max_index]</code>, using <code>#</code> for gaps.</li>
+        <li>To decode: materialise one node per non-<code>#</code> token, then for each index <code>i</code> attach <code>nodes[2i+1]</code> as its left child and <code>nodes[2i+2]</code> as its right.</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">The fatal flaw — find it before your interviewer does</span>
+        <p>The largest index at depth <code>d</code> is <code>2^(d+1) - 2</code>. So the output length is governed by tree <em>height</em>, not node count. A right-skewed chain of just 20 nodes emits over a million slots. The stated limit of 10&#8308; nodes allows a chain of height 10&#8308;, which needs <code>2^10000</code> slots &mdash; a number with about 3000 digits. Worse, in Java, C++ and Rust the index <code>2i+1</code> overflows a 64-bit integer past depth 62, so the encoding is not merely slow, it is <em>unrepresentable</em>.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">balanced tree<br><small>n nodes &rarr; ~n slots<br>fine</small></span><b>&rarr;</b>
+          <span class="node accent">skewed chain<br><small>n nodes &rarr; 2^n slots<br>catastrophic</small></span>
+        </div>
+        <figcaption>Same encoding, same node count, wildly different output. Position-based formats pay for the tree's height; marker-based formats pay for its size.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="st-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="st-bf-py" data-lang="python"><pre><code class="language-python">from typing import Dict, List, Optional
 
 
 class TreeNode:
-    def __init__(self, val: int = 0, left=None, right=None):
+    def __init__(self, val: int = 0) -&gt; None:
         self.val = val
-        self.left = left
-        self.right = right
+        self.left: Optional[TreeNode] = None
+        self.right: Optional[TreeNode] = None
 
 
-class Codec:
-    &quot;&quot;&quot;DFS preorder serialization.
-    &#x27;#&#x27; marks null nodes so the tree can be reconstructed unambiguously.&quot;&quot;&quot;
+def serialize_brute(root: Optional[TreeNode]) -&gt; str:
+    """Complete-array (heap index) encoding: children of i live at 2i+1, 2i+2.
 
-    def serialize(self, root: Optional[TreeNode]) -&gt; str:
-        tokens: list = []
+    Output length is 2^height, NOT O(n). Correct, but unusable on skewed trees.
+    """
+    if root is None:
+        return "#"
 
-        def dfs(node: Optional[TreeNode]) -&gt; None:
-            if not node:
-                tokens.append(&quot;#&quot;)
-                return
-            tokens.append(str(node.val))
-            dfs(node.left)
-            dfs(node.right)
+    slots: Dict[int, int] = {}
 
-        dfs(root)
-        return &quot;,&quot;.join(tokens)
+    def place(node: Optional[TreeNode], i: int) -&gt; None:
+        if node is None:
+            return
+        slots[i] = node.val
+        place(node.left, 2 * i + 1)
+        place(node.right, 2 * i + 2)
 
-    def deserialize(self, data: str) -&gt; Optional[TreeNode]:
-        it = iter(data.split(&quot;,&quot;))
+    place(root, 0)
+    width = max(slots) + 1                 # 2^height - 1 in the worst case
+    return ",".join(str(slots[i]) if i in slots else "#" for i in range(width))
 
-        def dfs() -&gt; Optional[TreeNode]:
-            tok = next(it)
-            if tok == &quot;#&quot;:
-                return None
-            node = TreeNode(int(tok))
-            # Recursion order matches serialize: left first, then right
-            node.left = dfs()
-            node.right = dfs()
-            return node
 
-        return dfs()</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::cell::RefCell;
-use std::rc::Rc;
+def deserialize_brute(data: str) -&gt; Optional[TreeNode]:
+    """One pass: build every node, then wire i -&gt; 2i+1, 2i+2."""
+    tokens = data.split(",")
+    if tokens == ["#"]:
+        return None
 
-type TreeLink = Option&lt;Rc&lt;RefCell&lt;TreeNode&gt;&gt;&gt;;
+    nodes: List[Optional[TreeNode]] = [
+        None if t == "#" else TreeNode(int(t)) for t in tokens
+    ]
+    for i, node in enumerate(nodes):
+        if node is None:
+            continue
+        left, right = 2 * i + 1, 2 * i + 2
+        if left &lt; len(nodes):
+            node.left = nodes[left]
+        if right &lt; len(nodes):
+            node.right = nodes[right]
+    return nodes[0]</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
 
-struct TreeNode {
-    val: i32,
-    left: TreeLink,
-    right: TreeLink,
+#[derive(Debug)]
+pub struct TreeNode {
+    pub val: i32,
+    pub left: Option&lt;Box&lt;TreeNode&gt;&gt;,
+    pub right: Option&lt;Box&lt;TreeNode&gt;&gt;,
 }
+
 impl TreeNode {
-    fn new(val: i32) -&gt; Rc&lt;RefCell&lt;Self&gt;&gt; {
-        Rc::new(RefCell::new(Self { val, left: None, right: None }))
+    pub fn new(val: i32) -&gt; Self {
+        TreeNode { val, left: None, right: None }
     }
 }
 
-/// DFS preorder: &#x27;#&#x27; marks null nodes for unambiguous reconstruction.
-fn serialize(root: &amp;TreeLink) -&gt; String {
-    let mut tokens = Vec::new();
-    fn dfs(node: &amp;TreeLink, out: &amp;mut Vec&lt;String&gt;) {
-        match node {
-            None =&gt; out.push(&quot;#&quot;.to_string()),
-            Some(rc) =&gt; {
-                let n = rc.borrow();
-                out.push(n.val.to_string());
-                dfs(&amp;n.left, out);
-                dfs(&amp;n.right, out);
-            }
+/// Complete-array (heap index) encoding: children of i live at 2i+1, 2i+2.
+///
+/// Output length is 2^height, NOT O(n). The index also overflows u64 past
+/// depth 62, so this encoding cannot even represent a deep chain.
+pub fn serialize_brute(root: &amp;Option&lt;Box&lt;TreeNode&gt;&gt;) -&gt; String {
+    fn place(node: &amp;Option&lt;Box&lt;TreeNode&gt;&gt;, i: u64, slots: &amp;mut HashMap&lt;u64, i32&gt;) {
+        if let Some(n) = node {
+            slots.insert(i, n.val);
+            // Depth &gt; 62 overflows here -- a hard limit of this format.
+            place(&amp;n.left, 2 * i + 1, slots);
+            place(&amp;n.right, 2 * i + 2, slots);
         }
     }
-    dfs(root, &amp;mut tokens);
-    tokens.join(&quot;,&quot;)
+
+    if root.is_none() {
+        return "#".to_string();
+    }
+    let mut slots: HashMap&lt;u64, i32&gt; = HashMap::new();
+    place(root, 0, &amp;mut slots);
+
+    let width = slots.keys().copied().max().unwrap() + 1;
+    (0..width)
+        .map(|i| match slots.get(&amp;i) {
+            Some(v) =&gt; v.to_string(),
+            None =&gt; "#".to_string(),
+        })
+        .collect::&lt;Vec&lt;_&gt;&gt;()
+        .join(",")
 }
 
-fn deserialize(data: &amp;str) -&gt; TreeLink {
-    let mut iter = data.split(&#x27;,&#x27;);
-    fn dfs(it: &amp;mut std::str::Split&lt;char&gt;) -&gt; TreeLink {
-        let tok = it.next()?;
-        if tok == &quot;#&quot; { return None; }
-        let node = TreeNode::new(tok.parse().ok()?);
-        // Recursion order matches serialize: left, then right
-        node.borrow_mut().left = dfs(it);
-        node.borrow_mut().right = dfs(it);
-        Some(node)
+/// Rebuild by index. Nodes are built into a flat Vec, then linked bottom-up
+/// so each child can be moved into its parent exactly once.
+pub fn deserialize_brute(data: &amp;str) -&gt; Option&lt;Box&lt;TreeNode&gt;&gt; {
+    let tokens: Vec&lt;&amp;str&gt; = data.split(',').collect();
+    if tokens == ["#"] {
+        return None;
     }
-    dfs(&amp;mut iter)
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
-#include &lt;string&gt;
+
+    let mut nodes: Vec&lt;Option&lt;Box&lt;TreeNode&gt;&gt;&gt; = tokens
+        .iter()
+        .map(|t| {
+            if *t == "#" {
+                None
+            } else {
+                Some(Box::new(TreeNode::new(t.parse().expect("bad token"))))
+            }
+        })
+        .collect();
+
+    // Reverse order guarantees both children are final before the parent.
+    for i in (0..nodes.len()).rev() {
+        if nodes[i].is_none() {
+            continue;
+        }
+        let left = if 2 * i + 1 &lt; nodes.len() { nodes[2 * i + 1].take() } else { None };
+        let right = if 2 * i + 2 &lt; nodes.len() { nodes[2 * i + 2].take() } else { None };
+        let parent = nodes[i].as_mut().unwrap();
+        parent.left = left;
+        parent.right = right;
+    }
+    nodes[0].take()
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashMap;
+import java.util.Map;
+import java.util.StringJoiner;
+
+class TreeNode {
+    int val;
+    TreeNode left;
+    TreeNode right;
+    TreeNode(int val) { this.val = val; }
+}
+
+class BruteCodec {
+
+    /**
+     * Complete-array (heap index) encoding: children of i live at 2i+1, 2i+2.
+     * Output length is 2^height, NOT O(n), and the index overflows long
+     * past depth 62 -- so deep chains cannot even be represented.
+     */
+    public String serialize(TreeNode root) {
+        if (root == null) return "#";
+
+        Map&lt;Long, Integer&gt; slots = new HashMap&lt;&gt;();
+        place(root, 0L, slots);
+
+        long max = 0;
+        for (long key : slots.keySet()) max = Math.max(max, key);
+
+        StringJoiner out = new StringJoiner(",");
+        for (long i = 0; i &lt;= max; i++) {
+            Integer v = slots.get(i);
+            out.add(v == null ? "#" : v.toString());
+        }
+        return out.toString();
+    }
+
+    private void place(TreeNode node, long i, Map&lt;Long, Integer&gt; slots) {
+        if (node == null) return;
+        slots.put(i, node.val);
+        place(node.left, 2 * i + 1, slots);    // overflows past depth 62
+        place(node.right, 2 * i + 2, slots);
+    }
+
+    /** One pass: build every node, then wire i -&gt; 2i+1, 2i+2. */
+    public TreeNode deserialize(String data) {
+        String[] tokens = data.split(",");
+        if (tokens.length == 1 &amp;&amp; tokens[0].equals("#")) return null;
+
+        TreeNode[] nodes = new TreeNode[tokens.length];
+        for (int i = 0; i &lt; tokens.length; i++) {
+            if (!tokens[i].equals("#")) {
+                nodes[i] = new TreeNode(Integer.parseInt(tokens[i]));
+            }
+        }
+        for (int i = 0; i &lt; nodes.length; i++) {
+            if (nodes[i] == null) continue;
+            if (2 * i + 1 &lt; nodes.length) nodes[i].left = nodes[2 * i + 1];
+            if (2 * i + 2 &lt; nodes.length) nodes[i].right = nodes[2 * i + 2];
+        }
+        return nodes[0];
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;cstdint&gt;
 #include &lt;sstream&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
 #include &lt;vector&gt;
 
 struct TreeNode {
     int val;
-    TreeNode *left, *right;
-    TreeNode(int v) : val(v), left(nullptr), right(nullptr) {}
+    TreeNode* left;
+    TreeNode* right;
+    explicit TreeNode(int v = 0) : val(v), left(nullptr), right(nullptr) {}
 };
 
-// DFS preorder: &#x27;#&#x27; marks null nodes for unambiguous reconstruction
-static std::string serialize(TreeNode *root) {
-    std::string out;
-    std::function&lt;void(TreeNode *)&gt; dfs = [&amp;](TreeNode *node) {
-        if (!node) { out += &quot;#,&quot;; return; }
-        out += std::to_string(node-&gt;val) + &quot;,&quot;;
-        dfs(node-&gt;left);
-        dfs(node-&gt;right);
-    };
-    dfs(root);
-    if (!out.empty()) out.pop_back(); // remove trailing comma
-    return out;
+class BruteCodec {
+public:
+    // Complete-array (heap index) encoding: children of i live at 2i+1, 2i+2.
+    // Output length is 2^height, NOT O(n), and the index overflows int64
+    // past depth 62 -- so deep chains cannot even be represented.
+    std::string serialize(TreeNode* root) {
+        if (root == nullptr) return "#";
+
+        std::unordered_map&lt;std::int64_t, int&gt; slots;
+        place(root, 0, slots);
+
+        std::int64_t max = 0;
+        for (const auto&amp; kv : slots) max = std::max(max, kv.first);
+
+        std::ostringstream out;
+        for (std::int64_t i = 0; i &lt;= max; ++i) {
+            if (i) out &lt;&lt; ',';
+            auto it = slots.find(i);
+            if (it == slots.end()) out &lt;&lt; '#';
+            else out &lt;&lt; it-&gt;second;
+        }
+        return out.str();
+    }
+
+    // One pass: build every node, then wire i -&gt; 2i+1, 2i+2.
+    TreeNode* deserialize(const std::string&amp; data) {
+        std::vector&lt;std::string&gt; tokens;
+        std::istringstream in(data);
+        std::string tok;
+        while (std::getline(in, tok, ',')) tokens.push_back(tok);
+        if (tokens.size() == 1 &amp;&amp; tokens[0] == "#") return nullptr;
+
+        std::vector&lt;TreeNode*&gt; nodes(tokens.size(), nullptr);
+        for (std::size_t i = 0; i &lt; tokens.size(); ++i) {
+            if (tokens[i] != "#") nodes[i] = new TreeNode(std::stoi(tokens[i]));
+        }
+        for (std::size_t i = 0; i &lt; nodes.size(); ++i) {
+            if (nodes[i] == nullptr) continue;
+            if (2 * i + 1 &lt; nodes.size()) nodes[i]-&gt;left = nodes[2 * i + 1];
+            if (2 * i + 2 &lt; nodes.size()) nodes[i]-&gt;right = nodes[2 * i + 2];
+        }
+        return nodes[0];
+    }
+
+private:
+    void place(TreeNode* node, std::int64_t i,
+               std::unordered_map&lt;std::int64_t, int&gt;&amp; slots) {
+        if (node == nullptr) return;
+        slots[i] = node-&gt;val;
+        place(node-&gt;left, 2 * i + 1, slots);    // overflows past depth 62
+        place(node-&gt;right, 2 * i + 2, slots);
+    }
+};</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(2^h)</span>
+          <p>Where <code>h</code> is the tree height. Balanced: <code>2^h &asymp; n</code>, so effectively O(n) and perfectly fine. Skewed: <code>h = n</code>, giving O(2^n) &mdash; unusable beyond ~25 nodes.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(2^h)</span>
+          <p>The emitted string dominates. Plus O(h) recursion. And a hard representational ceiling at depth 62 in any fixed-width-integer language.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>We are paying to describe positions that contain nothing. But a traversal already visits children in a fixed order &mdash; so instead of encoding <em>where</em> each node is, we can encode <em>whether</em> each child slot is occupied, in traversal order. That is one marker per absent child, and a tree with <code>n</code> nodes has exactly <code>n+1</code> absent child slots. Total tokens: <code>2n+1</code>. Linear, and independent of shape.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> a preorder traversal that emits an explicit marker for every <code>null</code> child is a self-delimiting encoding. Reading it back needs no lookahead and no index arithmetic: read a token; if it is the marker, the subtree is empty; otherwise make a node, then recursively build its left subtree and then its right subtree from the <em>same</em> token stream. The recursion structure of the reader mirrors the writer exactly, which is why it works.</p>
+      <ol class="step-list">
+        <li><strong>Serialize:</strong> if the node is null, emit <code>#</code> and return. Otherwise emit its value, then recurse left, then recurse right. Join with a delimiter.</li>
+        <li><strong>Deserialize:</strong> split into tokens and consume them through a single shared cursor (an iterator, queue, or stream &mdash; not a copied index).</li>
+        <li>Pop one token. If it is <code>#</code>, return null.</li>
+        <li>Otherwise create the node, set <code>node.left = build()</code>, then <code>node.right = build()</code>, and return it. The order of those two lines must match the order in <code>serialize</code>.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariant to say out loud</span>
+        <p>Every call to <code>build()</code> consumes exactly the tokens that the matching call to <code>walk()</code> produced &mdash; one complete subtree's worth &mdash; and leaves the cursor pointing at the next sibling's first token. That is why no separators, lengths, or backtracking are needed. A tree with <code>n</code> nodes has <code>2n</code> child slots of which <code>n-1</code> are filled, so exactly <code>n+1</code> markers are emitted: <code>2n+1</code> tokens total.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">emit 1</span><p>node 1 &mdash; now serialize its left subtree</p></div>
+          <div class="seq-row"><span class="actor">emit 2,#,#</span><p>node 2 is a leaf: value, then two absent children. Left subtree of 1 done.</p></div>
+          <div class="seq-row"><span class="actor">emit 3</span><p>right subtree of 1 begins</p></div>
+          <div class="seq-row"><span class="actor">emit 4,#,#</span><p>leaf 4 &mdash; left subtree of 3 done</p></div>
+          <div class="seq-row"><span class="actor">emit 5,#,#</span><p>leaf 5 &mdash; right subtree of 3 done. Stream: 1,2,#,#,3,4,#,#,5,#,#</p></div>
+        </div>
+        <figcaption>n = 5 nodes &rarr; 11 tokens = 2n+1, regardless of whether the tree is balanced or a straight chain.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="st-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="st-op-py" data-lang="python"><pre><code class="language-python">from typing import Iterator, List, Optional
+
+NULL = "#"
+
+
+class Codec:
+    """Preorder DFS with an explicit marker for every absent child."""
+
+    def serialize(self, root: Optional[TreeNode]) -&gt; str:
+        out: List[str] = []
+
+        def walk(node: Optional[TreeNode]) -&gt; None:
+            if node is None:
+                out.append(NULL)           # absence is DATA, not a gap
+                return
+            out.append(str(node.val))
+            walk(node.left)                # order here must match `build`
+            walk(node.right)
+
+        walk(root)
+        return ",".join(out)
+
+    def deserialize(self, data: str) -&gt; Optional[TreeNode]:
+        # A single iterator IS the cursor: every recursive call advances the
+        # same stream, so no index has to be threaded through or returned.
+        tokens: Iterator[str] = iter(data.split(","))
+
+        def build() -&gt; Optional[TreeNode]:
+            token = next(tokens)
+            if token == NULL:
+                return None
+            node = TreeNode(int(token))
+            node.left = build()            # same order as `walk`
+            node.right = build()
+            return node
+
+        return build()
+
+
+# Round-trip check:
+#   Codec().deserialize(Codec().serialize(root))  ==  root  (structurally)
+# Note: recursion depth is O(height). For a 10^4-node chain this exceeds
+# Python's default limit of 1000 -- use the iterative codec in 4.3.</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-op-rs" data-lang="rust" hidden><pre><code class="language-rust">const NULL: &amp;str = "#";
+
+/// Preorder DFS with an explicit marker for every absent child.
+pub fn serialize(root: &amp;Option&lt;Box&lt;TreeNode&gt;&gt;) -&gt; String {
+    fn walk(node: &amp;Option&lt;Box&lt;TreeNode&gt;&gt;, out: &amp;mut Vec&lt;String&gt;) {
+        match node {
+            None =&gt; out.push(NULL.to_string()),   // absence is DATA
+            Some(n) =&gt; {
+                out.push(n.val.to_string());
+                walk(&amp;n.left, out);               // order must match `build`
+                walk(&amp;n.right, out);
+            }
+        }
+    }
+
+    let mut out: Vec&lt;String&gt; = Vec::new();
+    walk(root, &amp;mut out);
+    out.join(",")
 }
 
-static TreeNode *deserialize(const std::string &amp;data) {
-    std::istringstream ss(data);
-    std::string tok;
-    // Recursive DFS mirrors the serialize order: val, left, right
-    std::function&lt;TreeNode *()&gt; dfs = [&amp;]() -&gt; TreeNode * {
-        if (!std::getline(ss, tok, &#x27;,&#x27;) || tok == &quot;#&quot;)
-            return nullptr;
-        TreeNode *node = new TreeNode(std::stoi(tok));
-        node-&gt;left = dfs();
-        node-&gt;right = dfs();
-        return node;
-    };
-    return dfs();
+/// The iterator IS the cursor: each recursive call advances the same stream.
+fn build&lt;'a, I&gt;(tokens: &amp;mut I) -&gt; Option&lt;Box&lt;TreeNode&gt;&gt;
+where
+    I: Iterator&lt;Item = &amp;'a str&gt;,
+{
+    let token = tokens.next()?;                   // stream exhausted =&gt; None
+    if token == NULL {
+        return None;
+    }
+    let val: i32 = token.parse().expect("malformed token");
+    let left = build(tokens);                     // same order as `walk`
+    let right = build(tokens);
+    Some(Box::new(TreeNode { val, left, right }))
 }
 
-// NSString convenience wrappers
-static NSString *serializeTree(TreeNode *root) {
-    return @(serialize(root).c_str());
-}
-static TreeNode *deserializeTree(NSString *data) {
-    return deserialize(data.UTF8String);
+pub fn deserialize(data: &amp;str) -&gt; Option&lt;Box&lt;TreeNode&gt;&gt; {
+    let mut tokens = data.split(',');
+    build(&amp;mut tokens)
 }</code></pre></div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Serialize</span><p>visit 1 → "1", recurse left</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 2 → "2", left=# right=# → back to 1</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 3 → "3", recurse left</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 4 → "4", left=# right=# → back to 3, recurse right</p></div><div class="seq-row"><span class="actor">Serialize</span><p>visit 5 → "5", left=# right=# → done: "1,2,#,#,3,4,#,#,5,#,#"</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
-            <div>
-              <strong>DFS vs BFS</strong>
-              <p>DFS is shorter code; BFS allows streaming top-down reconstruction.</p>
-            </div>
-            <div>
-              <strong>String vs binary</strong>
-              <p>Comma-separated string is human-readable; binary encoding is 2–3× smaller.</p>
-            </div>
-            <div>
-              <strong>Null sentinel</strong>
-              <p>&#x27;#&#x27; works for integers; for arbitrary strings, use length-prefixed encoding.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Forgetting null markers — tree shape becomes ambiguous.</li>
-            <li>Using a global index instead of an iterator — off-by-one between recursive calls.</li>
-            <li>Delimiter collision if values can contain the delimiter character.</li>
-            <li>Stack overflow on very deep trees (10^5 depth) — switch to iterative DFS.</li>
-            <li>Not handling empty tree (serialize should return &#x27;#&#x27;, not &#x27;&#x27;).</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
-          <ul class="ask-list">
-            <li>BST serialization without null markers — preorder is enough because BST property constrains reconstruction.</li>
-            <li>N-ary tree serialization — write child count before children, or use level-end markers.</li>
-            <li>Compact binary encoding — 1 bit per node for structure (1=node, 0=null) + values array.</li>
-            <li>Streaming deserialization — BFS allows you to reconstruct level by level as bytes arrive.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>Explain why null markers are necessary for general trees (the ambiguity argument), write clean DFS serialize and deserialize with the iterator trick, trace through a concrete tree showing every token, and mention the BST optimization where preorder alone suffices.</p>
-        </section>
+        <div class="code-panel" role="tabpanel" data-panel="st-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Deque;
 
-        <nav class="problem-nav" aria-label="Problem navigation">
-          <a class="problem-nav-link prev" href="../course_schedule/">← Course schedule / cycle detection</a>
-          <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <a class="problem-nav-link next" href="../median_stream/">Find median from data stream →</a>
-        </nav>
+public class Codec {
+
+    private static final String NULL = "#";
+
+    /** Preorder DFS with an explicit marker for every absent child. */
+    public String serialize(TreeNode root) {
+        StringBuilder sb = new StringBuilder();
+        walk(root, sb);
+        return sb.toString();
+    }
+
+    private void walk(TreeNode node, StringBuilder sb) {
+        if (sb.length() &gt; 0) sb.append(',');
+        if (node == null) {
+            sb.append(NULL);                       // absence is DATA
+            return;
+        }
+        sb.append(node.val);
+        walk(node.left, sb);                       // order must match build()
+        walk(node.right, sb);
+    }
+
+    /** The deque IS the cursor: every recursive call polls the same stream. */
+    public TreeNode deserialize(String data) {
+        Deque&lt;String&gt; tokens =
+                new ArrayDeque&lt;&gt;(Arrays.asList(data.split(",")));
+        return build(tokens);
+    }
+
+    private TreeNode build(Deque&lt;String&gt; tokens) {
+        String token = tokens.poll();              // null when exhausted
+        if (token == null || token.equals(NULL)) {
+            return null;
+        }
+        TreeNode node = new TreeNode(Integer.parseInt(token));
+        node.left = build(tokens);                 // same order as walk()
+        node.right = build(tokens);
+        return node;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;sstream&gt;
+#include &lt;string&gt;
+
+class Codec {
+public:
+    // Preorder DFS with an explicit marker for every absent child.
+    std::string serialize(TreeNode* root) {
+        std::ostringstream out;
+        walk(root, out);
+        return out.str();
+    }
+
+    // The stream IS the cursor: every recursive call reads the same
+    // istringstream, so no index has to be threaded through.
+    TreeNode* deserialize(const std::string&amp; data) {
+        std::istringstream in(data);
+        return build(in);
+    }
+
+private:
+    // Space-separated so operator&gt;&gt; tokenises for free. The trailing
+    // space is harmless.
+    void walk(TreeNode* node, std::ostringstream&amp; out) {
+        if (node == nullptr) {
+            out &lt;&lt; "# ";                           // absence is DATA
+            return;
+        }
+        out &lt;&lt; node-&gt;val &lt;&lt; ' ';
+        walk(node-&gt;left, out);                     // order must match build()
+        walk(node-&gt;right, out);
+    }
+
+    TreeNode* build(std::istringstream&amp; in) {
+        std::string token;
+        if (!(in &gt;&gt; token) || token == "#") {      // exhausted or marker
+            return nullptr;
+        }
+        TreeNode* node = new TreeNode(std::stoi(token));
+        node-&gt;left = build(in);                    // same order as walk()
+        node-&gt;right = build(in);
+        return node;
+    }
+};</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n) each way</span>
+          <p>Each node is written once and read once. Exactly <code>2n+1</code> tokens are produced, independent of shape &mdash; a balanced tree and a straight chain of the same size cost the same.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n) output, O(h) stack</span>
+          <p>The string is O(n). Recursion is O(h) frames: O(log n) balanced, but <strong>O(n) = 10&#8308; for a chain</strong>, which is the one weakness of this version.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p><code>None</code> &rarr; <code>"#"</code> &rarr; <code>None</code>. Single node &rarr; <code>"1,#,#"</code>. Negative values survive because the delimiter is <code>,</code> and not <code>-</code>. Duplicate values are fine because nothing is keyed on value. Left-only and right-only children are distinguished by marker position &mdash; the whole point of example 2.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: iterative BFS codec (no recursion)</h3>
+      <p>Same token economy, zero stack depth. Serialize level by level with a queue, pushing both children of every real node &mdash; including the null ones, which become markers when dequeued. Deserialize with a second queue: dequeue a parent, take the next two tokens as its children, and enqueue whichever are real. This is the version to reach for when the tree may be 10&#8308; nodes deep, and it is also the format that reads most naturally to a human.</p>
+      <div class="callout warn">
+        <span class="tag">The subtlety that bites people</span>
+        <p>Emit markers only for the children of nodes that <em>exist</em>. Do not enqueue the children of a null &mdash; that is precisely the mistake that turns this back into the exponential encoding from section 3. Done correctly the output is still exactly <code>2n+1</code> tokens.</p>
+      </div>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="st-bfs-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bfs-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bfs-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="st-bfs-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="st-bfs-py" data-lang="python"><pre><code class="language-python">from collections import deque
+
+
+class BfsCodec:
+    """Level-order codec. No recursion, so tree depth is irrelevant."""
+
+    def serialize(self, root: Optional[TreeNode]) -&gt; str:
+        if root is None:
+            return NULL
+
+        out: List[str] = []
+        queue = deque([root])
+        while queue:
+            node = queue.popleft()
+            if node is None:
+                out.append(NULL)
+                continue
+            out.append(str(node.val))
+            queue.append(node.left)        # children of a REAL node only
+            queue.append(node.right)
+        return ",".join(out)
+
+    def deserialize(self, data: str) -&gt; Optional[TreeNode]:
+        tokens = data.split(",")
+        if tokens[0] == NULL:
+            return None
+
+        root = TreeNode(int(tokens[0]))
+        queue = deque([root])
+        i = 1
+        while queue and i &lt; len(tokens):
+            node = queue.popleft()
+            # The next two tokens are exactly this node's two children.
+            for side in ("left", "right"):
+                if i &gt;= len(tokens):
+                    break
+                token = tokens[i]
+                i += 1
+                if token != NULL:
+                    child = TreeNode(int(token))
+                    setattr(node, side, child)
+                    queue.append(child)
+        return root</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bfs-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
+
+/// Level-order codec. No recursion, so tree depth is irrelevant.
+///
+/// `Rc&lt;RefCell&lt;..&gt;&gt;` is used here because BFS needs to hold a handle to a
+/// parent while still being able to mutate it later -- the one case where
+/// the owned `Box` tree is genuinely awkward.
+pub type Link = Option&lt;Rc&lt;RefCell&lt;RcTreeNode&gt;&gt;&gt;;
+
+pub struct RcTreeNode {
+    pub val: i32,
+    pub left: Link,
+    pub right: Link,
+}
+
+pub fn serialize_bfs(root: Link) -&gt; String {
+    if root.is_none() {
+        return "#".to_string();
+    }
+
+    let mut out: Vec&lt;String&gt; = Vec::new();
+    let mut queue: VecDeque&lt;Link&gt; = VecDeque::new();
+    queue.push_back(root);
+
+    while let Some(slot) = queue.pop_front() {
+        match slot {
+            None =&gt; out.push("#".to_string()),
+            Some(node) =&gt; {
+                let n = node.borrow();
+                out.push(n.val.to_string());
+                queue.push_back(n.left.clone());   // children of a REAL node
+                queue.push_back(n.right.clone());
+            }
+        }
+    }
+    out.join(",")
+}
+
+pub fn deserialize_bfs(data: &amp;str) -&gt; Link {
+    let tokens: Vec&lt;&amp;str&gt; = data.split(',').collect();
+    if tokens[0] == "#" {
+        return None;
+    }
+
+    let root = Rc::new(RefCell::new(RcTreeNode {
+        val: tokens[0].parse().expect("bad token"),
+        left: None,
+        right: None,
+    }));
+
+    let mut queue: VecDeque&lt;Rc&lt;RefCell&lt;RcTreeNode&gt;&gt;&gt; = VecDeque::new();
+    queue.push_back(Rc::clone(&amp;root));
+    let mut i = 1usize;
+
+    while let Some(parent) = queue.pop_front() {
+        // The next two tokens are exactly this node's two children.
+        for side in 0..2 {
+            if i &gt;= tokens.len() {
+                break;
+            }
+            let token = tokens[i];
+            i += 1;
+            if token == "#" {
+                continue;
+            }
+            let child = Rc::new(RefCell::new(RcTreeNode {
+                val: token.parse().expect("bad token"),
+                left: None,
+                right: None,
+            }));
+            if side == 0 {
+                parent.borrow_mut().left = Some(Rc::clone(&amp;child));
+            } else {
+                parent.borrow_mut().right = Some(Rc::clone(&amp;child));
+            }
+            queue.push_back(child);
+        }
+    }
+    Some(root)
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bfs-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.StringJoiner;
+
+public class BfsCodec {
+
+    private static final String NULL = "#";
+
+    /** Level-order codec. No recursion, so tree depth is irrelevant. */
+    public String serialize(TreeNode root) {
+        if (root == null) return NULL;
+
+        StringJoiner out = new StringJoiner(",");
+        // ArrayDeque rejects nulls, so LinkedList is used deliberately here.
+        Deque&lt;TreeNode&gt; queue = new java.util.LinkedList&lt;&gt;();
+        queue.add(root);
+
+        while (!queue.isEmpty()) {
+            TreeNode node = queue.poll();
+            if (node == null) {
+                out.add(NULL);
+                continue;
+            }
+            out.add(Integer.toString(node.val));
+            queue.add(node.left);          // children of a REAL node only
+            queue.add(node.right);
+        }
+        return out.toString();
+    }
+
+    public TreeNode deserialize(String data) {
+        String[] tokens = data.split(",");
+        if (tokens[0].equals(NULL)) return null;
+
+        TreeNode root = new TreeNode(Integer.parseInt(tokens[0]));
+        Deque&lt;TreeNode&gt; queue = new ArrayDeque&lt;&gt;();
+        queue.add(root);
+
+        int i = 1;
+        while (!queue.isEmpty() &amp;&amp; i &lt; tokens.length) {
+            TreeNode node = queue.poll();
+            // The next two tokens are exactly this node's two children.
+            if (i &lt; tokens.length &amp;&amp; !tokens[i].equals(NULL)) {
+                node.left = new TreeNode(Integer.parseInt(tokens[i]));
+                queue.add(node.left);
+            }
+            i++;
+            if (i &lt; tokens.length &amp;&amp; !tokens[i].equals(NULL)) {
+                node.right = new TreeNode(Integer.parseInt(tokens[i]));
+                queue.add(node.right);
+            }
+            i++;
+        }
+        return root;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="st-bfs-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;queue&gt;
+#include &lt;sstream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+class BfsCodec {
+public:
+    // Level-order codec. No recursion, so tree depth is irrelevant.
+    std::string serialize(TreeNode* root) {
+        if (root == nullptr) return "#";
+
+        std::ostringstream out;
+        std::queue&lt;TreeNode*&gt; q;
+        q.push(root);
+        bool first = true;
+
+        while (!q.empty()) {
+            TreeNode* node = q.front();
+            q.pop();
+            if (!first) out &lt;&lt; ',';
+            first = false;
+            if (node == nullptr) {
+                out &lt;&lt; '#';
+                continue;
+            }
+            out &lt;&lt; node-&gt;val;
+            q.push(node-&gt;left);            // children of a REAL node only
+            q.push(node-&gt;right);
+        }
+        return out.str();
+    }
+
+    TreeNode* deserialize(const std::string&amp; data) {
+        std::vector&lt;std::string&gt; tokens;
+        std::istringstream in(data);
+        std::string tok;
+        while (std::getline(in, tok, ',')) tokens.push_back(tok);
+        if (tokens.empty() || tokens[0] == "#") return nullptr;
+
+        TreeNode* root = new TreeNode(std::stoi(tokens[0]));
+        std::queue&lt;TreeNode*&gt; q;
+        q.push(root);
+
+        std::size_t i = 1;
+        while (!q.empty() &amp;&amp; i &lt; tokens.size()) {
+            TreeNode* node = q.front();
+            q.pop();
+            // The next two tokens are exactly this node's two children.
+            if (i &lt; tokens.size() &amp;&amp; tokens[i] != "#") {
+                node-&gt;left = new TreeNode(std::stoi(tokens[i]));
+                q.push(node-&gt;left);
+            }
+            ++i;
+            if (i &lt; tokens.size() &amp;&amp; tokens[i] != "#") {
+                node-&gt;right = new TreeNode(std::stoi(tokens[i]));
+                q.push(node-&gt;right);
+            }
+            ++i;
+        }
+        return root;
+    }
+};</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n) each way</span>
+          <p>Same <code>2n+1</code> tokens as the preorder codec. No asymptotic difference &mdash; this is purely about which resource you spend.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n) output, O(w) queue</span>
+          <p><code>w</code> is the maximum tree width, up to <code>n/2</code> for a balanced tree but only <strong>O(1) for a chain</strong> &mdash; the exact inverse of the recursive version's profile.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Which one would I ship?</span>
+        <p>Preorder for interviews and for deep or unknown-shape trees, converted to an explicit stack if depth is a risk. BFS when the output should be readable by a human (levels line up) or when the tree is known to be deep and narrow. State the trade in one line: <strong>DFS costs O(height), BFS costs O(width)</strong> &mdash; pick against the shape you expect.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>Serialize a BST with no null markers at all.</strong> Preorder plus value bounds is enough: while rebuilding, a token belongs to the current subtree only if it lies inside <code>(low, high)</code>. Output drops from <code>2n+1</code> tokens to <code>n</code> &mdash; a genuine ~50% saving that comes purely from the extra structural guarantee. Great answer to &ldquo;can you do better?&rdquo;</li>
+        <li><strong>Make it as compact as possible.</strong> Separate structure from payload: emit <code>2n+1</code> bits of shape information (1 = node, 0 = null) plus <code>n</code> packed values. With <code>|val| &le; 1000</code> that is 11 bits per value, so ~13 bits per node total versus ~40 bits for the comma-separated text. This is exactly how succinct tree representations work.</li>
+        <li><strong>Why not preorder + inorder?</strong> It rebuilds the tree only when all values are <em>distinct</em>, needs a value&rarr;index map, and emits <code>2n</code> tokens for no benefit. Worth naming and rejecting with the duplicate-value counterexample.</li>
+        <li><strong>N-ary trees.</strong> Emit each node's child count before its children (length-prefixing), or use a closing marker per node. Length-prefixing is more robust because it survives truncation detection.</li>
+        <li><strong>Arbitrary string values.</strong> The delimiter can now appear inside the payload. Either escape it or, better, length-prefix each field (<code>5:hello</code>). This is the bug class that produces real CVEs in home-grown serializers.</li>
+        <li><strong>Truncated or malicious input.</strong> A hostile string can drive unbounded allocation or recursion. Defend with a declared node count, a depth cap, and an explicit &ldquo;stream ended early&rdquo; error rather than returning a partial tree.</li>
+        <li><strong>Schema evolution.</strong> If nodes gain a field next quarter, an unversioned positional format breaks every stored blob. Add a version byte, or move to protobuf/Thrift where field tags make additions backward compatible. Strong signal for anything infra-adjacent.</li>
+        <li><strong>Streaming, tree too large for memory.</strong> Preorder is already streamable in both directions: write tokens as you walk, and build incrementally with an explicit stack while reading. BFS is not &mdash; it needs the queue resident.</li>
+        <li><strong>Verifying the round trip.</strong> Property-based testing: generate random trees, assert <code>deserialize(serialize(t))</code> is structurally equal to <code>t</code>, and assert <code>serialize</code> is deterministic. Mentioning property tests rather than three hand-written cases reads as production experience.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Identify that shape needs encoding and give the two-node counterexample, propose and reject the positional encoding for the right reason, write the preorder codec with reader and writer in matching order and a real cursor, verify the empty and single-node cases, and name the O(height) recursion risk with the iterative fix.</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../course_schedule/">&larr; Course schedule / cycle detection</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <a class="problem-nav-link next" href="../median_stream/">Find median from data stream &rarr;</a>
+    </nav>
   </div>
 </main>
 

@@ -1,5 +1,5 @@
 /**
- * Editor-style code blocks: language tabs (Python / Rust / Objective-C++),
+ * Editor-style code blocks: language tabs (Python / Rust / Java / C++),
  * highlight.js colouring, a line-number gutter and a copy button.
  *
  * highlight.js is optional — if the CDN script is missing the code still shows,

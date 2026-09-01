@@ -24,300 +24,691 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Merge k sorted lists</p>
-      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <p class="eyebrow">DSA · Hard · ~50 min</p>
       <h1>Merge k sorted lists</h1>
       <p class="problem-deck">k-way merge shows up in external sort and in interview rooms — the heap is the point, not list pointer gymnastics.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
-            <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>List type, duplicates, memory.</p></div></div>
-            <div class="stack-step"><strong>5–15 min</strong><div><strong>Compare three approaches</strong><p>Draw complexity table: pairwise O(kN), D&amp;C O(N log k), heap O(N log k).</p></div></div>
-            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code heap solution</strong><p>Wrapper for heap comparison, dummy head, push/pop loop.</p></div></div>
-            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through example</strong><p>k=3 lists, walk every pop and push.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>Edge cases + D&amp;C alternative</strong><p>Empty lists, single list, all same values; sketch D&amp;C.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>External sort, streaming merge, merge k sorted arrays.</p></div></div>
-            </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
-          </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d open with three approaches side by side: naive pairwise merge, divide-and-conquer, and min-heap. Pairwise looks fine until you realize each merge pass touches all N total nodes, and you do k-1 passes — that&#x27;s O(kN) total work. Divide-and-conquer cuts it to O(N log k) by halving the number of lists each round, like merge sort on the list array.</p>
-          <p>The min-heap approach also gets O(N log k): maintain a heap of size k with one element from each list. Pop the min, advance that list&#x27;s pointer, push the next element. N pops, each costing O(log k). I&#x27;d lead with the heap because it&#x27;s the approach that generalizes to streaming — external sort, merging sorted runs from disk — and that&#x27;s the real-world context where this pattern earns its keep.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>Are all k lists individually sorted in ascending order?</li>
-            <li>Can individual lists be empty? Can k be 0?</li>
-            <li>Linked lists or arrays?</li>
-            <li>Duplicates across lists — preserve all or deduplicate?</li>
-            <li>Do we need stable merge (preserve order of equal elements)?</li>
-            <li>Memory: build a new list or reuse existing nodes?</li>
-            <li>Bounds on k and total N for complexity discussion?</li>
-            <li>Is this an in-memory problem or could lists be on-disk sorted runs?</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: merge k sorted linked lists into one sorted list, heap-based O(N log k).</li>
-            <li>Out: on-disk merge and parallel merge unless follow-up.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>Input: List[Optional[ListNode]] of k sorted linked lists.</li>
-            <li>Output: single merged sorted linked list head.</li>
-            <li>Preserve all duplicates in sorted order.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Time</strong>
-              <p>O(N log k) where N = total nodes across all lists.</p>
-            </div>
-            <div>
-              <strong>Space</strong>
-              <p>O(k) for the heap; O(1) extra if we reuse existing nodes.</p>
-            </div>
-            <div>
-              <strong>k=0 or all empty</strong>
-              <p>Return None without crashing.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>k=1, N=10^6</strong>
-              <p>Just return the single list — O(N) pass-through.</p>
-            </div>
-            <div>
-              <strong>k=10^4, N=10^6</strong>
-              <p>Heap of 10^4 elements; each pop is ~14 comparisons.</p>
-            </div>
-            <div>
-              <strong>k=10^6, N=10^6</strong>
-              <p>Each list has ~1 element; heap is huge but total work is N log k ≈ 2×10^7.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>def mergeKLists(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]:</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>min_heap: List[Tuple[int, int, ListNode]]  # (value, tiebreaker, node)
-dummy: ListNode                             # sentinel head for result list
-tail: ListNode                              # current tail of result list
-counter: int                                # monotonic tiebreaker for heap</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>Use a min-heap of size k. For each non-empty list, push (value, tiebreaker, node) into the heap. The tiebreaker is a counter to avoid comparing ListNode objects when values tie — Python 3 will throw TypeError if you try to compare custom objects without __lt__.</p>
-          <p>Create a dummy head node. Pop the smallest (val, _, node) from the heap, append node to the result tail. If node.next exists, push (node.next.val, counter, node.next). Repeat until the heap is empty.</p>
-          <p>Divide-and-conquer alternative: merge lists[0..k//2] and lists[k//2..k] recursively, then merge the two results. Base case: single list or empty. This avoids the heap import and is elegant, but less flexible for streaming scenarios where new sorted runs appear over time.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">List heads</span><b>→</b><span class="node accent">Min-heap (size k)</span><b>→</b><span class="node">Pop min → result tail</span></div><figcaption>Each pop is O(log k); N total pops gives O(N log k) overall</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">Pairwise: O(kN)</span><b>vs</b><span class="node accent">D&C / Heap: O(N log k)</span></div><figcaption>At k=1000, pairwise does 1000× more work than heap — the difference is real</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>Three lists: L1=[1,4,7], L2=[2,5,8], L3=[3,6,9]. k=3, N=9.</p>
-          <p>Init heap: push (1,0,L1[0]), (2,1,L2[0]), (3,2,L3[0]). Heap: [(1,..), (2,..), (3,..)].</p>
-          <p>Pop (1,0,node1→1): result=[1]. Push node1.next=(4,3,L1[1]). Heap: [(2,..), (3,..), (4,..)].
-Pop (2,1,node2→2): result=[1,2]. Push (5,4,L2[1]). Heap: [(3,..), (4,..), (5,..)].
-Pop (3,2,node3→3): result=[1,2,3]. Push (6,5,L3[1]). Heap: [(4,..), (5,..), (6,..)].
-Pop (4,3,node1→4): result=[1,2,3,4]. Push (7,6,L1[2]). Heap: [(5,..), (6,..), (7,..)].
-Pop (5,4,node2→5): result=[1,2,3,4,5]. Push (8,7,L2[2]). Heap: [(6,..), (7,..), (8,..)].
-Pop (6,5,node3→6): result=[..6]. Push (9,8,L3[2]). Heap: [(7,..), (8,..), (9,..)].
-Pop 7, 8, 9 — no more nexts. Result: [1,2,3,4,5,6,7,8,9].</p>
-          <p>9 pops, each O(log 3) ≈ 1.6 comparisons. Total ≈ 15 comparisons vs pairwise which would do two merge passes: merge L1+L2 (6 compares), then merge result+L3 (12 compares) = 18. Difference grows with larger k.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Min-heap k-way merge</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import heapq
-from typing import List, Optional
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: pairwise merge, O(1) extra space</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 50 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–6 min</strong><div><strong>Sections 1–2</strong><p>Nail down k vs N, whether nodes can be relinked, and whether all N values fit in memory.</p></div></div>
+        <div class="stack-step"><strong>6–12 min</strong><div><strong>Section 3</strong><p>Collect-and-sort baseline. Say out loud that it throws away the sortedness you were handed.</p></div></div>
+        <div class="stack-step"><strong>12–34 min</strong><div><strong>Section 4</strong><p>Min-heap of k heads. Code it, handle the node-comparison tie-break, dry-run three lists.</p></div></div>
+        <div class="stack-step"><strong>34–42 min</strong><div><strong>Section 4.3</strong><p>Pairwise bottom-up merge for O(1) extra space; compare against the heap.</p></div></div>
+        <div class="stack-step"><strong>42–50 min</strong><div><strong>Section 5</strong><p>Follow-ups: external merge sort, tournament trees, merging k streams across machines.</p></div></div>
+      </div>
+      <figcaption>This is the one DSA problem that maps directly onto real infrastructure — leave time for the external-sort follow-up.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>You are given an array of <code>k</code> linked lists. Each list is already sorted in ascending order. Merge them into a single sorted linked list and return its head.</p>
+      <p>The reason this is a Hard and not an Easy: the answer hinges on <em>which</em> quantity you put inside the logarithm. There are two sizes in play &mdash; <code>k</code>, the number of lists, and <code>N</code>, the total number of nodes across all lists. A solution that ignores the sortedness costs O(N log N). A solution that exploits it costs O(N log k). With <code>k = 10&#8308;</code> and <code>N = 5 &times; 10&#8310;</code> that is the difference between <code>log&#8322;N &asymp; 22</code> and <code>log&#8322;k &asymp; 13</code> comparisons per output element.</p>
+      <p>The structural observation to lead with: at every step, the next element of the merged output must be the smallest of the <em>k current heads</em> &mdash; never anything deeper in a list, because each list is sorted. So the whole problem reduces to &ldquo;repeatedly give me the minimum of k values, with cheap replacement.&rdquo; That is the definition of a min-heap, and this is exactly the k-way merge inside every external sort.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>class ListNode:
+    val: int
+    next: Optional[ListNode]
+
+merge_k_lists(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  lists = [[1,4,5], [1,3,4], [2,6]]
+Output: [1,1,2,3,4,4,5,6]
+Why:    duplicates across lists are kept (both 1s, both 4s) — this is a
+        merge, not a set union.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — degenerate inputs</span><pre><code>Input:  lists = []        -&gt; Output: []      (k = 0, no lists at all)
+Input:  lists = [[]]      -&gt; Output: []      (k = 1, one EMPTY list)
+Input:  lists = [[], [1]] -&gt; Output: [1]     (empty lists must be skipped)
+Input:  lists = [[2],[1]] -&gt; Output: [1,2]   (input order is not sorted order)</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — the skew case that kills pairwise merging</span><pre><code>Input:  lists = [[1..500], [], [], ..., []]   # one long list, k-1 empty
+Output: [1..500]
+Why:    a naive "merge list 0 with list 1, then with list 2, ..." walks the
+        long accumulator k times: O(N*k). The heap does not care.</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>k == lists.length</code>, <code>0 &le; k &le; 10^4</code> &mdash; <code>k = 0</code> is legal, so <code>lists[0]</code> is not safe to touch unguarded.</li>
+        <li><code>0 &le; lists[i].length &le; 500</code>, so <code>N &le; 5 &times; 10^6</code> nodes total.</li>
+        <li><code>-10^4 &le; node.val &le; 10^4</code> &mdash; small range, which later opens a counting-sort follow-up.</li>
+        <li>Each input list is already sorted ascending. Duplicates are allowed, within and across lists.</li>
+        <li>Output must be a single sorted linked list. Whether you may <em>relink</em> the given nodes or must allocate new ones is question one in section 2.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>Can I relink the existing nodes, or must the output be freshly allocated?</strong> Relinking is O(1) extra memory per node; copying is O(N). This single answer changes the space complexity of everything that follows.</li>
+        <li><strong>What are the relative magnitudes of k and N?</strong> If <code>k</code> is tiny (say 3), a hand-rolled pairwise merge is simpler and just as fast; the heap only earns its complexity when <code>k</code> is large.</li>
+        <li><strong>Do all N values fit in memory?</strong> If not, the brute force is off the table entirely and we are really discussing external merge sort.</li>
+        <li><strong>Are the input lists guaranteed sorted, or should I validate?</strong> If a caller can hand me an unsorted list, the heap silently produces garbage &mdash; worth an explicit assertion or a documented precondition.</li>
+        <li><strong>Ascending or descending? Any custom comparator?</strong> A comparator makes the min-heap ordering pluggable and is a one-line change; assuming <code>&lt;</code> on integers is an assumption.</li>
+        <li><strong>Can entries in <code>lists</code> be null / empty?</strong> Both, per the examples. Confirm that <code>k = 0</code> returns null rather than throwing.</li>
+        <li><strong>Is stability required?</strong> For equal values, must the node from the earlier list come first? Using <code>&le;</code> in the merge and the list index as heap tie-breaker gives it to you; say so explicitly.</li>
+        <li><strong>Singly or doubly linked?</strong> Doubly linked means <code>prev</code> pointers must be fixed up too &mdash; easy to forget.</li>
+        <li><strong>Is recursion acceptable?</strong> A recursive two-list merge is elegant but is O(N) stack deep; at N = 5 &times; 10&#8310; it overflows. Prefer iterative and say why.</li>
+        <li><strong>Is the input arriving as streams / iterators rather than lists?</strong> The heap solution works unchanged, which is a nice thing to point out.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not open with &ldquo;use a heap&rdquo;.</strong> First state the reduction: &ldquo;the next output element is always the minimum of the k current heads.&rdquo; The heap is then the obvious data structure for that operation, and you have demonstrated the reasoning rather than pattern-matching.</li>
+        <li><strong>Do not skip the baseline.</strong> Spend 90 seconds on collect-and-sort. Then say the sentence that earns the points: <em>&ldquo;this ignores the fact that the inputs are already sorted, and that is the information I should be exploiting.&rdquo;</em></li>
+        <li><strong>Say which variable is inside the log, and why.</strong> &ldquo;O(N log k), because the heap only ever holds k elements&rdquo; is the single most important sentence in this problem. Candidates who say &ldquo;O(N log N)&rdquo; for the heap solution lose the point.</li>
+        <li><strong>Use a dummy head node.</strong> Announce it: &ldquo;I will use a sentinel so the first insertion is not a special case.&rdquo; Every linked-list off-by-one in an interview comes from not doing this.</li>
+        <li><strong>Mention the tie-break before it bites you.</strong> In Python, <code>ListNode</code> is not orderable, so a heap of bare nodes raises <code>TypeError</code> on equal values. Push <code>(val, index, node)</code>. In Java and C++ supply a comparator. Naming this before you hit it looks like experience.</li>
+        <li><strong>Do not write recursive merge for 5 million nodes.</strong> If you start recursive, say &ldquo;this is O(N) stack deep, so for the stated N I would convert it to a loop&rdquo; &mdash; then convert it.</li>
+        <li><strong>Terminate the output list.</strong> When you relink existing nodes, the final node still points at its old successor. Set <code>tail.next = null</code> and say why: forgetting it can create a cycle.</li>
+        <li><strong>Connect it to the real world once.</strong> &ldquo;This is the merge step of an external sort, and the same structure appears in LSM-tree compaction.&rdquo; One sentence, high signal, then get back to the code.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Ignore the structure entirely: walk every list, dump all values into one array, sort it, and rebuild a linked list from the sorted array.</p>
+      <ol class="step-list">
+        <li>Traverse all k lists, appending each <code>val</code> to an array. This is O(N).</li>
+        <li>Sort the array &mdash; O(N log N).</li>
+        <li>Rebuild a list from the sorted array &mdash; O(N).</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">There is a second brute force — mention both</span>
+        <p>Instead of sorting, you could scan all k heads on every output step and pick the smallest by linear search. That is O(N&middot;k) time with O(1) space. At <code>k = 10&#8308;</code> and <code>N = 5 &times; 10&#8310;</code> it is 5 &times; 10&#185;&#8304; operations &mdash; far worse than sorting. Comparing the two baselines out loud shows you are reasoning about the inputs, not reciting.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">k sorted lists</span><b>&rarr;</b>
+          <span class="node">flatten to one array<br><small>sortedness discarded</small></span><b>&rarr;</b>
+          <span class="node accent">general sort<br><small>O(N log N)</small></span><b>&rarr;</b>
+          <span class="node">rebuild list</span>
+        </div>
+        <figcaption>The middle step is the waste: we pay to rediscover an ordering we were already given.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mk-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mk-bf-py" data-lang="python"><pre><code class="language-python">from typing import List, Optional
 
 
 class ListNode:
-    def __init__(self, val=0, nxt=None):
+    def __init__(self, val: int = 0, nxt: "Optional[ListNode]" = None) -&gt; None:
         self.val = val
         self.next = nxt
 
 
-def merge_k_lists(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]:
-    &quot;&quot;&quot;K-way merge using a min-heap.
-    Counter breaks ties so heapq never compares ListNode objects.&quot;&quot;&quot;
-    heap: list = []
-    counter = 0
+def merge_k_lists_brute(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]:
+    """Flatten every list into one array, sort, rebuild.
+
+    Correct but wasteful: step 2 re-derives an ordering the input already had.
+    """
+    values: List[int] = []
     for head in lists:
-        if head:
-            heapq.heappush(heap, (head.val, counter, head))
-            counter += 1
+        node = head
+        while node is not None:
+            values.append(node.val)
+            node = node.next
 
-    dummy = tail = ListNode(0)
-    while heap:
-        val, _, node = heapq.heappop(heap)
-        tail.next = node
+    values.sort()                          # O(N log N) -- the wasteful part
+
+    dummy = ListNode()                     # sentinel: no special case for head
+    tail = dummy
+    for v in values:
+        tail.next = ListNode(v)            # NEW nodes: O(N) extra memory
         tail = tail.next
-        if node.next:
-            # Push the next element from the same list
-            heapq.heappush(heap, (node.next.val, counter, node.next))
-            counter += 1
-
-    return dummy.next</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::{Ordering, Reverse};
-use std::collections::BinaryHeap;
-
-#[derive(Clone)]
-struct ListNode { val: i32, next: Option&lt;Box&lt;ListNode&gt;&gt; }
-
-// Wrapper for BinaryHeap: Reverse gives us a min-heap by value
-struct HeapEntry(i32, usize, Box&lt;ListNode&gt;);
-impl PartialEq for HeapEntry { fn eq(&amp;self, o: &amp;Self) -&gt; bool { self.0 == o.0 } }
-impl Eq for HeapEntry {}
-impl PartialOrd for HeapEntry {
-    fn partial_cmp(&amp;self, o: &amp;Self) -&gt; Option&lt;Ordering&gt; { Some(self.cmp(o)) }
+    return dummy.next</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">#[derive(Debug, PartialEq, Eq)]
+pub struct ListNode {
+    pub val: i32,
+    pub next: Option&lt;Box&lt;ListNode&gt;&gt;,
 }
-impl Ord for HeapEntry {
-    // Reversed so BinaryHeap (max-heap) acts as min-heap
-    fn cmp(&amp;self, o: &amp;Self) -&gt; Ordering {
-        o.0.cmp(&amp;self.0).then(o.1.cmp(&amp;self.1))
+
+impl ListNode {
+    pub fn new(val: i32) -&gt; Self {
+        ListNode { val, next: None }
     }
 }
 
-fn merge_k_lists(lists: Vec&lt;Option&lt;Box&lt;ListNode&gt;&gt;&gt;) -&gt; Option&lt;Box&lt;ListNode&gt;&gt; {
-    let mut heap = BinaryHeap::new();
-    for (i, head) in lists.into_iter().enumerate() {
-        if let Some(node) = head {
-            heap.push(HeapEntry(node.val, i, node));
+/// Flatten every list into one Vec, sort, rebuild.
+/// Correct but wasteful: the sort re-derives an ordering we already had.
+pub fn merge_k_lists_brute(lists: Vec&lt;Option&lt;Box&lt;ListNode&gt;&gt;&gt;) -&gt; Option&lt;Box&lt;ListNode&gt;&gt; {
+    let mut values: Vec&lt;i32&gt; = Vec::new();
+    for head in lists {
+        let mut cur = head;
+        while let Some(node) = cur {
+            values.push(node.val);
+            cur = node.next;               // moves ownership forward
         }
     }
-    let mut dummy = Box::new(ListNode { val: 0, next: None });
-    let mut tail = &amp;mut dummy;
-    let mut counter = heap.len();
-    while let Some(HeapEntry(_, _, mut node)) = heap.pop() {
-        // Take ownership of the rest of the list
-        let rest = node.next.take();
-        tail.next = Some(node);
-        tail = tail.next.as_mut().unwrap();
-        if let Some(next) = rest {
-            counter += 1;
-            heap.push(HeapEntry(next.val, counter, next));
-        }
+
+    values.sort_unstable();                // O(N log N) -- the wasteful part
+
+    // Build back-to-front: each new node takes the list built so far as `next`.
+    let mut head: Option&lt;Box&lt;ListNode&gt;&gt; = None;
+    for v in values.into_iter().rev() {
+        head = Some(Box::new(ListNode { val: v, next: head }));
     }
-    dummy.next
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+    head
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+class ListNode {
+    int val;
+    ListNode next;
+    ListNode() {}
+    ListNode(int val) { this.val = val; }
+}
+
+class Solution {
+
+    /**
+     * Flatten every list into one List, sort, rebuild.
+     * Correct but wasteful: the sort re-derives an ordering we already had.
+     */
+    public ListNode mergeKListsBrute(ListNode[] lists) {
+        List&lt;Integer&gt; values = new ArrayList&lt;&gt;();
+        for (ListNode head : lists) {
+            for (ListNode node = head; node != null; node = node.next) {
+                values.add(node.val);
+            }
+        }
+
+        Collections.sort(values);          // O(N log N) -- the wasteful part
+
+        ListNode dummy = new ListNode();   // sentinel: no special case for head
+        ListNode tail = dummy;
+        for (int v : values) {
+            tail.next = new ListNode(v);   // NEW nodes: O(N) extra memory
+            tail = tail.next;
+        }
+        return dummy.next;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
 #include &lt;vector&gt;
-#include &lt;queue&gt;
 
 struct ListNode {
     int val;
-    ListNode *next;
-    ListNode(int v = 0, ListNode *n = nullptr) : val(v), next(n) {}
+    ListNode* next;
+    explicit ListNode(int v = 0, ListNode* n = nullptr) : val(v), next(n) {}
 };
 
-// Min-heap comparator: smallest value has highest priority
-struct Cmp {
-    bool operator()(ListNode *a, ListNode *b) { return a-&gt;val &gt; b-&gt;val; }
-};
+// Flatten every list into one vector, sort, rebuild.
+// Correct but wasteful: the sort re-derives an ordering we already had.
+ListNode* mergeKListsBrute(const std::vector&lt;ListNode*&gt;&amp; lists) {
+    std::vector&lt;int&gt; values;
+    for (ListNode* head : lists) {
+        for (ListNode* node = head; node != nullptr; node = node-&gt;next) {
+            values.push_back(node-&gt;val);
+        }
+    }
 
-// K-way merge using a min-heap — O(N log K) total
-static ListNode *mergeKLists(std::vector&lt;ListNode *&gt; &amp;lists) {
-    std::priority_queue&lt;ListNode *, std::vector&lt;ListNode *&gt;, Cmp&gt; heap;
-    for (auto *head : lists)
-        if (head) heap.push(head);
+    std::sort(values.begin(), values.end());   // O(N log N) -- the waste
+
+    ListNode dummy;                            // sentinel on the stack
+    ListNode* tail = &amp;dummy;
+    for (int v : values) {
+        tail-&gt;next = new ListNode(v);          // NEW nodes: O(N) extra memory
+        tail = tail-&gt;next;
+    }
+    return dummy.next;
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(N log N)</span>
+          <p>N to collect, N log N to sort, N to rebuild. At N = 5 &times; 10&#8310; that is roughly 1.1 &times; 10&#8312; comparisons.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(N)</span>
+          <p>The value array, plus N freshly allocated nodes if you rebuild rather than relink. Two full copies of the data in the worst case.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>A general-purpose sort assumes nothing about its input. We know a great deal: the data arrives as <code>k</code> already-ordered runs. The minimum of the whole collection is always among the <code>k</code> heads, so we never need to compare against more than <code>k</code> candidates &mdash; <code>log k</code>, not <code>log N</code>. And relinking instead of rebuilding removes the O(N) allocation.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> maintain a min-heap containing exactly one node per non-empty list &mdash; its current head. Pop the global minimum, append that node to the output, and push its successor. The heap size never exceeds <code>k</code>, so each of the N pops and N pushes costs <code>O(log k)</code>.</p>
+      <ol class="step-list">
+        <li>Push the head of every non-empty list into a min-heap keyed on <code>val</code>. Skip nulls &mdash; this is where <code>[[], [1]]</code> is handled.</li>
+        <li>Create a dummy sentinel node; <code>tail = dummy</code>.</li>
+        <li>While the heap is non-empty: pop the smallest node, splice it on with <code>tail.next = node; tail = node</code>.</li>
+        <li>If the popped node has a successor, push that successor. This keeps the invariant &ldquo;the heap holds the current head of every list that still has nodes.&rdquo;</li>
+        <li>Set <code>tail.next = null</code> so no stale pointer survives, then return <code>dummy.next</code>.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariant to say out loud</span>
+        <p>The heap always contains the smallest unconsumed node of every list that is not yet exhausted. Therefore its minimum is the global minimum of everything unconsumed, so appending it preserves sorted order. Because we push a node only when its predecessor is popped, each node enters and leaves the heap exactly once.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">seed</span><p>heap = {1 (from L0), 1 (from L1), 2 (from L2)} &mdash; three heads, k = 3</p></div>
+          <div class="seq-row"><span class="actor">pop 1 (L0)</span><p>out = 1. push L0's next (4). heap = {1(L1), 2(L2), 4(L0)}</p></div>
+          <div class="seq-row"><span class="actor">pop 1 (L1)</span><p>out = 1,1. push 3. heap = {2(L2), 3(L1), 4(L0)}</p></div>
+          <div class="seq-row"><span class="actor">pop 2 (L2)</span><p>out = 1,1,2. push 6. heap = {3(L1), 4(L0), 6(L2)}</p></div>
+          <div class="seq-row"><span class="actor">pop 3, 4, 4, 5, 6</span><p>out = 1,1,2,3,4,4,5,6. heap drains to empty; every node touched once.</p></div>
+        </div>
+        <figcaption>lists = [[1,4,5], [1,3,4], [2,6]]. Heap size stays &le; 3 throughout, never N.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mk-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mk-op-py" data-lang="python"><pre><code class="language-python">import heapq
+from typing import List, Optional, Tuple
+
+
+def merge_k_lists(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]:
+    """Min-heap over the k current heads. Relinks nodes, allocates nothing.
+
+    Invariant: the heap holds the current head of every list that still has
+    nodes, so heap[0] is the global minimum of everything unconsumed.
+    """
+    # (value, list_index, node). The index is a tie-breaker: ListNode is not
+    # orderable, so without it equal values raise TypeError on comparison.
+    heap: List[Tuple[int, int, ListNode]] = []
+    for i, head in enumerate(lists):
+        if head is not None:               # skip empty lists up front
+            heap.append((head.val, i, head))
+    heapq.heapify(heap)                    # O(k), cheaper than k pushes
+
+    dummy = ListNode()
+    tail = dummy
+    while heap:
+        _, i, node = heapq.heappop(heap)
+        tail.next = node                   # relink, do not copy
+        tail = node
+        if node.next is not None:
+            heapq.heappush(heap, (node.next.val, i, node.next))
+
+    tail.next = None                       # cut the popped node's stale pointer
+    return dummy.next</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+
+/// Min-heap over the k current heads.
+///
+/// `BinaryHeap` is a max-heap, so entries are wrapped in `Reverse`.
+/// We heap on `(value, list_index)` and keep the owned nodes in `lists`,
+/// which sidesteps ordering `Box&lt;ListNode&gt;` itself.
+pub fn merge_k_lists(mut lists: Vec&lt;Option&lt;Box&lt;ListNode&gt;&gt;&gt;) -&gt; Option&lt;Box&lt;ListNode&gt;&gt; {
+    let mut heap: BinaryHeap&lt;Reverse&lt;(i32, usize)&gt;&gt; =
+        BinaryHeap::with_capacity(lists.len());
+
+    for (i, head) in lists.iter().enumerate() {
+        if let Some(node) = head {         // skip empty lists up front
+            heap.push(Reverse((node.val, i)));
+        }
+    }
+
+    let mut dummy = Box::new(ListNode::new(0));
+    let mut tail = &amp;mut dummy;
+
+    while let Some(Reverse((_, i))) = heap.pop() {
+        // Detach list i's head; its successor becomes the new head of list i.
+        let mut node = lists[i].take().expect("heap entry implies a node");
+        lists[i] = node.next.take();       // also clears the stale `next`
+        if let Some(next) = lists[i].as_ref() {
+            heap.push(Reverse((next.val, i)));
+        }
+        tail.next = Some(node);
+        tail = tail.next.as_mut().unwrap();
+    }
+
+    dummy.next.take()
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.Comparator;
+import java.util.PriorityQueue;
+
+class Solution {
+
+    /**
+     * Min-heap over the k current heads. Relinks nodes, allocates no nodes.
+     *
+     * Invariant: the queue holds the current head of every list that still
+     * has nodes, so peek() is the global minimum of everything unconsumed.
+     */
+    public ListNode mergeKLists(ListNode[] lists) {
+        // Explicit comparator: ListNode has no natural ordering.
+        PriorityQueue&lt;ListNode&gt; heap = new PriorityQueue&lt;&gt;(
+                Math.max(1, lists.length),
+                Comparator.comparingInt(n -&gt; n.val));
+
+        for (ListNode head : lists) {
+            if (head != null) {            // skip empty lists up front
+                heap.add(head);
+            }
+        }
+
+        ListNode dummy = new ListNode();
+        ListNode tail = dummy;
+        while (!heap.isEmpty()) {
+            ListNode node = heap.poll();
+            tail.next = node;              // relink, do not copy
+            tail = node;
+            if (node.next != null) {
+                heap.add(node.next);
+            }
+        }
+
+        tail.next = null;                  // cut the stale pointer
+        return dummy.next;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;functional&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+
+// Min-heap over the k current heads. Relinks nodes, allocates nothing.
+//
+// Invariant: the queue holds the current head of every list that still has
+// nodes, so top() is the global minimum of everything unconsumed.
+ListNode* mergeKLists(const std::vector&lt;ListNode*&gt;&amp; lists) {
+    // std::priority_queue is a max-heap; invert the comparator for a min-heap.
+    auto worse = [](const ListNode* a, const ListNode* b) {
+        return a-&gt;val &gt; b-&gt;val;
+    };
+    std::priority_queue&lt;ListNode*, std::vector&lt;ListNode*&gt;, decltype(worse)&gt;
+        heap(worse);
+
+    for (ListNode* head : lists) {
+        if (head != nullptr) {                 // skip empty lists up front
+            heap.push(head);
+        }
+    }
 
     ListNode dummy;
-    ListNode *tail = &amp;dummy;
+    ListNode* tail = &amp;dummy;
     while (!heap.empty()) {
-        ListNode *node = heap.top();
+        ListNode* node = heap.top();
         heap.pop();
-        tail-&gt;next = node;
-        tail = tail-&gt;next;
-        if (node-&gt;next)
-            heap.push(node-&gt;next); // push next element from same list
+        tail-&gt;next = node;                     // relink, do not copy
+        tail = node;
+        if (node-&gt;next != nullptr) {
+            heap.push(node-&gt;next);
+        }
     }
+
+    tail-&gt;next = nullptr;                      // cut the stale pointer
+    return dummy.next;
+}</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(N log k)</span>
+          <p>O(k) to heapify the seeds, then N pops and at most N pushes, each O(log k). At N = 5 &times; 10&#8310;, k = 10&#8308;: ~6.6 &times; 10&#8311; comparisons, roughly 1.7&times; better than the O(N log N) baseline &mdash; and it allocates nothing.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(k)</span>
+          <p>The heap holds at most one node reference per list. Output nodes are the input nodes relinked, so no O(N) term at all.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p><code>k = 0</code> &rarr; heap never seeded, returns null. <code>[[]]</code> &rarr; the null head is skipped. Lists of wildly different lengths &rarr; the heap simply shrinks as lists drain. Duplicate values &rarr; kept, and stable if the tie-breaker is the list index.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: pairwise merge, O(1) extra space</h3>
+      <p>The same O(N log k) time is reachable with no heap at all. Merge lists in pairs bottom-up: round one merges (0,1), (2,3), (4,5)&hellip;; round two merges the results in pairs; and so on. There are <code>&lceil;log&#8322; k&rceil;</code> rounds and each round touches every node at most once, so the total is O(N log k) &mdash; with only a couple of pointers of extra state.</p>
+      <div class="callout warn">
+        <span class="tag">The trap this avoids</span>
+        <p>Merging <em>sequentially</em> &mdash; accumulator &oplus; list 1, then &oplus; list 2, &hellip; &mdash; walks the growing accumulator k times and degrades to O(N&middot;k). Pairwise merging keeps the merged sizes balanced, which is exactly where the <code>log k</code> comes from. Say this difference out loud; it is the thing being tested.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">8 lists</span><b>&rarr;</b>
+          <span class="node">4 merged</span><b>&rarr;</b>
+          <span class="node">2 merged</span><b>&rarr;</b>
+          <span class="node accent">1 list<br><small>log&#8322;8 = 3 rounds</small></span>
+        </div>
+        <figcaption>Each round is O(N). Sequential merging would instead be 8 rounds over an ever-longer accumulator.</figcaption>
+      </figure>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mk-dc-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-dc-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-dc-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mk-dc-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mk-dc-py" data-lang="python"><pre><code class="language-python">def merge_two(a: Optional[ListNode], b: Optional[ListNode]) -&gt; Optional[ListNode]:
+    """Standard two-list merge, iterative so the stack stays O(1)."""
+    dummy = ListNode()
+    tail = dummy
+    while a is not None and b is not None:
+        if a.val &lt;= b.val:                 # &lt;= makes the merge STABLE
+            tail.next, a = a, a.next
+        else:
+            tail.next, b = b, b.next
+        tail = tail.next
+    tail.next = a if a is not None else b  # attach whatever is left
+    return dummy.next
+
+
+def merge_k_lists_pairwise(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]:
+    """Bottom-up pairwise merge: ceil(log2 k) rounds, each O(N)."""
+    if not lists:
+        return None
+
+    n = len(lists)
+    step = 1
+    while step &lt; n:
+        for i in range(0, n - step, 2 * step):
+            lists[i] = merge_two(lists[i], lists[i + step])
+        step *= 2                          # 1, 2, 4, 8, ... doubling reach
+    return lists[0]</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-dc-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Standard two-list merge, iterative so the stack stays O(1).
+/// A recursive version would be O(N) frames deep and overflows at N = 5e6.
+fn merge_two(
+    mut a: Option&lt;Box&lt;ListNode&gt;&gt;,
+    mut b: Option&lt;Box&lt;ListNode&gt;&gt;,
+) -&gt; Option&lt;Box&lt;ListNode&gt;&gt; {
+    let mut dummy = Box::new(ListNode::new(0));
+    let mut tail = &amp;mut dummy;
+
+    while a.is_some() &amp;&amp; b.is_some() {
+        // &lt;= makes the merge stable: ties take from `a` first.
+        let take_a = a.as_ref().unwrap().val &lt;= b.as_ref().unwrap().val;
+        let mut node = if take_a {
+            a.take().unwrap()
+        } else {
+            b.take().unwrap()
+        };
+        let rest = node.next.take();
+        if take_a { a = rest; } else { b = rest; }
+
+        tail.next = Some(node);
+        tail = tail.next.as_mut().unwrap();
+    }
+
+    tail.next = if a.is_some() { a } else { b };   // attach the remainder
+    dummy.next.take()
+}
+
+/// Bottom-up pairwise merge: ceil(log2 k) rounds, each O(N).
+pub fn merge_k_lists_pairwise(
+    mut lists: Vec&lt;Option&lt;Box&lt;ListNode&gt;&gt;&gt;,
+) -&gt; Option&lt;Box&lt;ListNode&gt;&gt; {
+    if lists.is_empty() {
+        return None;
+    }
+
+    let n = lists.len();
+    let mut step = 1;
+    while step &lt; n {
+        let mut i = 0;
+        while i + step &lt; n {
+            let left = lists[i].take();
+            let right = lists[i + step].take();
+            lists[i] = merge_two(left, right);
+            i += 2 * step;
+        }
+        step *= 2;                         // 1, 2, 4, 8, ... doubling reach
+    }
+    lists[0].take()
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-dc-java" data-lang="java" hidden><pre><code class="language-java">class Solution {
+
+    /** Standard two-list merge, iterative so the stack stays O(1). */
+    private ListNode mergeTwo(ListNode a, ListNode b) {
+        ListNode dummy = new ListNode();
+        ListNode tail = dummy;
+        while (a != null &amp;&amp; b != null) {
+            if (a.val &lt;= b.val) {          // &lt;= makes the merge STABLE
+                tail.next = a;
+                a = a.next;
+            } else {
+                tail.next = b;
+                b = b.next;
+            }
+            tail = tail.next;
+        }
+        tail.next = (a != null) ? a : b;   // attach whatever is left
+        return dummy.next;
+    }
+
+    /** Bottom-up pairwise merge: ceil(log2 k) rounds, each O(N). */
+    public ListNode mergeKListsPairwise(ListNode[] lists) {
+        if (lists.length == 0) {
+            return null;
+        }
+        int n = lists.length;
+        for (int step = 1; step &lt; n; step *= 2) {   // 1, 2, 4, 8, ...
+            for (int i = 0; i + step &lt; n; i += 2 * step) {
+                lists[i] = mergeTwo(lists[i], lists[i + step]);
+            }
+        }
+        return lists[0];
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mk-dc-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;vector&gt;
+
+// Standard two-list merge, iterative so the stack stays O(1).
+static ListNode* mergeTwo(ListNode* a, ListNode* b) {
+    ListNode dummy;
+    ListNode* tail = &amp;dummy;
+    while (a != nullptr &amp;&amp; b != nullptr) {
+        if (a-&gt;val &lt;= b-&gt;val) {                // &lt;= makes the merge STABLE
+            tail-&gt;next = a;
+            a = a-&gt;next;
+        } else {
+            tail-&gt;next = b;
+            b = b-&gt;next;
+        }
+        tail = tail-&gt;next;
+    }
+    tail-&gt;next = (a != nullptr) ? a : b;       // attach whatever is left
     return dummy.next;
 }
 
-// Convenience: wrap result as NSArray of values for easy inspection
-static NSArray&lt;NSNumber *&gt; *mergedValues(std::vector&lt;ListNode *&gt; &amp;lists) {
-    ListNode *head = mergeKLists(lists);
-    NSMutableArray *result = [NSMutableArray new];
-    while (head) {
-        [result addObject:@(head-&gt;val)];
-        head = head-&gt;next;
+// Bottom-up pairwise merge: ceil(log2 k) rounds, each O(N).
+ListNode* mergeKListsPairwise(std::vector&lt;ListNode*&gt;&amp; lists) {
+    if (lists.empty()) {
+        return nullptr;
     }
-    return result;
+    const int n = static_cast&lt;int&gt;(lists.size());
+    for (int step = 1; step &lt; n; step *= 2) {  // 1, 2, 4, 8, ...
+        for (int i = 0; i + step &lt; n; i += 2 * step) {
+            lists[i] = mergeTwo(lists[i], lists[i + step]);
+        }
+    }
+    return lists[0];
 }</code></pre></div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Init</span><p>push heads (1,2,3) into heap of size k=3</p></div><div class="seq-row"><span class="actor">Pop 1</span><p>append 1 to result, push L1.next=4</p></div><div class="seq-row"><span class="actor">Pop 2</span><p>append 2, push L2.next=5</p></div><div class="seq-row"><span class="actor">Pop 3</span><p>append 3, push L3.next=6</p></div><div class="seq-row"><span class="actor">…</span><p>continue until heap empty → [1,2,3,4,5,6,7,8,9]</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Heap vs D&amp;C</strong>
-              <p>Heap is online-friendly (can add new lists); D&amp;C needs all lists upfront.</p>
-            </div>
-            <div>
-              <strong>Counter tiebreaker</strong>
-              <p>Avoids TypeError on equal values; monotonic counter is cheaper than wrapping nodes.</p>
-            </div>
-            <div>
-              <strong>Reuse vs copy</strong>
-              <p>Reusing nodes saves memory but mutates input lists — clarify with interviewer.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Comparing ListNode objects directly in Python 3 without a tiebreaker.</li>
-            <li>Forgetting to check if a list head is None before pushing.</li>
-            <li>Not advancing the pointer — infinite loop pushing the same node.</li>
-            <li>Off-by-one on divide-and-conquer base case (empty vs single list).</li>
-            <li>Memory leak if building new nodes instead of relinking existing ones.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
-          <ul class="ask-list">
-            <li>Merge k sorted arrays — same heap idea, use (val, array_idx, element_idx).</li>
-            <li>External sort — merge sorted runs from disk; heap of file iterators.</li>
-            <li>Merge with deduplication — skip if popped value equals last appended.</li>
-            <li>Parallel merge — split k lists across threads, merge results.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>Explain why pairwise merge is O(kN) and why heap or D&amp;C is O(N log k). Write clean heap code with the counter tiebreaker, trace through a 3-list example, and mention the external-sort generalization. That covers the algorithm, the engineering, and the real-world application.</p>
-        </section>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(N log k)</span>
+          <p>Same as the heap. In practice often faster: pure pointer comparisons, sequential memory access, no heap sift.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(1)</span>
+          <p>Bottom-up and iterative, so no heap and no recursion stack. The <code>lists</code> array is reused in place as the accumulator.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Which one would I ship?</span>
+        <p>Pairwise, when all k lists are available up front &mdash; better constants, less memory, no comparator plumbing. The heap, when the lists are <em>streams</em> that arrive incrementally or live on separate machines, because it consumes exactly one element at a time from each source. Say both and say why; that is the senior answer.</p>
+      </div>
+    </section>
 
-        <nav class="problem-nav" aria-label="Problem navigation">
-          <a class="problem-nav-link prev" href="../longest_substring/">← Longest substring without repeating characters</a>
-          <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <a class="problem-nav-link next" href="../course_schedule/">Course schedule / cycle detection →</a>
-        </nav>
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>The data does not fit in memory.</strong> This is external merge sort: sort chunks that do fit, spill them as sorted runs on disk, then k-way merge the runs with exactly the section-4 heap, reading each run through a buffered reader. The heap is O(k) memory regardless of file size &mdash; that is why the merge step is a heap and not a sort.</li>
+        <li><strong>What if k is larger than the number of file handles / memory for buffers?</strong> Merge in multiple passes: merge <code>k'</code> runs at a time so that <code>k'</code> buffers fit, producing fewer, longer runs, and repeat. The total cost becomes O(N log<sub>k'</sub> k) passes over the data &mdash; the classic I/O-bound trade-off.</li>
+        <li><strong>Tournament tree / loser tree instead of a binary heap.</strong> Same asymptotics but ~1 comparison per output element instead of ~log k, which matters when comparisons are expensive (long string keys). This is what real database merge operators use.</li>
+        <li><strong>Merge k sorted arrays instead of lists.</strong> Identical heap, but store <code>(value, array_index, position)</code> because arrays have no <code>next</code> pointer. Also allows binary-search-based &ldquo;galloping&rdquo; merges when one array dominates.</li>
+        <li><strong>Values in a small fixed range.</strong> Here <code>|val| &le; 10&#8308;</code>, so counting sort over 20 001 buckets gives O(N + R) time &mdash; linear, beating O(N log k), at the cost of O(R) space and losing generality. Good demonstration that constraints can beat cleverness.</li>
+        <li><strong>Deduplicate while merging.</strong> Skip a popped node whose value equals the previous output value. One extra comparison, no extra memory &mdash; and it turns the merge into a sorted set union.</li>
+        <li><strong>Parallel merge across machines.</strong> Range-partition the key space so each worker merges an independent key range, then concatenate. Discuss skew: hot ranges need splitting, which is where sampling-based partitioning comes in.</li>
+        <li><strong>Stability and total ordering.</strong> If nodes carry payloads and values tie, the tie-breaker defines the output. Using the list index makes it deterministic; not defining it means the output depends on heap internals, which is a bug waiting to be filed.</li>
+        <li><strong>Memory ownership in C++/Rust.</strong> The relinking versions transfer ownership rather than copying, so the caller must not free the input lists separately. Worth stating explicitly &mdash; interviewers notice candidates who think about lifetimes.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Reduce the problem to &ldquo;minimum of k heads&rdquo;, state the baseline and reject it for a reason, write the heap version with the tie-break and the null-head skip correct, say <strong>O(N log k)</strong> and justify the <code>k</code>, then offer pairwise merge as the O(1)-space alternative and connect it to external sort.</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../longest_substring/">&larr; Longest substring without repeating characters</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <a class="problem-nav-link next" href="../course_schedule/">Course schedule / cycle detection &rarr;</a>
+    </nav>
   </div>
 </main>
 

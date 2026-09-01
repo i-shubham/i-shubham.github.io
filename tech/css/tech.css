@@ -990,6 +990,222 @@ a.problem-card:hover .problem-body p { color: var(--muted); }
   width: 100%;
 }
 
+/* ---------------------------------------------------------------------------
+   Numbered interview walkthrough (DSA problem pages)
+   Sections run 1 → 5 with 1.1 / 3.2 style subsections, so the heading scale
+   has to stay readable three levels deep.
+   --------------------------------------------------------------------------- */
+.problem-toc {
+  margin: 0 0 2.4rem;
+  padding: 1.1rem 1.3rem;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  background: var(--surface);
+}
+.problem-toc strong {
+  display: block;
+  margin-bottom: .6rem;
+  color: var(--orange);
+  font: 600 .68rem var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.problem-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: .3rem;
+}
+.problem-toc a {
+  color: #2c3934;
+  font: 400 .9rem/1.5 var(--sans);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.problem-toc a:hover { color: var(--orange); border-bottom-color: currentColor; }
+.problem-toc .sub { padding-left: 1.1rem; font-size: .84rem; color: var(--muted); }
+
+.problem-section[id] { scroll-margin-top: 84px; }
+.problem-section h2 .num,
+.problem-section h3 .num {
+  color: var(--orange);
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+.problem-section h2 {
+  padding-bottom: .55rem;
+  border-bottom: 2px solid var(--night);
+}
+.problem-section h3 {
+  margin: 2rem 0 .8rem;
+  color: var(--ink);
+  font: 600 clamp(1.06rem, 2vw, 1.24rem)/1.25 var(--sans);
+  letter-spacing: -.01em;
+}
+.problem-section h3 .num { font-size: .92em; }
+.problem-section h4 {
+  margin: 1.4rem 0 .5rem;
+  color: var(--ink);
+  font: 600 .78rem var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* Plain fact list — no leading glyph, for constraints and signatures */
+.spec-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.spec-list li {
+  position: relative;
+  padding: .7rem 0 .7rem 1.35rem;
+  border-top: 1px solid var(--line);
+  color: #2c3934;
+  font: 400 .96rem/1.55 var(--sans);
+}
+.spec-list li:last-child { border-bottom: 1px solid var(--line); }
+.spec-list li::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  top: .78rem;
+  color: var(--mint);
+  font: 600 .72rem var(--mono);
+}
+.spec-list code,
+.tip-list code,
+.step-list code,
+.ask-list code,
+.trade-list code,
+.problem-section p code {
+  padding: .1rem .32rem;
+  border-radius: .3rem;
+  background: rgba(20,41,35,.07);
+  font: 500 .86em var(--mono);
+  color: #12352b;
+}
+
+/* Coaching notes for the candidate — deliberately louder than a normal list */
+.tip-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: .55rem;
+}
+.tip-list li {
+  position: relative;
+  padding: .8rem .95rem .8rem 2.35rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--orange);
+  border-radius: .55rem;
+  background: var(--surface);
+  color: #2c3934;
+  font: 400 .95rem/1.55 var(--sans);
+}
+.tip-list li::before {
+  content: "!";
+  position: absolute;
+  left: .95rem;
+  top: .78rem;
+  color: var(--orange);
+  font: 700 .8rem var(--mono);
+}
+.tip-list strong { color: var(--ink); }
+
+/* Numbered algorithm steps */
+.step-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: .5rem;
+}
+.step-list li {
+  position: relative;
+  counter-increment: step;
+  padding: .3rem 0 .3rem 2.1rem;
+  color: #2c3934;
+  font: 400 .97rem/1.6 var(--sans);
+}
+.step-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: .34rem;
+  display: grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 50%;
+  background: var(--night);
+  color: var(--mint);
+  font: 600 .7rem var(--mono);
+}
+
+/* Complexity verdict strip that closes every approach */
+.verdict {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin: .5rem 0 1rem;
+}
+.verdict > div {
+  padding: 1rem 1.05rem;
+  border: 1px solid #243832;
+  border-radius: .75rem;
+  background: #0f1a17;
+}
+.verdict strong {
+  display: block;
+  margin-bottom: .35rem;
+  color: var(--mint);
+  font: 600 .66rem var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.verdict .big {
+  display: block;
+  margin-bottom: .3rem;
+  color: #f4f5ee;
+  font: 600 1.02rem var(--mono);
+}
+.verdict p {
+  margin: 0 !important;
+  color: rgba(255,255,255,.66) !important;
+  font: 400 .86rem/1.45 var(--sans) !important;
+}
+.verdict.single { grid-template-columns: 1fr; }
+
+/* Pass / fail banner for "is this good enough to ship in the interview?" */
+.callout {
+  margin: 1rem 0;
+  padding: .95rem 1.1rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--mint);
+  border-radius: .55rem;
+  background: var(--surface);
+}
+.callout p { margin: 0 !important; font-size: .95rem !important; }
+.callout.warn { border-left-color: var(--orange); }
+.callout .tag {
+  display: block;
+  margin-bottom: .3rem;
+  color: var(--mint);
+  font: 600 .66rem var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.callout.warn .tag { color: var(--orange); }
+
+@media (max-width: 900px) {
+  .verdict { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .cursor { animation: none; }

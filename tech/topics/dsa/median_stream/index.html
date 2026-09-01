@@ -24,290 +24,801 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Find median from data stream</p>
-      <p class="eyebrow">DSA · Hard · ~60 min</p>
+      <p class="eyebrow">DSA · Hard · ~50 min</p>
       <h1>Find median from data stream</h1>
       <p class="problem-deck">Running median is the two-heap invariant problem — once the sizes and tops are right, the rest is bookkeeping.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
-            <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Value type, stream size, precision.</p></div></div>
-            <div class="stack-step"><strong>5–15 min</strong><div><strong>Why two heaps</strong><p>Compare sorted array, BST, and two-heap approaches.</p></div></div>
-            <div class="stack-step"><strong>15–30 min</strong><div><strong>Code the solution</strong><p>Max-heap (negated) for lower, min-heap for upper; rebalance logic.</p></div></div>
-            <div class="stack-step"><strong>30–40 min</strong><div><strong>Trace through stream</strong><p>Insert [5, 2, 8, 1, 9, 3] one by one, show heaps and median.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>Edge cases</strong><p>Single element, two elements, all same values, negative numbers.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>Sliding window median, distributed median, approximate quantiles.</p></div></div>
-            </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
-          </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d frame this as: we need O(log n) insertion and O(1) median retrieval. A sorted list gives O(1) median but O(n) insertion (shifting elements). A balanced BST works but is annoying to implement. The elegant solution is two heaps: a max-heap for the lower half and a min-heap for the upper half.</p>
-          <p>The invariant is simple: max-heap size is always equal to or one more than min-heap size. The median is either the top of the max-heap (odd count) or the average of both tops (even count). Every insertion either goes to the correct heap directly or requires a rebalance — pop from the overfull heap and push to the other. I&#x27;d draw the invariant before writing a single line of code.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>Integer or floating-point values?</li>
-            <li>Can the stream be empty when median is queried?</li>
-            <li>How many insertions — thousands or billions?</li>
-            <li>Do we need to support removal or just insertion?</li>
-            <li>Is the stream finite or truly unbounded?</li>
-            <li>Precision requirements for the average of two numbers?</li>
-            <li>Thread-safe access needed?</li>
-            <li>Do we need percentiles beyond median (p99, p50)?</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: addNum(int) + findMedian() with two-heap invariant.</li>
-            <li>Out: removal, percentiles, distributed median unless follow-up.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>addNum(num): insert a number into the data structure.</li>
-            <li>findMedian(): return the median of all numbers added so far.</li>
-            <li>Median of even count is average of two middle values.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
-            <div>
-              <strong>addNum</strong>
-              <p>O(log n) — heap push + possible rebalance.</p>
-            </div>
-            <div>
-              <strong>findMedian</strong>
-              <p>O(1) — peek at heap tops.</p>
-            </div>
-            <div>
-              <strong>Space</strong>
-              <p>O(n) — storing all elements across both heaps.</p>
-            </div>
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: Fenwick tree over a bounded domain</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 50 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–7 min</strong><div><strong>Sections 1–2</strong><p>Confirm the median definition for even counts, and the ratio of writes to reads — that ratio picks the design.</p></div></div>
+        <div class="stack-step"><strong>7–14 min</strong><div><strong>Section 3</strong><p>Sort-on-query baseline, plus the sorted-insert alternative. Contrast which operation each one taxes.</p></div></div>
+        <div class="stack-step"><strong>14–36 min</strong><div><strong>Section 4</strong><p>Two heaps. State both invariants, code push-then-rebalance, trace 1 &rarr; 2 &rarr; 3.</p></div></div>
+        <div class="stack-step"><strong>36–43 min</strong><div><strong>Section 4.3</strong><p>Bounded value range &rarr; Fenwick tree: any percentile, plus deletions.</p></div></div>
+        <div class="stack-step"><strong>43–50 min</strong><div><strong>Section 5</strong><p>Follow-ups: sliding-window median, approximate quantiles, distributed aggregation.</p></div></div>
+      </div>
+      <figcaption>This is a data-structure design question, not a puzzle. The invariants are the answer; the code is short.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Design a data structure that supports two operations on a stream of numbers:</p>
+      <ul class="spec-list">
+        <li><code>addNum(num)</code> &mdash; add an integer to the collection.</li>
+        <li><code>findMedian()</code> &mdash; return the median of everything added so far.</li>
+      </ul>
+      <p>The median is the middle value when the count is odd, and the mean of the two middle values when the count is even. Note the wording: <em>&ldquo;so far&rdquo;</em>. This is not a batch problem &mdash; queries interleave with insertions arbitrarily, so you cannot sort once at the end.</p>
+      <p>The reason a heap shows up: you never need the data <em>sorted</em>, you only need the one or two elements that sit at the middle boundary. So the right question is not &ldquo;how do I keep this sorted cheaply?&rdquo; but <strong>&ldquo;how do I keep just the boundary elements cheap to reach?&rdquo;</strong> Split the data into a lower half and an upper half, and you only ever need the largest of the lower half and the smallest of the upper half. Those are exactly the two operations a heap makes O(1) to read and O(log n) to maintain.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>class MedianFinder:
+    def __init__(self) -&gt; None: ...
+    def add_num(self, num: int) -&gt; None: ...
+    def find_median(self) -&gt; float: ...      # float, even for integer input</code></pre></div>
+
+      <h4>Worked example</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the canonical trace</span><pre><code>mf = MedianFinder()
+mf.add_num(1)        # data = [1]
+mf.find_median()     # -&gt; 1.0     (odd count: the middle element)
+mf.add_num(2)        # data = [1, 2]
+mf.find_median()     # -&gt; 1.5     (even count: MEAN of the two middles)
+mf.add_num(3)        # data = [1, 2, 3]
+mf.find_median()     # -&gt; 2.0</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — order of arrival is arbitrary</span><pre><code>add 5, 15, 1, 3      # sorted view: [1, 3, 5, 15]
+find_median()        # -&gt; 4.0     ((3 + 5) / 2)
+add 8                # sorted view: [1, 3, 5, 8, 15]
+find_median()        # -&gt; 5.0
+Note: values arrive unsorted; every median must be correct at the time asked.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — the cases that break naive code</span><pre><code>add 2; find_median()             -&gt; 2.0      (single element)
+add 1; add 1; find_median()      -&gt; 1.0      (duplicates are kept, not deduped)
+add -5; add 5; find_median()     -&gt; 0.0      (negatives, and a zero result)
+add 100000; add 100000           -&gt; 100000.0 (sum of two middles can exceed
+                                              int range -- widen before adding)</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>-10^5 &le; num &le; 10^5</code> &mdash; a <strong>bounded</strong> domain of only 200 001 distinct values. That bound is the door to the counting/Fenwick solution in 4.3; say it out loud when you read the constraint.</li>
+        <li>At most <code>5 &times; 10^4</code> calls in total to <code>addNum</code> and <code>findMedian</code> combined.</li>
+        <li><code>findMedian</code> is only called when at least one element has been added, so the empty case need not return a sentinel &mdash; but say that you are relying on it.</li>
+        <li>Return type is a floating-point number. Two integer middles must be averaged in floating point (or the sum widened first), or <code>(1 + 2) / 2</code> silently becomes <code>1</code> in Java, C++ and Rust.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>What is the read/write ratio?</strong> This is the design question. Write-heavy with rare reads favours append-and-sort-on-query. Read-heavy favours keeping the structure ordered. Balanced favours two heaps. Ask before choosing.</li>
+        <li><strong>Confirm the even-count rule.</strong> Mean of the two middles, or lower middle? Different products define it differently and it costs one line either way.</li>
+        <li><strong>Integers or arbitrary floats?</strong> Bounded integers unlock counting structures; floats force comparison-based ones.</li>
+        <li><strong>Is the value range bounded?</strong> It is here, and that is a much stronger hint than most candidates notice. A bounded domain makes the cost O(log R) &mdash; independent of how many elements arrive.</li>
+        <li><strong>Do we ever remove elements?</strong> Heaps cannot delete an arbitrary element cheaply. If removal is needed, say so early and switch to a Fenwick tree, an ordered multiset, or lazy deletion with a tombstone map.</li>
+        <li><strong>Is it the median of all history, or of a sliding window?</strong> Windowed median is a materially harder variant &mdash; it is the classic follow-up, so pre-empt it.</li>
+        <li><strong>Must the answer be exact?</strong> At scale, monitoring systems accept approximate quantiles (t-digest, HdrHistogram) for a large constant-factor win. Knowing when exactness is negotiable is a senior signal.</li>
+        <li><strong>How much data in total?</strong> If it does not fit in memory, exact median needs multiple passes or an approximate sketch.</li>
+        <li><strong>Concurrent access?</strong> Multiple producers and one reader changes everything: the two-heap rebalance is not atomic, so you need a lock or a lock-free design.</li>
+        <li><strong>Will other percentiles be asked for later?</strong> If p95 is coming, build the Fenwick/histogram version now &mdash; two heaps give you the median and nothing else.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not say &ldquo;two heaps&rdquo; in the first ten seconds.</strong> It is the most memorised answer in this problem set, and saying it early reads as recall, not reasoning. First say <em>why</em>: &ldquo;I only ever need the boundary between the halves, not the full order.&rdquo; Then the heaps are a conclusion.</li>
+        <li><strong>Do not skip the baseline, and use it to ask about the workload.</strong> &ldquo;If reads are rare, appending and sorting on query is genuinely the right engineering answer.&rdquo; That sentence shows judgement rather than reflex optimisation.</li>
+        <li><strong>Write both invariants on the board before coding.</strong> (1) <em>every</em> element of <code>lo</code> &le; <em>every</em> element of <code>hi</code>; (2) <code>len(lo) == len(hi)</code> or <code>len(lo) == len(hi) + 1</code>. Almost every bug in this problem is one of these two being violated, and having them written down lets you check your own code.</li>
+        <li><strong>Use push-then-rebalance, not if/else placement.</strong> Always push into <code>lo</code>, move <code>lo</code>'s max into <code>hi</code>, then move back if <code>hi</code> grew too large. Three unconditional lines. The &ldquo;compare against the current median and decide which heap&rdquo; version has four branches and is where candidates lose time.</li>
+        <li><strong>Decide which heap holds the extra element and never waver.</strong> This page keeps it in <code>lo</code>, so an odd count means the answer is <code>lo.top()</code>. Flip-flopping mid-solution guarantees an off-by-one.</li>
+        <li><strong>Watch the integer division and the overflow.</strong> <code>(lo.top() + hi.top()) / 2</code> is wrong in Java, C++ and Rust for two reasons: integer division truncates, and the sum can exceed the type. Cast to floating point or widen first.</li>
+        <li><strong>Trace 1 &rarr; 2 &rarr; 3 out loud.</strong> Three insertions exercise both parity cases and both rebalance directions. It takes 40 seconds and proves the invariants hold.</li>
+        <li><strong>Point out the bounded range yourself.</strong> Even if you implement the heaps, say &ldquo;given <code>|num| &le; 10&#8309;</code> a Fenwick tree over the domain is O(log R) and also gives me deletions and arbitrary percentiles.&rdquo; That single observation is what separates a correct answer from a strong one.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Keep every number in a plain list. <code>addNum</code> appends. <code>findMedian</code> sorts and reads the middle. Obviously correct, and it makes the trade-off visible: all of the cost has been pushed onto the read path.</p>
+      <ol class="step-list">
+        <li><code>addNum</code>: append. O(1) amortised.</li>
+        <li><code>findMedian</code>: sort the list, then return <code>data[n//2]</code> for odd <code>n</code>, or the mean of <code>data[n//2 - 1]</code> and <code>data[n//2]</code> for even <code>n</code>.</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">There is a second baseline — contrast them explicitly</span>
+        <p>Keep the list <em>sorted</em> instead: binary-search the insertion point (O(log n)) and shift the tail (O(n)). That gives <code>addNum</code> O(n) and <code>findMedian</code> O(1) &mdash; the exact mirror image. Which baseline is better depends entirely on the read/write ratio, which is why that was question one in section 2. Worth adding: the O(n) shift is a single contiguous <code>memmove</code>, so in practice sorted-insert beats a heap up to roughly 10&#8309; elements. Knowing that constants sometimes win is a real-engineering signal.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="compare">
+          <div>
+            <span class="label">Append + sort on query</span>
+            <p>add O(1) &middot; find O(n log n)</p>
+            <p>Good when reads are rare.</p>
           </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>n limit</strong>
-              <p>up to 5×10^4 calls to addNum in LeetCode constraints</p>
-            </div>
-            <div>
-              <strong>Heap ops</strong>
-              <p>each addNum does ≤ 3 heap operations → ~3 × log(5×10^4) ≈ 48 comparisons max</p>
-            </div>
-            <div>
-              <strong>Memory</strong>
-              <p>two heaps hold all n elements — at n=5×10^4 ints that&#x27;s ~400 KB</p>
-            </div>
-            <div>
-              <strong>Billion scale</strong>
-              <p>at 10^9 inserts, heaps use ~8 GB; approximate with t-digest at that point</p>
-            </div>
+          <div>
+            <span class="label">Sorted insert</span>
+            <p>add O(n) &middot; find O(1)</p>
+            <p>Good when reads dominate.</p>
           </div>
-        </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>class MedianFinder:
-    def addNum(self, num: int) -&gt; None: ...
-    def findMedian(self) -&gt; float: ...</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>lower: List[int]   # max-heap (values negated for Python heapq)
-upper: List[int]   # min-heap
-Invariant: len(lower) == len(upper) or len(lower) == len(upper) + 1
-Invariant: -lower[0] &lt;= upper[0]  (max of lower half ≤ min of upper half)</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>Use a max-heap (lower) and a min-heap (upper). In Python, simulate max-heap by negating values.</p>
-          <p>addNum(num): if lower is empty or num &lt;= -lower[0] (top of max-heap), push to lower. Else push to upper. Then rebalance: if len(lower) &gt; len(upper) + 1, pop from lower and push to upper. If len(upper) &gt; len(lower), pop from upper and push to lower. This maintains the invariant that len(lower) == len(upper) or len(lower) == len(upper) + 1.</p>
-          <p>findMedian(): if sizes are equal, return (-lower[0] + upper[0]) / 2. If lower is bigger, return -lower[0].</p>
-          <p>Why this works: lower&#x27;s max &lt;= upper&#x27;s min, always. The median sits at the boundary between the halves. Rebalancing ensures neither heap gets more than one element ahead, so the tops are always the middle elements.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">Max-heap (lower half)</span><b>→</b><span class="node accent">Median = top(lower) or avg(tops)</span><b>→</b><span class="node">Min-heap (upper half)</span></div><figcaption>Two-heap invariant: lower.max ≤ upper.min, sizes differ by at most 1</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">|lower| > |upper|+1</span><b>→ pop lower, push upper</b><span class="node accent">balanced</span><b>← pop upper, push lower ←</b><span class="node">|upper| > |lower|</span></div><figcaption>Rebalance rules keep the two heaps within 1 element of each other</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>Stream: [5, 2, 8, 1, 9, 3]. Walk through each insertion.</p>
-          <p>Add 5: lower empty, push to lower. lower=[-5], upper=[]. Median = 5.</p>
-          <p>Add 2: 2 &lt;= 5 (top of lower), push to lower. lower=[-5,-2], upper=[]. |lower|=2 &gt; |upper|+1=1, rebalance: pop 5 from lower, push to upper. lower=[-2], upper=[5]. Median = (2+5)/2 = 3.5.</p>
-          <p>Add 8: 8 &gt; 2 (top of lower), push to upper. lower=[-2], upper=[5,8]. |upper|=2 &gt; |lower|=1, rebalance: pop 5, push to lower. lower=[-5,-2], upper=[8]. Median = 5.</p>
-          <p>Add 1: 1 &lt;= 5 (top of lower), push to lower. lower=[-5,-2,-1], upper=[8]. |lower|=3 &gt; |upper|+1=2, rebalance: pop 5, push to upper. lower=[-2,-1], upper=[5,8]. Median = (2+5)/2 = 3.5.</p>
-          <p>Add 9: 9 &gt; 2, push to upper. lower=[-2,-1], upper=[5,8,9]. |upper|=3 &gt; |lower|=2, rebalance: pop 5, push to lower. lower=[-5,-2,-1], upper=[8,9]. Median = 5.</p>
-          <p>Add 3: 3 &lt;= 5, push to lower. lower=[-5,-3,-2,-1], upper=[8,9]. |lower|=4 &gt; |upper|+1=3, rebalance: pop 5, push to upper. lower=[-3,-2,-1], upper=[5,8,9]. Median = (3+5)/2 = 4.0.</p>
-          <p>Sorted stream: [1,2,3,5,8,9]. Actual median = (3+5)/2 = 4.0. Correct.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Two-heap MedianFinder with rebalance</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">import heapq
+        </div>
+        <figcaption>Neither is balanced. Two heaps make both sides logarithmic-or-better, which is why they win when the ratio is unknown.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="md-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="md-bf-py" data-lang="python"><pre><code class="language-python">from typing import List
+
+
+class MedianFinderBrute:
+    """Store everything, sort on every query.
+
+    All the cost sits on the read path -- which is the right choice only if
+    reads are rare compared to writes.
+    """
+
+    def __init__(self) -&gt; None:
+        self.data: List[int] = []
+
+    def add_num(self, num: int) -&gt; None:
+        self.data.append(num)              # O(1) amortised
+
+    def find_median(self) -&gt; float:
+        self.data.sort()                   # O(n log n) on EVERY query
+        n = len(self.data)
+        mid = n // 2
+        if n % 2 == 1:
+            return float(self.data[mid])
+        # Averaging in float: (1 + 2) / 2 must be 1.5, not 1.
+        return (self.data[mid - 1] + self.data[mid]) / 2.0</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Store everything, sort on every query.
+/// All the cost sits on the read path.
+pub struct MedianFinderBrute {
+    data: Vec&lt;i32&gt;,
+}
+
+impl MedianFinderBrute {
+    pub fn new() -&gt; Self {
+        MedianFinderBrute { data: Vec::new() }
+    }
+
+    pub fn add_num(&amp;mut self, num: i32) {
+        self.data.push(num);               // O(1) amortised
+    }
+
+    /// Takes &amp;mut self because sorting mutates -- worth noting, it means
+    /// the "read" path is not actually read-only.
+    pub fn find_median(&amp;mut self) -&gt; f64 {
+        self.data.sort_unstable();         // O(n log n) on EVERY query
+        let n = self.data.len();
+        let mid = n / 2;
+        if n % 2 == 1 {
+            self.data[mid] as f64
+        } else {
+            // Cast BEFORE adding: the i32 sum could overflow.
+            (self.data[mid - 1] as f64 + self.data[mid] as f64) / 2.0
+        }
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+class MedianFinderBrute {
+
+    private final List&lt;Integer&gt; data = new ArrayList&lt;&gt;();
+
+    public void addNum(int num) {
+        data.add(num);                     // O(1) amortised
+    }
+
+    public double findMedian() {
+        Collections.sort(data);            // O(n log n) on EVERY query
+        int n = data.size();
+        int mid = n / 2;
+        if (n % 2 == 1) {
+            return data.get(mid);
+        }
+        // Widen to long before adding, then divide as a double:
+        // (a + b) / 2 with ints would both overflow AND truncate.
+        return ((long) data.get(mid - 1) + data.get(mid)) / 2.0;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Store everything, sort on every query.
+// All the cost sits on the read path.
+class MedianFinderBrute {
+public:
+    void addNum(int num) {
+        data_.push_back(num);              // O(1) amortised
+    }
+
+    double findMedian() {
+        std::sort(data_.begin(), data_.end());   // O(n log n) EVERY query
+        const std::size_t n = data_.size();
+        const std::size_t mid = n / 2;
+        if (n % 2 == 1) {
+            return static_cast&lt;double&gt;(data_[mid]);
+        }
+        // Widen before adding: the int sum could overflow, and integer
+        // division would truncate 1.5 to 1.
+        return (static_cast&lt;std::int64_t&gt;(data_[mid - 1]) + data_[mid]) / 2.0;
+    }
+
+private:
+    std::vector&lt;int&gt; data_;
+};</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">add O(1) &middot; find O(n log n)</span>
+          <p>Worst case is alternating add/find: n queries each sorting n elements gives O(n&sup2; log n) overall. At n = 5 &times; 10&#8308; that is ~4 &times; 10&#8310; &times; 10&#8308; comparisons &mdash; far too slow.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n)</span>
+          <p>Every element retained. Unavoidable for an exact median over unbounded values &mdash; but <em>not</em> unavoidable for a bounded domain, which is section 4.3.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>Sorting produces the full ordering, but the query reads only the middle one or two positions. Everything else is discarded work &mdash; and it is redone from scratch on every query even though only one element changed. We need a structure that maintains just enough order to keep the middle reachable, and updates incrementally.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> partition the data into a lower half and an upper half. Store the lower half in a <em>max</em>-heap (<code>lo</code>) and the upper half in a <em>min</em>-heap (<code>hi</code>). Then the median depends only on the two heap tops &mdash; which is exactly what heaps make free to read.</p>
+      <div class="callout">
+        <span class="tag">The two invariants — the whole solution</span>
+        <p><strong>Order:</strong> every element in <code>lo</code> &le; every element in <code>hi</code>.<br>
+        <strong>Balance:</strong> <code>len(lo) == len(hi)</code> (even count) or <code>len(lo) == len(hi) + 1</code> (odd count &mdash; the extra element always lives in <code>lo</code>).<br>
+        Given both, the median is <code>lo.top()</code> when the sizes differ, and the mean of the two tops when they match.</p>
+      </div>
+      <ol class="step-list">
+        <li><code>addNum</code>, step 1: push <code>num</code> into <code>lo</code> unconditionally. This may break the order invariant.</li>
+        <li>Step 2: pop <code>lo</code>'s maximum and push it into <code>hi</code>. Now the order invariant is restored &mdash; whatever the largest of the lower half is, it has been promoted &mdash; but <code>hi</code> may now be too large.</li>
+        <li>Step 3: if <code>len(hi) &gt; len(lo)</code>, pop <code>hi</code>'s minimum and push it back into <code>lo</code>. Balance restored.</li>
+        <li><code>findMedian</code>: sizes differ &rarr; return <code>lo.top()</code>. Sizes equal &rarr; return <code>(lo.top() + hi.top()) / 2.0</code>.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">Why push-then-rebalance is correct — and why it is worth preferring</span>
+        <p>Routing on a comparison (&ldquo;if <code>num &le; lo.top()</code> push to <code>lo</code> else push to <code>hi</code>, then fix sizes&rdquo;) works but has four branches and an empty-heap special case. Push-then-rebalance is three unconditional lines and no special cases: the mandatory hop through <code>hi</code> guarantees the promoted element is the correct boundary regardless of where <code>num</code> belonged. It costs one extra pair of heap operations and removes the entire class of branch bugs.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">lo: max-heap<br><small>smaller half &mdash; top is its LARGEST</small></span><b>|</b>
+          <span class="node accent">median lives here</span><b>|</b>
+          <span class="node">hi: min-heap<br><small>larger half &mdash; top is its SMALLEST</small></span>
+        </div>
+        <figcaption>Both heap tops sit against the partition line, so both are O(1) to read.</figcaption>
+      </figure>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">add 1</span><p>push 1 &rarr; lo=[1]. Move max to hi &rarr; lo=[], hi=[1]. hi larger &rarr; move back: lo=[1], hi=[]. median = <strong>1.0</strong></p></div>
+          <div class="seq-row"><span class="actor">add 2</span><p>push 2 &rarr; lo=[2,1]. Move max 2 to hi &rarr; lo=[1], hi=[2]. Sizes equal, no move back. median = (1+2)/2 = <strong>1.5</strong></p></div>
+          <div class="seq-row"><span class="actor">add 3</span><p>push 3 &rarr; lo=[3,1]. Move max 3 to hi &rarr; lo=[1], hi=[2,3]. hi larger &rarr; move 2 back: lo=[2,1], hi=[3]. median = <strong>2.0</strong></p></div>
+        </div>
+        <figcaption>Three insertions exercise both parities and both rebalance directions. Note the extra element always ends up in <code>lo</code>.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="md-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="md-op-py" data-lang="python"><pre><code class="language-python">import heapq
+from typing import List
 
 
 class MedianFinder:
-    &quot;&quot;&quot;Two-heap approach:
-    - lower: max-heap (via negation) holds the smaller half
-    - upper: min-heap holds the larger half
-    Invariant: len(lower) == len(upper) or len(lower) == len(upper) + 1.&quot;&quot;&quot;
+    """Two heaps straddling the median.
 
-    def __init__(self):
-        self.lower = []  # max-heap (store negated values)
-        self.upper = []  # min-heap
+    Invariants after every add_num:
+      1. ORDER:   max(lo) &lt;= min(hi)
+      2. BALANCE: len(lo) == len(hi)  or  len(lo) == len(hi) + 1
+    The extra element (odd count) always lives in `lo`.
+    """
+
+    def __init__(self) -&gt; None:
+        # heapq is a MIN-heap only, so `lo` stores negated values to
+        # behave as a max-heap. lo[0] == -max(lower half).
+        self.lo: List[int] = []            # max-heap (negated)
+        self.hi: List[int] = []            # min-heap
 
     def add_num(self, num: int) -&gt; None:
-        if not self.lower or num &lt;= -self.lower[0]:
-            heapq.heappush(self.lower, -num)
-        else:
-            heapq.heappush(self.upper, num)
-        # Rebalance so lower always has equal or one more element
-        if len(self.lower) &gt; len(self.upper) + 1:
-            heapq.heappush(self.upper, -heapq.heappop(self.lower))
-        elif len(self.upper) &gt; len(self.lower):
-            heapq.heappush(self.lower, -heapq.heappop(self.upper))
+        # Push, then rebalance. Three unconditional steps, no branches on
+        # where `num` belongs and no empty-heap special case.
+        heapq.heappush(self.lo, -num)
+        heapq.heappush(self.hi, -heapq.heappop(self.lo))   # lo's max -&gt; hi
+        if len(self.hi) &gt; len(self.lo):
+            heapq.heappush(self.lo, -heapq.heappop(self.hi))
 
     def find_median(self) -&gt; float:
-        if len(self.lower) &gt; len(self.upper):
-            return float(-self.lower[0])
-        return (-self.lower[0] + self.upper[0]) / 2.0</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::BinaryHeap;
-use std::cmp::Reverse;
+        # Precondition: at least one element has been added.
+        if len(self.lo) &gt; len(self.hi):    # odd count
+            return float(-self.lo[0])
+        return (-self.lo[0] + self.hi[0]) / 2.0            # even count</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 
-/// Two-heap MedianFinder:
-/// - lower: max-heap (BinaryHeap default) for the smaller half
-/// - upper: min-heap (via Reverse) for the larger half
-struct MedianFinder {
-    lower: BinaryHeap&lt;i32&gt;,          // max-heap
-    upper: BinaryHeap&lt;Reverse&lt;i32&gt;&gt;, // min-heap via Reverse wrapper
+/// Two heaps straddling the median.
+///
+/// Invariants after every `add_num`:
+///   1. ORDER:   max(lo) &lt;= min(hi)
+///   2. BALANCE: lo.len() == hi.len()  or  lo.len() == hi.len() + 1
+/// The extra element (odd count) always lives in `lo`.
+pub struct MedianFinder {
+    lo: BinaryHeap&lt;i32&gt;,           // BinaryHeap is a max-heap: lower half
+    hi: BinaryHeap&lt;Reverse&lt;i32&gt;&gt;,  // Reverse makes it a min-heap: upper half
 }
 
 impl MedianFinder {
-    fn new() -&gt; Self {
-        Self { lower: BinaryHeap::new(), upper: BinaryHeap::new() }
-    }
-
-    fn add_num(&amp;mut self, num: i32) {
-        if self.lower.is_empty() || num &lt;= *self.lower.peek().unwrap() {
-            self.lower.push(num);
-        } else {
-            self.upper.push(Reverse(num));
-        }
-        // Rebalance: lower always has equal or one more element
-        if self.lower.len() &gt; self.upper.len() + 1 {
-            self.upper.push(Reverse(self.lower.pop().unwrap()));
-        } else if self.upper.len() &gt; self.lower.len() {
-            self.lower.push(self.upper.pop().unwrap().0);
+    pub fn new() -&gt; Self {
+        MedianFinder {
+            lo: BinaryHeap::new(),
+            hi: BinaryHeap::new(),
         }
     }
 
-    fn find_median(&amp;self) -&gt; f64 {
-        if self.lower.len() &gt; self.upper.len() {
-            *self.lower.peek().unwrap() as f64
-        } else {
-            (*self.lower.peek().unwrap() + self.upper.peek().unwrap().0) as f64 / 2.0
+    pub fn add_num(&amp;mut self, num: i32) {
+        // Push, then rebalance. No branch on where `num` belongs.
+        self.lo.push(num);
+        let promoted = self.lo.pop().expect("just pushed, cannot be empty");
+        self.hi.push(Reverse(promoted));               // lo's max -&gt; hi
+
+        if self.hi.len() &gt; self.lo.len() {
+            let Reverse(demoted) = self.hi.pop().unwrap();
+            self.lo.push(demoted);
         }
     }
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
-#include &lt;queue&gt;
+
+    /// Precondition: at least one element has been added.
+    pub fn find_median(&amp;self) -&gt; f64 {
+        let lo_top = *self.lo.peek().expect("no elements yet") as f64;
+        if self.lo.len() &gt; self.hi.len() {
+            lo_top                                     // odd count
+        } else {
+            let Reverse(hi_top) = *self.hi.peek().unwrap();
+            (lo_top + hi_top as f64) / 2.0             // even count
+        }
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.Collections;
+import java.util.PriorityQueue;
+
+/**
+ * Two heaps straddling the median.
+ *
+ * Invariants after every addNum:
+ *   1. ORDER:   lo.peek() &lt;= hi.peek()
+ *   2. BALANCE: lo.size() == hi.size()  or  lo.size() == hi.size() + 1
+ * The extra element (odd count) always lives in `lo`.
+ */
+class MedianFinder {
+
+    private final PriorityQueue&lt;Integer&gt; lo =            // max-heap: lower half
+            new PriorityQueue&lt;&gt;(Collections.reverseOrder());
+    private final PriorityQueue&lt;Integer&gt; hi =            // min-heap: upper half
+            new PriorityQueue&lt;&gt;();
+
+    public void addNum(int num) {
+        // Push, then rebalance. No branch on where `num` belongs.
+        lo.add(num);
+        hi.add(lo.poll());                              // lo's max -&gt; hi
+        if (hi.size() &gt; lo.size()) {
+            lo.add(hi.poll());
+        }
+    }
+
+    /** Precondition: at least one element has been added. */
+    public double findMedian() {
+        if (lo.size() &gt; hi.size()) {
+            return lo.peek();                           // odd count
+        }
+        // Widen to long before adding: two values near 10^5 are fine, but
+        // the habit matters -- and /2.0 avoids integer truncation.
+        return ((long) lo.peek() + hi.peek()) / 2.0;    // even count
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;cstdint&gt;
 #include &lt;functional&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
 
-// Two-heap median finder:
-// lower (max-heap) holds smaller half, upper (min-heap) holds larger half
-@interface MedianFinder : NSObject
-- (void)addNum:(int)num;
-- (double)findMedian;
-@end
-
-@implementation MedianFinder {
-    std::priority_queue&lt;int&gt; _lower;                              // max-heap
-    std::priority_queue&lt;int, std::vector&lt;int&gt;, std::greater&lt;&gt;&gt; _upper; // min-heap
-}
-
-- (void)addNum:(int)num {
-    if (_lower.empty() || num &lt;= _lower.top()) {
-        _lower.push(num);
-    } else {
-        _upper.push(num);
+// Two heaps straddling the median.
+//
+// Invariants after every addNum:
+//   1. ORDER:   lo_.top() &lt;= hi_.top()
+//   2. BALANCE: lo_.size() == hi_.size()  or  lo_.size() == hi_.size() + 1
+// The extra element (odd count) always lives in lo_.
+class MedianFinder {
+public:
+    void addNum(int num) {
+        // Push, then rebalance. No branch on where `num` belongs.
+        lo_.push(num);
+        hi_.push(lo_.top());                   // lo_'s max -&gt; hi_
+        lo_.pop();
+        if (hi_.size() &gt; lo_.size()) {
+            lo_.push(hi_.top());
+            hi_.pop();
+        }
     }
-    // Rebalance: lower always has equal or one more element
-    if (_lower.size() &gt; _upper.size() + 1) {
-        _upper.push(_lower.top()); _lower.pop();
-    } else if (_upper.size() &gt; _lower.size()) {
-        _lower.push(_upper.top()); _upper.pop();
+
+    // Precondition: at least one element has been added.
+    double findMedian() const {
+        if (lo_.size() &gt; hi_.size()) {
+            return static_cast&lt;double&gt;(lo_.top());          // odd count
+        }
+        // Widen before adding, and divide by 2.0 to avoid truncation.
+        return (static_cast&lt;std::int64_t&gt;(lo_.top()) + hi_.top()) / 2.0;
     }
+
+private:
+    // std::priority_queue is a max-heap by default.
+    std::priority_queue&lt;int&gt; lo_;                                  // lower half
+    std::priority_queue&lt;int, std::vector&lt;int&gt;, std::greater&lt;int&gt;&gt; hi_;  // upper
+};</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">add O(log n) &middot; find O(1)</span>
+          <p>Each <code>addNum</code> performs at most 3 pushes and 2 pops, all O(log n). <code>findMedian</code> reads one or two heap tops &mdash; no traversal, no sorting. Over 5 &times; 10&#8308; operations that is ~8 &times; 10&#8309; comparisons total.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n)</span>
+          <p>Every element is stored exactly once, split across the two heaps. No duplication, no index structures.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p>First insertion: <code>lo</code> gets it, <code>hi</code> is empty, the size check keeps it in <code>lo</code>. Duplicates: nothing is keyed on value, so they simply occupy two slots. Negatives and a zero median: fine, since only comparisons are used. All-equal input: both heaps fill with the same value and the mean is that value.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: Fenwick tree over a bounded domain</h3>
+      <p>The constraint <code>|num| &le; 10&#8309;</code> means there are only <code>R = 200 001</code> distinct possible values. Instead of storing elements, store <em>counts per value</em> in a Fenwick tree (binary indexed tree). Insertion is a point update; the median is a search for the <code>k</code>-th smallest, which the Fenwick structure answers by binary lifting in a single descent.</p>
+      <p>Three things this buys that two heaps cannot: <strong>deletion</strong> in O(log R), <strong>any percentile</strong> (p50, p95, p99) at the same cost, and memory that depends on the value <em>range</em> rather than the number of elements &mdash; so a billion insertions still cost 800 KB.</p>
+      <ol class="step-list">
+        <li><code>add_num(v)</code>: increment position <code>v + OFFSET + 1</code> and every Fenwick ancestor. O(log R).</li>
+        <li><code>remove_num(v)</code>: the same walk with <code>-1</code>. Heaps have no cheap equivalent.</li>
+        <li><code>kth(k)</code>: descend from the highest power of two, taking a step whenever the subtree count is still below <code>k</code>. Lands on the smallest value whose prefix count reaches <code>k</code>.</li>
+        <li><code>find_median()</code>: odd total &rarr; <code>kth(total/2 + 1)</code>. Even total &rarr; mean of <code>kth(total/2)</code> and <code>kth(total/2 + 1)</code>.</li>
+      </ol>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="md-fen-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-fen-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-fen-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="md-fen-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="md-fen-py" data-lang="python"><pre><code class="language-python">class MedianFinderCounting:
+    """Fenwick tree of counts over the value domain [-OFFSET, OFFSET].
+
+    Supports insertion, DELETION, and any percentile in O(log R), with
+    memory O(R) that is independent of how many elements arrive.
+    """
+
+    OFFSET = 100_000
+    SIZE = 200_001                         # distinct legal values
+    TOP_BIT = 1 &lt;&lt; 17                      # largest power of two &lt;= SIZE
+
+    def __init__(self) -&gt; None:
+        self.tree = [0] * (self.SIZE + 1)  # 1-indexed Fenwick counts
+        self.total = 0
+
+    def _update(self, num: int, delta: int) -&gt; None:
+        i = num + self.OFFSET + 1          # map value -&gt; 1-based position
+        while i &lt;= self.SIZE:
+            self.tree[i] += delta
+            i += i &amp; -i                    # move to the next covering node
+        self.total += delta
+
+    def add_num(self, num: int) -&gt; None:
+        self._update(num, 1)
+
+    def remove_num(self, num: int) -&gt; None:
+        self._update(num, -1)              # heaps cannot do this cheaply
+
+    def _kth(self, k: int) -&gt; int:
+        """Smallest value whose prefix count reaches k (k is 1-indexed)."""
+        idx = 0
+        remaining = k
+        bit = self.TOP_BIT
+        while bit:
+            nxt = idx + bit
+            if nxt &lt;= self.SIZE and self.tree[nxt] &lt; remaining:
+                idx = nxt                  # skip this whole subtree
+                remaining -= self.tree[nxt]
+            bit &gt;&gt;= 1
+        # `idx` is the last position with prefix count &lt; k, so idx+1 is the
+        # answer position; converting back to a value cancels the +1.
+        return idx - self.OFFSET
+
+    def find_median(self) -&gt; float:
+        if self.total % 2 == 1:
+            return float(self._kth(self.total // 2 + 1))
+        lower = self._kth(self.total // 2)
+        upper = self._kth(self.total // 2 + 1)
+        return (lower + upper) / 2.0
+
+    def percentile(self, p: float) -&gt; int:
+        """Any percentile, same cost. p in [0, 100]."""
+        k = max(1, min(self.total, int(self.total * p / 100.0 + 0.5)))
+        return self._kth(k)</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-fen-rs" data-lang="rust" hidden><pre><code class="language-rust">const OFFSET: i32 = 100_000;
+const SIZE: usize = 200_001;      // distinct legal values
+const TOP_BIT: usize = 1 &lt;&lt; 17;   // largest power of two &lt;= SIZE
+
+/// Fenwick tree of counts over the value domain [-OFFSET, OFFSET].
+///
+/// Insertion, DELETION and any percentile in O(log R), with memory O(R)
+/// independent of how many elements arrive.
+pub struct MedianFinderCounting {
+    tree: Vec&lt;i64&gt;,               // 1-indexed Fenwick counts
+    total: i64,
 }
 
-- (double)findMedian {
-    if (_lower.size() &gt; _upper.size())
-        return (double)_lower.top();
-    return (_lower.top() + _upper.top()) / 2.0;
-}
-@end</code></pre></div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">Add 5</span><p>lower=[-5], upper=[] → median=5</p></div><div class="seq-row"><span class="actor">Add 2</span><p>push lower, rebalance → lower=[-2], upper=[5] → median=3.5</p></div><div class="seq-row"><span class="actor">Add 8</span><p>push upper, rebalance → lower=[-5,-2], upper=[8] → median=5</p></div><div class="seq-row"><span class="actor">Add 1</span><p>push lower, rebalance → lower=[-2,-1], upper=[5,8] → median=3.5</p></div><div class="seq-row"><span class="actor">Add 9</span><p>push upper, rebalance → lower=[-5,-2,-1], upper=[8,9] → median=5</p></div><div class="seq-row"><span class="actor">Add 3</span><p>push lower, rebalance → lower=[-3,-2,-1], upper=[5,8,9] → median=4.0</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Two heaps vs sorted list</strong>
-              <p>O(log n) insert vs O(n) insert; heaps win for large streams.</p>
-            </div>
-            <div>
-              <strong>Max-heap negation</strong>
-              <p>Python lacks a native max-heap; negating values is the standard hack.</p>
-            </div>
-            <div>
-              <strong>Exact vs approximate</strong>
-              <p>For billions of values, t-digest or count-min sketch gives approximate percentiles in O(1) space.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Forgetting to negate values for the max-heap — lower half returns wrong top.</li>
-            <li>Rebalance in wrong direction — upper grows larger than lower.</li>
-            <li>Integer division instead of float for even-count median.</li>
-            <li>Not handling single-element stream (findMedian before any add).</li>
-            <li>Comparing heap sizes with wrong inequality — off-by-one on the rebalance trigger.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
-          <ul class="ask-list">
-            <li>Sliding window median — add + remove with lazy deletion from heaps.</li>
-            <li>Distributed median — each node has a local sketch; merge sketches for global percentile.</li>
-            <li>Weighted median — elements have weights; adjust heap sizes by weight sum.</li>
-            <li>Find k-th largest in a stream — single min-heap of size k.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>Clearly state the two-heap invariant and why it gives O(1) median access. Write clean code with correct negation and rebalancing. Walk through 5–6 insertions showing both heaps after each step. Mention the approximate percentile approach for truly massive streams — that shows production awareness.</p>
-        </section>
+impl MedianFinderCounting {
+    pub fn new() -&gt; Self {
+        MedianFinderCounting {
+            tree: vec![0; SIZE + 1],
+            total: 0,
+        }
+    }
 
-        <nav class="problem-nav" aria-label="Problem navigation">
-          <a class="problem-nav-link prev" href="../serialize_tree/">← Serialize and deserialize a binary tree</a>
-          <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <a class="problem-nav-link next" href="../word_ladder/">Word ladder →</a>
-        </nav>
+    fn update(&amp;mut self, num: i32, delta: i64) {
+        let mut i = (num + OFFSET) as usize + 1;    // value -&gt; 1-based position
+        while i &lt;= SIZE {
+            self.tree[i] += delta;
+            i += i &amp; i.wrapping_neg();              // next covering node
+        }
+        self.total += delta;
+    }
+
+    pub fn add_num(&amp;mut self, num: i32) {
+        self.update(num, 1);
+    }
+
+    pub fn remove_num(&amp;mut self, num: i32) {
+        self.update(num, -1);                       // heaps cannot do this
+    }
+
+    /// Smallest value whose prefix count reaches `k` (k is 1-indexed).
+    fn kth(&amp;self, k: i64) -&gt; i32 {
+        let mut idx = 0usize;
+        let mut remaining = k;
+        let mut bit = TOP_BIT;
+        while bit &gt; 0 {
+            let next = idx + bit;
+            if next &lt;= SIZE &amp;&amp; self.tree[next] &lt; remaining {
+                idx = next;                         // skip this whole subtree
+                remaining -= self.tree[next];
+            }
+            bit &gt;&gt;= 1;
+        }
+        idx as i32 - OFFSET
+    }
+
+    pub fn find_median(&amp;self) -&gt; f64 {
+        if self.total % 2 == 1 {
+            self.kth(self.total / 2 + 1) as f64
+        } else {
+            let lower = self.kth(self.total / 2) as f64;
+            let upper = self.kth(self.total / 2 + 1) as f64;
+            (lower + upper) / 2.0
+        }
+    }
+
+    /// Any percentile, same cost. `p` in [0, 100].
+    pub fn percentile(&amp;self, p: f64) -&gt; i32 {
+        let k = ((self.total as f64) * p / 100.0).round() as i64;
+        self.kth(k.clamp(1, self.total.max(1)))
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-fen-java" data-lang="java" hidden><pre><code class="language-java">/**
+ * Fenwick tree of counts over the value domain [-OFFSET, OFFSET].
+ *
+ * Insertion, DELETION and any percentile in O(log R), with memory O(R)
+ * independent of how many elements arrive.
+ */
+class MedianFinderCounting {
+
+    private static final int OFFSET = 100_000;
+    private static final int SIZE = 200_001;     // distinct legal values
+    private static final int TOP_BIT = 1 &lt;&lt; 17;  // largest 2^k &lt;= SIZE
+
+    private final long[] tree = new long[SIZE + 1];   // 1-indexed Fenwick
+    private long total = 0;
+
+    public void addNum(int num) {
+        update(num, 1);
+    }
+
+    public void removeNum(int num) {
+        update(num, -1);                        // heaps cannot do this cheaply
+    }
+
+    private void update(int num, long delta) {
+        // value -&gt; 1-based position; i += i &amp; -i walks the covering nodes.
+        for (int i = num + OFFSET + 1; i &lt;= SIZE; i += i &amp; -i) {
+            tree[i] += delta;
+        }
+        total += delta;
+    }
+
+    /** Smallest value whose prefix count reaches k (k is 1-indexed). */
+    private int kth(long k) {
+        int idx = 0;
+        long remaining = k;
+        for (int bit = TOP_BIT; bit &gt; 0; bit &gt;&gt;= 1) {
+            int next = idx + bit;
+            if (next &lt;= SIZE &amp;&amp; tree[next] &lt; remaining) {
+                idx = next;                     // skip this whole subtree
+                remaining -= tree[next];
+            }
+        }
+        return idx - OFFSET;
+    }
+
+    public double findMedian() {
+        if (total % 2 == 1) {
+            return kth(total / 2 + 1);
+        }
+        return (kth(total / 2) + (double) kth(total / 2 + 1)) / 2.0;
+    }
+
+    /** Any percentile, same cost. p in [0, 100]. */
+    public int percentile(double p) {
+        long k = Math.round(total * p / 100.0);
+        return kth(Math.max(1, Math.min(total, k)));
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="md-fen-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Fenwick tree of counts over the value domain [-kOffset, kOffset].
+//
+// Insertion, DELETION and any percentile in O(log R), with memory O(R)
+// independent of how many elements arrive.
+class MedianFinderCounting {
+public:
+    void addNum(int num) { update(num, 1); }
+
+    void removeNum(int num) { update(num, -1); }   // heaps cannot do this
+
+    double findMedian() const {
+        if (total_ % 2 == 1) {
+            return static_cast&lt;double&gt;(kth(total_ / 2 + 1));
+        }
+        const std::int64_t lower = kth(total_ / 2);
+        const std::int64_t upper = kth(total_ / 2 + 1);
+        return (static_cast&lt;double&gt;(lower) + upper) / 2.0;
+    }
+
+    // Any percentile, same cost. p in [0, 100].
+    int percentile(double p) const {
+        std::int64_t k = static_cast&lt;std::int64_t&gt;(
+            std::llround(static_cast&lt;double&gt;(total_) * p / 100.0));
+        k = std::clamp&lt;std::int64_t&gt;(k, 1, std::max&lt;std::int64_t&gt;(total_, 1));
+        return kth(k);
+    }
+
+private:
+    static constexpr int kOffset = 100000;
+    static constexpr int kSize = 200001;        // distinct legal values
+    static constexpr int kTopBit = 1 &lt;&lt; 17;     // largest 2^k &lt;= kSize
+
+    std::vector&lt;std::int64_t&gt; tree_ =
+        std::vector&lt;std::int64_t&gt;(kSize + 1, 0);   // 1-indexed Fenwick
+    std::int64_t total_ = 0;
+
+    void update(int num, std::int64_t delta) {
+        // value -&gt; 1-based position; i += i &amp; -i walks the covering nodes.
+        for (int i = num + kOffset + 1; i &lt;= kSize; i += i &amp; -i) {
+            tree_[i] += delta;
+        }
+        total_ += delta;
+    }
+
+    // Smallest value whose prefix count reaches k (k is 1-indexed).
+    int kth(std::int64_t k) const {
+        int idx = 0;
+        std::int64_t remaining = k;
+        for (int bit = kTopBit; bit &gt; 0; bit &gt;&gt;= 1) {
+            const int next = idx + bit;
+            if (next &lt;= kSize &amp;&amp; tree_[next] &lt; remaining) {
+                idx = next;                     // skip this whole subtree
+                remaining -= tree_[next];
+            }
+        }
+        return idx - kOffset;
+    }
+};</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">add O(log R) &middot; find O(log R)</span>
+          <p>R = 200 001 so log&#8322;R &asymp; 18 &mdash; a fixed cost that does <em>not</em> grow with the number of elements. Slightly worse than the heaps' O(1) read, better than their O(log n) write once n exceeds R.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(R)</span>
+          <p>~800 KB for 200 001 64-bit counters, regardless of whether you insert a thousand elements or a billion. Only viable because the domain is bounded &mdash; state that precondition explicitly.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Which one would I ship?</span>
+        <p>Two heaps for the interview and for unbounded or floating-point values: less code, O(1) reads, no domain assumption. The Fenwick tree the moment the requirements include <strong>deletions, other percentiles, or a very high element count over a small value range</strong> &mdash; which describes almost every real latency-monitoring system. Naming that boundary is the answer the interviewer wants.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>Sliding-window median (last k elements).</strong> Now you must evict the element leaving the window, which heaps cannot do by value. Options: two heaps with <em>lazy deletion</em> (a tombstone count per value, purged when it reaches a top), an ordered multiset with an iterator kept at the middle, or the Fenwick tree from 4.3, which handles it natively. Say which and why.</li>
+        <li><strong>Only p95 and p99 are needed, at millions of events per second.</strong> Exactness stops being worth its cost. HdrHistogram or t-digest gives bounded relative error in O(1) amortised per insert and a few KB of state &mdash; and t-digest is <em>mergeable</em>, so shards can be combined. This is what production monitoring actually runs.</li>
+        <li><strong>Median across many machines.</strong> Exact distributed median needs several rounds: broadcast a candidate pivot, have every shard report how many of its values fall below it, and binary-search the value space. That is O(log R) rounds. Mergeable sketches replace it with one round and an error bound.</li>
+        <li><strong>Data does not fit in memory at all.</strong> Two passes: build a coarse histogram to locate the bucket containing the median, then re-scan only that bucket. This is the median-of-medians idea applied to external data.</li>
+        <li><strong>The stream is weighted or time-decayed.</strong> A recent value should count more than an hour-old one. Exponentially decaying counts in the Fenwick tree, or a sliding set of time buckets that are dropped wholesale as they age out.</li>
+        <li><strong>Why not a balanced BST or skip list?</strong> An order-statistic tree (nodes annotated with subtree sizes) gives O(log n) insert, delete <em>and</em> arbitrary rank query &mdash; strictly more capable than two heaps. C++ hands you this via <code>__gnu_pbds::tree_order_statistics_node_update</code>; Java and Python have no ordered multiset in the standard library, which is the practical reason heaps win in interviews.</li>
+        <li><strong>Concurrency.</strong> The rebalance in <code>addNum</code> spans several heap mutations, so a reader can observe a broken invariant mid-update. Simplest fix: one lock around both heaps. Better under load: per-thread histograms merged periodically, which is exactly the mergeable-sketch answer again.</li>
+        <li><strong>Median of two already-sorted arrays.</strong> Different problem, worth naming: binary search on the partition point gives O(log(min(m, n))). Interviewers sometimes pivot to it to see whether you pattern-match on the word &ldquo;median&rdquo;.</li>
+        <li><strong>Testing this.</strong> Property-based: after every operation, assert both invariants directly (max of <code>lo</code> &le; min of <code>hi</code>, and the size relation) and compare the result against a naive sorted-list oracle on random operation sequences. Invariant assertions plus an oracle is far stronger than a handful of examples.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Ask about the read/write ratio, state both baselines and which operation each taxes, write both invariants down, implement push-then-rebalance correctly on the first attempt, avoid the integer-division trap in <code>findMedian</code>, trace 1&rarr;2&rarr;3, and volunteer the bounded-range Fenwick alternative with deletions and percentiles as the reason to prefer it in production.</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../serialize_tree/">&larr; Serialize and deserialize a binary tree</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <a class="problem-nav-link next" href="../word_ladder/">Word ladder &rarr;</a>
+    </nav>
   </div>
 </main>
 

@@ -24,290 +24,545 @@
   <header class="problem-hero">
     <div class="container">
       <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Longest substring without repeating characters</p>
-      <p class="eyebrow">DSA · Medium · ~60 min</p>
+      <p class="eyebrow">DSA · Medium · ~45 min</p>
       <h1>Longest substring without repeating characters</h1>
       <p class="problem-deck">The sliding window poster child — easy to sketch, easy to get the left pointer wrong on repeats.</p>
     </div>
   </header>
 
   <div class="container problem-detail">
-        <section class="problem-section">
-          <h2>60-minute agenda</h2>
-          <figure class="diagram dark" aria-label="60-minute interview agenda">
-            <div class="stack-flow">
-            <div class="stack-step"><strong>0–5 min</strong><div><strong>Clarify</strong><p>Alphabet, return type, edge cases.</p></div></div>
-            <div class="stack-step"><strong>5–10 min</strong><div><strong>Brute force + why it&#x27;s slow</strong><p>O(n³) or O(n²) with set — too slow for n=10^5.</p></div></div>
-            <div class="stack-step"><strong>10–25 min</strong><div><strong>Sliding window approach</strong><p>Explain invariant, draw &#x27;abba&#x27; and &#x27;abcabcbb&#x27; step by step.</p></div></div>
-            <div class="stack-step"><strong>25–40 min</strong><div><strong>Code + trace</strong><p>Write clean code, trace through &#x27;pwwkew&#x27; character by character.</p></div></div>
-            <div class="stack-step"><strong>40–50 min</strong><div><strong>Edge cases + complexity</strong><p>Empty, single char, all unique, all same, Unicode.</p></div></div>
-            <div class="stack-step"><strong>50–60 min</strong><div><strong>Follow-ups</strong><p>K-distinct, longest repeating, sliding window template.</p></div></div>
-            </div>
-            <figcaption>Rough pacing for a 60-minute round. Steal time from polish if a deep-dive is going well.</figcaption>
-          </figure>
-        </section>
-        <section class="problem-section">
-          <h2>How I&#x27;d open the discussion</h2>
-          <p>I&#x27;d say this is the canonical sliding window problem. The brute-force approach checks all O(n²) substrings and validates each with a set — that&#x27;s O(n³). We can drop it to O(n) by maintaining a window [left, right] and a map of character → last-seen index.</p>
-          <p>When we see a repeat of char c, we don&#x27;t just move left by one. We jump left to max(left, last_seen[c] + 1). The max is critical — without it, left can go backwards when a character repeats from before the current window. I&#x27;ve seen senior engineers miss this in interviews. I&#x27;d draw the example &#x27;abba&#x27; to show why.</p>
-        </section>
-        <section class="problem-section">
-          <h2>Open questions worth asking</h2>
-          <ul class="ask-list">
-            <li>ASCII only, or full Unicode / emoji?</li>
-            <li>Empty string — return 0?</li>
-            <li>Single character repeated n times — return 1?</li>
-            <li>Do we return the length, or the substring itself?</li>
-            <li>Is the input always a string, or can it be a generic sequence?</li>
-            <li>Case-sensitive? &#x27;A&#x27; != &#x27;a&#x27;?</li>
-            <li>Any constraint on string length (for overflow concerns)?</li>
-            <li>Online / streaming variant where we report max so far?</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Scope I&#x27;d lock first</h2>
-          <ul class="trade-list">
-            <li>In: optimal O(n) sliding window returning length.</li>
-            <li>Out: returning all such substrings or k-distinct variant unless follow-up.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Functional requirements</h2>
-          <ul class="ask-list">
-            <li>Given string s, return length of longest substring with all unique characters.</li>
-            <li>Empty string returns 0.</li>
-            <li>String with all unique chars returns len(s).</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Non-functional / rough numbers</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Time</strong>
-              <p>O(n) — single pass with the sliding window.</p>
-            </div>
-            <div>
-              <strong>Space</strong>
-              <p>O(min(n, |Σ|)) — map bounded by alphabet size; 128 for ASCII, 26 for lowercase.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Capacity estimate (do this on the board)</h2>
-          <div class="req-grid">
-            <div>
-              <strong>n limit</strong>
-              <p>up to 5×10^4 in the standard LeetCode constraint</p>
-            </div>
-            <div>
-              <strong>Time target</strong>
-              <p>O(n) single pass — ~5×10^4 iterations, trivially fast</p>
-            </div>
-            <div>
-              <strong>Space budget</strong>
-              <p>O(|Σ|) where |Σ|=128 for ASCII; dict overhead ~4 KB</p>
-            </div>
-            <div>
-              <strong>Unicode</strong>
-              <p>If full Unicode, dict still O(n) worst case but n ≤ 5×10^4 is fine</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>API / interface sketch</h2>
-          <div class="tech-code"><span class="code-lang">http</span><pre><code>def lengthOfLongestSubstring(s: str) -&gt; int:</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Data model</h2>
-          <div class="tech-code"><span class="code-lang">sql</span><pre><code>last_seen: Dict[str, int]  # char → most recent index
-left: int                  # left boundary of current window
-max_len: int               # best answer found so far</code></pre></div>
-        </section>
-        <section class="problem-section">
-          <h2>Approach / design notes</h2>
-          <p>Maintain a window [left, right]. Keep a dict last_seen mapping character → its most recent index. For each right, if s[right] was seen at index j and j &gt;= left, move left to j + 1. Update last_seen[s[right]] = right. Track max_len = max(max_len, right - left + 1).</p>
-          <p>The key insight is the left pointer only moves forward. Each character is visited at most twice (once by right, possibly once by left jumping past it), giving amortized O(n).</p>
-          <p>Alternative: use a set and explicitly remove characters from the left until the duplicate is gone. This is still O(n) amortized but does more work per step — the last_seen map approach is cleaner because left jumps directly.</p>
-<figure class="diagram dark"><div class="flow-row"><span class="node">left</span><b>→</b><span class="node accent">window [left..right] — all unique</span><b>→</b><span class="node">right</span></div><figcaption>Sliding window: left jumps to max(left, last_seen[ch]+1) on repeat</figcaption></figure>
-<figure class="diagram dark"><div class="flow-row"><span class="node">a b b a</span><b>→</b><span class="node accent">right=3 (a), last_seen[a]=0, but left=2 → left stays 2</span></div><figcaption>Why max(left, last_seen+1) matters: without it, left goes backwards on "abba"</figcaption></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Deep dive (spend 15–25 minutes here)</h2>
-          <p>Walk through s = &#x27;abba&#x27;.</p>
-          <p>right=0 (a): last_seen={}, a not seen. last_seen={a:0}. max_len=1, window=&#x27;a&#x27;.
-right=1 (b): b not seen. last_seen={a:0, b:1}. max_len=2, window=&#x27;ab&#x27;.
-right=2 (b): b last seen at 1, 1 &gt;= left(0), so left = 1+1 = 2. last_seen={a:0, b:2}. max_len stays 2, window=&#x27;b&#x27;.
-right=3 (a): a last seen at 0, but 0 &lt; left(2). So left stays at 2. This is where max(left, last_seen[c]+1) saves us. last_seen={a:3, b:2}. max_len stays 2, window=&#x27;ba&#x27;.</p>
-          <p>Without the max check, left would jump back to 0+1=1, giving window &#x27;bba&#x27; which contains a repeat. Bug.</p>
-          <p>Now trace s = &#x27;pwwkew&#x27;:
-right=0 (p): window=&#x27;p&#x27;, len=1.
-right=1 (w): window=&#x27;pw&#x27;, len=2.
-right=2 (w): w at 1 &gt;= left(0), left=2. window=&#x27;w&#x27;, len=1.
-right=3 (k): window=&#x27;wk&#x27;, len=2.
-right=4 (e): window=&#x27;wke&#x27;, len=3. max_len=3.
-right=5 (w): w at 2, but 2 &gt;= left(2), so left=3. window=&#x27;kew&#x27;, len=3.
-Answer: 3 (&#x27;wke&#x27; or &#x27;kew&#x27;).</p>
-        </section>
-        <section class="problem-section">
-          <h2>Sliding window with last-seen map (dict + ASCII array variants)</h2>
-          <div class="code-tabs" data-code-tabs>
-            <div class="code-tablist" role="tablist" aria-label="Language">
-              <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="tab-python-0">Python</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-rust-1">Rust</button> <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="tab-objcpppp-2">Objective-C++</button>
-              <button type="button" class="code-copy" data-code-copy>Copy</button>
-            </div>
-            <div class="code-panel is-active" role="tabpanel" data-panel="tab-python-0" data-lang="python"><pre><code class="language-python">def length_of_longest_substring(s: str) -&gt; int:
-    &quot;&quot;&quot;Sliding window with a dict tracking each character&#x27;s last-seen index.
-    When a repeat is found inside the window, jump left past it.&quot;&quot;&quot;
-    last_seen = {}
-    left = 0
-    max_len = 0
-    for right, ch in enumerate(s):
-        if ch in last_seen and last_seen[ch] &gt;= left:
-            # Shrink window: move left pointer past the previous occurrence
-            left = last_seen[ch] + 1
-        last_seen[ch] = right
-        max_len = max(max_len, right - left + 1)
-    return max_len
 
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: return the substring, O(1) space</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
 
-def length_of_longest_substring_array(s: str) -&gt; int:
-    &quot;&quot;&quot;Optimised for ASCII input: fixed-size int array instead of hash map.
-    Avoids hashing overhead — useful in tight interview follow-ups.&quot;&quot;&quot;
-    last_seen = [-1] * 128
-    left = 0
-    max_len = 0
-    for right, ch in enumerate(s):
-        idx = ord(ch)
-        if last_seen[idx] &gt;= left:
-            left = last_seen[idx] + 1
-        last_seen[idx] = right
-        max_len = max(max_len, right - left + 1)
-    return max_len</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-rust-1" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+    <figure class="diagram dark" aria-label="How the 45 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–5 min</strong><div><strong>Sections 1–2</strong><p>Substring vs subsequence, charset, return type. Get these wrong and the rest is wasted.</p></div></div>
+        <div class="stack-step"><strong>5–12 min</strong><div><strong>Section 3</strong><p>Brute force over all start positions; name the repeated work it does.</p></div></div>
+        <div class="stack-step"><strong>12–32 min</strong><div><strong>Section 4</strong><p>Sliding window with last-seen indices. Code it, then dry-run <code>"abba"</code> to prove the left pointer never moves backwards.</p></div></div>
+        <div class="stack-step"><strong>32–45 min</strong><div><strong>Section 5</strong><p>Follow-ups: at most k distinct, Unicode, streams, longest repeating character replacement.</p></div></div>
+      </div>
+      <figcaption>Budget real time for the <code>"abba"</code> trace — it is where most candidates discover their own bug.</figcaption>
+    </figure>
 
-/// Sliding window with HashMap tracking last-seen index of each character.
-fn length_of_longest_substring(s: &amp;str) -&gt; usize {
-    let mut last_seen: HashMap&lt;char, usize&gt; = HashMap::new();
-    let mut left = 0usize;
-    let mut max_len = 0usize;
-    for (right, ch) in s.chars().enumerate() {
-        if let Some(&amp;prev) = last_seen.get(&amp;ch) {
-            if prev &gt;= left {
-                // Shrink window past the previous occurrence
-                left = prev + 1;
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Given a string <code>s</code>, return the length of the longest <strong>substring</strong> of <code>s</code> that contains no repeated character.</p>
+      <p>&ldquo;Substring&rdquo; means <em>contiguous</em>. That one word is the whole problem. If it said &ldquo;subsequence&rdquo; the answer would just be the count of distinct characters and there would be nothing to discuss. Because it is contiguous, the answer is a <em>window</em>: a pair of indices <code>[left, right]</code> that we slide rightwards over the string.</p>
+      <p>The property that makes a linear solution possible is monotonicity: if the window <code>[left, right]</code> has all-distinct characters, then every sub-window of it does too. So when adding <code>s[right]</code> breaks the invariant, we never need to move <code>left</code> backwards &mdash; a shorter window starting further left could not help. Both pointers only ever move forward, which is what turns O(n&sup2;) into O(n).</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>length_of_longest_substring(s: str) -&gt; int   # length only, not the substring</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  s = "abcabcbb"
+Output: 3
+Why:    "abc" (and "bca", "cab") — every longer window repeats a character.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — all identical</span><pre><code>Input:  s = "bbbbb"
+Output: 1
+Why:    every window of length 2 already repeats. Answer is a single 'b'.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — the answer is not a prefix</span><pre><code>Input:  s = "pwwkew"
+Output: 3
+Why:    "wke" — not "pwke", which is a subsequence, not a substring.
+        This example exists precisely to catch subsequence answers.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 4 — the left-pointer trap</span><pre><code>Input:  s = "abba"
+Output: 2
+Why:    at right = 3 ('a'), the previous 'a' sits at index 0, which is
+        ALREADY BEHIND the window (left = 2). Jumping left back to 1 would
+        report "bba" = 3. Wrong. left must never decrease.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 5 — degenerate inputs</span><pre><code>Input:  s = ""     -&gt; Output: 0
+Input:  s = " "    -&gt; Output: 1     (space is a character)
+Input:  s = "au"   -&gt; Output: 2
+Input:  s = "dvdf" -&gt; Output: 3     ("vdf", again a non-prefix answer)</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>0 &le; s.length &le; 5 &times; 10^4</code> &mdash; the empty string is legal and must return <code>0</code>, not crash.</li>
+        <li><code>s</code> consists of English letters, digits, symbols and spaces &mdash; i.e. printable ASCII, so a 128-slot table is enough and the space term is O(1).</li>
+        <li>Return a length (an <code>int</code>). If the interviewer wants the substring itself, you also need to remember where the best window started &mdash; see 4.3.</li>
+        <li>Comparison is exact and case-sensitive: <code>'a'</code> and <code>'A'</code> are different characters unless told otherwise.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>Substring or subsequence?</strong> Confirm contiguity explicitly. If it is a subsequence, the answer is <code>len(set(s))</code> and the interview is over in 20 seconds.</li>
+        <li><strong>What is the alphabet?</strong> ASCII-128 &rarr; fixed array, O(1) space. Full Unicode &rarr; hash map, and the space term becomes O(min(n, &Sigma;)).</li>
+        <li><strong>Length or the substring itself?</strong> Returning the substring costs one extra variable (<code>best_start</code>) &mdash; cheap, but only if you know up front.</li>
+        <li><strong>Case-sensitive?</strong> Is <code>"aA"</code> length 1 or 2? Never assume.</li>
+        <li><strong>Do whitespace and punctuation count as characters?</strong> Usually yes; confirm so <code>" "</code> returning 1 is not a surprise.</li>
+        <li><strong>Unicode: code points or grapheme clusters?</strong> Is <code>"e&#769;"</code> (e + combining accent) one character or two? For emoji with skin-tone modifiers this genuinely changes the answer.</li>
+        <li><strong>Ties &mdash; which window do you want?</strong> For <code>"abcabc"</code> several windows have length 3. First, last, or any?</li>
+        <li><strong>Is the whole string in memory?</strong> A stream still works (the window only ever moves forward) but you cannot return a slice of it without buffering.</li>
+        <li><strong>Expected n?</strong> At 5 &times; 10&#8308; even O(n&sup2;) passes; if the interviewer says gigabytes, the O(1)-space window is the point.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not jump straight to &ldquo;sliding window&rdquo;.</strong> Naming the pattern is not solving the problem. Say what the window <em>maintains</em> (&ldquo;all characters inside are distinct&rdquo;) and why <code>left</code> may only move forward. That reasoning is the answer; the name is a label.</li>
+        <li><strong>Do not present the optimal code first.</strong> Two minutes on the brute force buys you the observation that every start position re-reads the same characters &mdash; and the window solution is then the obvious fix rather than a magic trick.</li>
+        <li><strong>Write <code>"abba"</code> on the board before you code.</strong> This is the example that separates a working solution from a plausible-looking one. Deliberately test the <code>last[c] &ge; left</code> guard against it.</li>
+        <li><strong>Choose your window style and stay in it.</strong> Either jump <code>left</code> straight to <code>last[c] + 1</code>, or shrink one step at a time with a <code>while</code> loop. Both are correct; mixing them mid-solution is how off-by-ones appear.</li>
+        <li><strong>State the space term precisely.</strong> &ldquo;O(min(n, &Sigma;)) &mdash; bounded by 128 for ASCII, so effectively O(1)&rdquo; reads much better than a vague &ldquo;O(n) for the map&rdquo;.</li>
+        <li><strong>Handle the empty string explicitly.</strong> Not with a special case if the loop already handles it &mdash; just say &ldquo;the loop body never runs, <code>best</code> stays 0, correct.&rdquo;</li>
+        <li><strong>Ask about Unicode once, then move on.</strong> It shows range. Litigating grapheme clusters for five minutes does not.</li>
+        <li><strong>Trace your own code out loud after writing it.</strong> Finding your own off-by-one is a strong positive signal; having it found for you is not.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Try every start index, extend rightwards while characters stay distinct, and stop the moment one repeats. Correct by construction: it literally examines every candidate window.</p>
+      <ol class="step-list">
+        <li>For each start <code>i</code>, create an empty set.</li>
+        <li>Walk <code>j = i, i+1, &hellip;</code> adding <code>s[j]</code> to the set.</li>
+        <li>The instant <code>s[j]</code> is already present, no window starting at <code>i</code> can extend past <code>j</code> &mdash; break.</li>
+        <li>Track the maximum <code>j - i + 1</code> seen across all starts.</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">Say this while writing it</span>
+        <p>The truly naive version is O(n&sup3;): enumerate all O(n&sup2;) substrings and check each for duplicates in O(n). Reusing the set as <code>j</code> advances already drops that to O(n&sup2;). Mention both so the interviewer sees you are optimising, not guessing.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">start i = 0<br><small>scan until repeat</small></span><b>&rarr;</b>
+          <span class="node">start i = 1<br><small>rescan almost the same chars</small></span><b>&rarr;</b>
+          <span class="node accent">start i = 2<br><small>rescan again&hellip;</small></span>
+        </div>
+        <figcaption>Every start throws away everything the previous start learned. That discarded work is the O(n) factor we are about to remove.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ls-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ls-bf-py" data-lang="python"><pre><code class="language-python">def length_of_longest_substring_brute(s: str) -&gt; int:
+    """Every start index, extended until a character repeats.
+
+    O(n^2) rather than the fully naive O(n^3), because the `seen` set is
+    reused as j advances instead of being rebuilt per substring.
+    """
+    n = len(s)
+    best = 0
+    for i in range(n):
+        seen = set()
+        for j in range(i, n):
+            if s[j] in seen:
+                break                      # no window from i survives past j
+            seen.add(s[j])
+            best = max(best, j - i + 1)
+    return best                            # s == "" never enters the loop -&gt; 0</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashSet;
+
+/// Every start index, extended until a character repeats.
+/// Collects to `Vec&lt;char&gt;` first so indexing is by character, not byte.
+pub fn length_of_longest_substring_brute(s: &amp;str) -&gt; usize {
+    let chars: Vec&lt;char&gt; = s.chars().collect();
+    let mut best = 0usize;
+
+    for i in 0..chars.len() {
+        let mut seen: HashSet&lt;char&gt; = HashSet::new();
+        for j in i..chars.len() {
+            // `insert` returns false when the value was already present.
+            if !seen.insert(chars[j]) {
+                break;                     // no window from i survives past j
+            }
+            best = best.max(j - i + 1);
+        }
+    }
+    best
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashSet;
+import java.util.Set;
+
+class Solution {
+
+    /**
+     * Every start index, extended until a character repeats.
+     * O(n^2), not the fully naive O(n^3): the set is reused as j advances.
+     */
+    public int lengthOfLongestSubstringBrute(String s) {
+        int best = 0;
+        for (int i = 0; i &lt; s.length(); i++) {
+            Set&lt;Character&gt; seen = new HashSet&lt;&gt;();
+            for (int j = i; j &lt; s.length(); j++) {
+                // add() returns false when the element was already present.
+                if (!seen.add(s.charAt(j))) {
+                    break;                 // no window from i survives past j
+                }
+                best = Math.max(best, j - i + 1);
             }
         }
-        last_seen.insert(ch, right);
-        max_len = max_len.max(right - left + 1);
+        return best;
     }
-    max_len
-}
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
+#include &lt;string&gt;
+#include &lt;unordered_set&gt;
 
-/// ASCII-optimised variant: fixed [i32; 128] array avoids hashing overhead.
-fn length_of_longest_substring_array(s: &amp;[u8]) -&gt; usize {
-    let mut last_seen = [-1i64; 128];
-    let mut left: i64 = 0;
-    let mut max_len: usize = 0;
-    for (right, &amp;b) in s.iter().enumerate() {
-        let idx = b as usize;
-        if last_seen[idx] &gt;= left {
-            left = last_seen[idx] + 1;
+// Every start index, extended until a character repeats.
+// O(n^2), not the fully naive O(n^3): the set is reused as j advances.
+int lengthOfLongestSubstringBrute(const std::string&amp; s) {
+    const int n = static_cast&lt;int&gt;(s.size());
+    int best = 0;
+
+    for (int i = 0; i &lt; n; ++i) {
+        std::unordered_set&lt;char&gt; seen;
+        for (int j = i; j &lt; n; ++j) {
+            // insert() returns {iterator, inserted?}
+            if (!seen.insert(s[j]).second) {
+                break;                     // no window from i survives past j
+            }
+            best = std::max(best, j - i + 1);
         }
-        last_seen[idx] = right as i64;
-        max_len = max_len.max((right as i64 - left + 1) as usize);
     }
-    max_len
-}</code></pre></div><div class="code-panel" role="tabpanel" data-panel="tab-objcpppp-2" data-lang="objc++" hidden><pre><code class="language-objectivec">#import &lt;Foundation/Foundation.h&gt;
+    return best;
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n&sup2;)</span>
+          <p>Each of n starts scans up to n characters. With a bounded alphabet &Sigma; the inner loop cannot exceed &Sigma;+1 steps, so it is really O(n&middot;&Sigma;) &mdash; worth pointing out, it is a genuinely sharper bound.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(min(n, &Sigma;))</span>
+          <p>One set holding at most &Sigma; distinct characters &mdash; at most 128 for ASCII.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>When the window starting at <code>i</code> stops at <code>j</code> because <code>s[j]</code> duplicates <code>s[k]</code> (with <code>i &le; k &lt; j</code>), we already know that <em>every</em> start in <code>[i, k]</code> will also stop at <code>j</code>. Restarting at <code>i+1</code> re-derives a fact we hold. Jumping <code>left</code> to <code>k+1</code> instead skips all of that.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> keep one window and remember, for every character, the last index at which it appeared. When <code>s[right]</code> repeats a character whose last occurrence is <em>inside</em> the current window, the smallest legal window ending at <code>right</code> starts at <code>last[s[right]] + 1</code>. Jump <code>left</code> there in one step. If the last occurrence is already behind <code>left</code>, it is irrelevant &mdash; leave <code>left</code> alone.</p>
+      <ol class="step-list">
+        <li><code>last</code> = map from character to its most recent index. <code>left = 0</code>, <code>best = 0</code>.</li>
+        <li>For <code>right = 0 &hellip; n-1</code>, let <code>c = s[right]</code>.</li>
+        <li>If <code>c</code> is in <code>last</code> <em>and</em> <code>last[c] &ge; left</code>, set <code>left = last[c] + 1</code>. The second half of that condition is the entire <code>"abba"</code> fix.</li>
+        <li>Set <code>last[c] = right</code>.</li>
+        <li><code>best = max(best, right - left + 1)</code>.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariant to say out loud</span>
+        <p>After processing <code>right</code>, the window <code>s[left .. right]</code> contains no repeats, and it is the <strong>longest</strong> repeat-free window ending at <code>right</code>. Since the answer is some window ending at some <code>right</code>, taking the max over all <code>right</code> is exhaustive. <code>left</code> is non-decreasing, so the total work is one forward pass.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">r=0 'a'</span><p>unseen. last={a:0}. window [0,0] &rarr; best = 1</p></div>
+          <div class="seq-row"><span class="actor">r=1 'b'</span><p>unseen. last={a:0, b:1}. window [0,1] &rarr; best = 2</p></div>
+          <div class="seq-row"><span class="actor">r=2 'b'</span><p>last[b]=1 &ge; left=0 &rarr; <strong>left = 2</strong>. last={a:0, b:2}. window [2,2] &rarr; best stays 2</p></div>
+          <div class="seq-row"><span class="actor">r=3 'a'</span><p>last[a]=0 but 0 &lt; left=2 &rarr; <strong>left unchanged</strong>. last={a:3, b:2}. window [2,3] &rarr; best stays 2</p></div>
+        </div>
+        <figcaption>s = "abba". Answer 2. Drop the <code>last[c] &ge; left</code> guard and step r=3 wrongly rewinds left to 1, reporting "bba" = 3.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ls-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ls-op-py" data-lang="python"><pre><code class="language-python">from typing import Dict
+
+
+def length_of_longest_substring(s: str) -&gt; int:
+    """Sliding window with last-seen indices. One forward pass.
+
+    Invariant: after each step, s[left:right+1] is the longest repeat-free
+    window that ends at `right`. `left` never decreases.
+    """
+    last: Dict[str, int] = {}              # character -&gt; last index seen
+    left = 0
+    best = 0
+
+    for right, ch in enumerate(s):
+        prev = last.get(ch, -1)
+        if prev &gt;= left:                   # the repeat is INSIDE the window
+            left = prev + 1                # jump past it in one move
+        last[ch] = right
+        best = max(best, right - left + 1)
+
+    return best</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+/// Sliding window with last-seen indices. One forward pass.
+///
+/// Invariant: after each step, the window `[left, right]` is the longest
+/// repeat-free window ending at `right`. `left` never decreases.
+///
+/// Indices are signed so the "never seen" sentinel (-1) compares correctly.
+pub fn length_of_longest_substring(s: &amp;str) -&gt; usize {
+    let mut last: HashMap&lt;char, i64&gt; = HashMap::new();
+    let mut left: i64 = 0;
+    let mut best: i64 = 0;
+
+    for (right, ch) in s.chars().enumerate() {
+        let right = right as i64;
+        let prev = *last.get(&amp;ch).unwrap_or(&amp;-1);
+        if prev &gt;= left {                  // the repeat is INSIDE the window
+            left = prev + 1;               // jump past it in one move
+        }
+        last.insert(ch, right);
+        best = best.max(right - left + 1);
+    }
+    best as usize
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashMap;
+import java.util.Map;
+
+class Solution {
+
+    /**
+     * Sliding window with last-seen indices. One forward pass.
+     *
+     * Invariant: after each step, s[left .. right] is the longest
+     * repeat-free window ending at `right`. `left` never decreases.
+     */
+    public int lengthOfLongestSubstring(String s) {
+        Map&lt;Character, Integer&gt; last = new HashMap&lt;&gt;();
+        int left = 0;
+        int best = 0;
+
+        for (int right = 0; right &lt; s.length(); right++) {
+            char c = s.charAt(right);
+            int prev = last.getOrDefault(c, -1);
+            if (prev &gt;= left) {            // the repeat is INSIDE the window
+                left = prev + 1;           // jump past it in one move
+            }
+            last.put(c, right);
+            best = Math.max(best, right - left + 1);
+        }
+        return best;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;algorithm&gt;
 #include &lt;string&gt;
 #include &lt;unordered_map&gt;
-#include &lt;algorithm&gt;
 
-// Sliding window with unordered_map tracking last-seen index
-static int lengthOfLongestSubstring(const std::string &amp;s) {
-    std::unordered_map&lt;char, int&gt; lastSeen;
-    int left = 0, maxLen = 0;
-    for (int right = 0; right &lt; (int)s.size(); right++) {
-        char ch = s[right];
-        auto it = lastSeen.find(ch);
-        if (it != lastSeen.end() &amp;&amp; it-&gt;second &gt;= left) {
-            // Shrink window past the previous occurrence
-            left = it-&gt;second + 1;
+// Sliding window with last-seen indices. One forward pass.
+//
+// Invariant: after each step, s[left .. right] is the longest repeat-free
+// window ending at `right`. `left` never decreases.
+int lengthOfLongestSubstring(const std::string&amp; s) {
+    std::unordered_map&lt;char, int&gt; last;    // character -&gt; last index seen
+    int left = 0;
+    int best = 0;
+
+    for (int right = 0; right &lt; static_cast&lt;int&gt;(s.size()); ++right) {
+        const char c = s[right];
+        auto it = last.find(c);
+        const int prev = (it == last.end()) ? -1 : it-&gt;second;
+        if (prev &gt;= left) {                // the repeat is INSIDE the window
+            left = prev + 1;               // jump past it in one move
         }
-        lastSeen[ch] = right;
-        maxLen = std::max(maxLen, right - left + 1);
+        last[c] = right;
+        best = std::max(best, right - left + 1);
     }
-    return maxLen;
-}
-
-// ASCII-optimised: fixed int array avoids hashing overhead
-static int lengthOfLongestSubstringArray(const std::string &amp;s) {
-    int lastSeen[128];
-    std::fill(lastSeen, lastSeen + 128, -1);
-    int left = 0, maxLen = 0;
-    for (int right = 0; right &lt; (int)s.size(); right++) {
-        int idx = (unsigned char)s[right];
-        if (lastSeen[idx] &gt;= left)
-            left = lastSeen[idx] + 1;
-        lastSeen[idx] = right;
-        maxLen = std::max(maxLen, right - left + 1);
-    }
-    return maxLen;
-}
-
-// NSString convenience wrapper using the C++ implementation above
-static NSInteger longestUniqueSubstring(NSString *str) {
-    return lengthOfLongestSubstring(str.UTF8String);
+    return best;
 }</code></pre></div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Request path / sequence</h2>
-<figure class="diagram dark"><div class="seq"><div class="seq-row"><span class="actor">right=0</span><p>ch=a, no repeat → window=[0,0], len=1</p></div><div class="seq-row"><span class="actor">right=1</span><p>ch=b, no repeat → window=[0,1], len=2</p></div><div class="seq-row"><span class="actor">right=2</span><p>ch=b, repeat at 1 ≥ left=0 → left=2, window=[2,2], len=1</p></div><div class="seq-row"><span class="actor">right=3</span><p>ch=a, last_seen=0 &lt; left=2 → left stays, window=[2,3], len=2</p></div></div></figure>
-        </section>
-        <section class="problem-section">
-          <h2>Trade-offs I&#x27;d say out loud</h2>
-          <div class="req-grid">
-            <div>
-              <strong>Map vs set</strong>
-              <p>Map gives O(1) left-jump; set requires O(k) removals to slide left.</p>
-            </div>
-            <div>
-              <strong>Array vs dict</strong>
-              <p>If ASCII-only, int[128] is faster than a hash map — cache-friendly.</p>
-            </div>
-            <div>
-              <strong>Length vs substring</strong>
-              <p>If you also need the substring, track start index of best window.</p>
-            </div>
-          </div>
-        </section>
-        <section class="problem-section">
-          <h2>Where it usually breaks</h2>
-          <ul class="trade-list">
-            <li>Left pointer going backwards without the max() guard — &#x27;abba&#x27; is the classic breaker.</li>
-            <li>Off-by-one: right - left + 1 vs right - left.</li>
-            <li>Not handling empty string (should return 0, not crash).</li>
-            <li>Forgetting to update last_seen after moving left.</li>
-            <li>Assuming ASCII when input is Unicode — dict handles both, array doesn&#x27;t.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>Follow-ups if time remains</h2>
-          <ul class="ask-list">
-            <li>Longest substring with at most k distinct characters — generalize with a freq map and count.</li>
-            <li>Minimum window substring — shrink-from-left variant with a &#x27;formed&#x27; counter.</li>
-            <li>Longest repeating character replacement — window + max-frequency trick.</li>
-            <li>Sliding window template — right expands, left contracts, invariant maintained.</li>
-          </ul>
-        </section>
-        <section class="problem-section">
-          <h2>What &quot;good enough&quot; looks like in 60 minutes</h2>
-          <p>Clean O(n) code with the last_seen map, correct max() guard on left, traced through &#x27;abba&#x27; to show the subtle bug, and discussed the set-based alternative. Mentioning the ASCII array optimization and connecting to the sliding window template earns extra credit.</p>
-        </section>
+      </div>
 
-        <nav class="problem-nav" aria-label="Problem navigation">
-          <a class="problem-nav-link prev" href="../two_sum_variants/">← Two Sum variants under memory pressure</a>
-          <a class="problem-nav-link back" href="../">All DSA problems</a>
-          <a class="problem-nav-link next" href="../merge_k_lists/">Merge k sorted lists →</a>
-        </nav>
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n)</span>
+          <p>Exactly one iteration per character; <code>left</code> only moves forward, so the pointers travel at most 2n steps in total. No inner loop, no rescans.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(min(n, &Sigma;))</span>
+          <p>One entry per distinct character. With the stated ASCII alphabet that is at most 128 entries &mdash; constant.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p><code>""</code> &rarr; 0 (loop body never runs). <code>" "</code> &rarr; 1. <code>"bbbb"</code> &rarr; 1. <code>"abba"</code> &rarr; 2 via the <code>prev &ge; left</code> guard. <code>"dvdf"</code> &rarr; 3. A string of 128 distinct ASCII characters &rarr; 128.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: return the substring, O(1) space</h3>
+      <p>Two upgrades the interviewer often asks for next, both cheap. First, remember <code>best_start</code> alongside <code>best_len</code> so you can slice out the actual substring. Second, since the alphabet is bounded, replace the hash map with a flat array indexed by character code &mdash; strictly O(1) space, and materially faster because there is no hashing and no pointer chasing.</p>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="ls-var-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-var-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-var-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="ls-var-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="ls-var-py" data-lang="python"><pre><code class="language-python">ALPHABET = 128                             # printable ASCII, per the constraints
+
+
+def longest_unique_substring(s: str) -&gt; str:
+    """Same window, but on a flat table, and returns the substring itself.
+
+    Precondition: every character satisfies ord(ch) &lt; ALPHABET.
+    """
+    last = [-1] * ALPHABET                 # code point -&gt; last index seen
+    left = 0
+    best_len = 0
+    best_start = 0
+
+    for right, ch in enumerate(s):
+        c = ord(ch)
+        if last[c] &gt;= left:
+            left = last[c] + 1
+        last[c] = right
+        if right - left + 1 &gt; best_len:    # strict &gt; keeps the FIRST best window
+            best_len = right - left + 1
+            best_start = left
+
+    return s[best_start:best_start + best_len]</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-var-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Same window on a flat 256-slot byte table, returning a borrowed slice.
+///
+/// Byte-indexed, so this is correct for ASCII input. For multi-byte UTF-8
+/// keep the `HashMap&lt;char, _&gt;` version in 4.1 instead.
+pub fn longest_unique_substring(s: &amp;str) -&gt; &amp;str {
+    let bytes = s.as_bytes();
+    let mut last = [-1i64; 256];           // byte value -&gt; last index seen
+    let mut left: i64 = 0;
+    let mut best_len: i64 = 0;
+    let mut best_start: i64 = 0;
+
+    for (right, &amp;b) in bytes.iter().enumerate() {
+        let right = right as i64;
+        let c = b as usize;
+        if last[c] &gt;= left {
+            left = last[c] + 1;
+        }
+        last[c] = right;
+        if right - left + 1 &gt; best_len {   // strict &gt;: keep the FIRST best window
+            best_len = right - left + 1;
+            best_start = left;
+        }
+    }
+    &amp;s[best_start as usize..(best_start + best_len) as usize]
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-var-java" data-lang="java" hidden><pre><code class="language-java">import java.util.Arrays;
+
+class Solution {
+
+    private static final int ALPHABET = 128;   // printable ASCII
+
+    /**
+     * Same window on a flat table, returning the substring itself.
+     * Precondition: every char is below ALPHABET.
+     */
+    public String longestUniqueSubstring(String s) {
+        int[] last = new int[ALPHABET];
+        Arrays.fill(last, -1);                 // -1 = never seen
+
+        int left = 0, bestLen = 0, bestStart = 0;
+        for (int right = 0; right &lt; s.length(); right++) {
+            int c = s.charAt(right);
+            if (last[c] &gt;= left) {
+                left = last[c] + 1;
+            }
+            last[c] = right;
+            if (right - left + 1 &gt; bestLen) {  // strict &gt;: keep FIRST best window
+                bestLen = right - left + 1;
+                bestStart = left;
+            }
+        }
+        return s.substring(bestStart, bestStart + bestLen);
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="ls-var-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;array&gt;
+#include &lt;string&gt;
+
+// Same window on a flat 256-slot byte table, returning the substring.
+// Indexed through unsigned char so a negative signed char cannot escape
+// the array (a real portability bug on platforms where char is signed).
+std::string longestUniqueSubstring(const std::string&amp; s) {
+    std::array&lt;int, 256&gt; last{};
+    last.fill(-1);                             // -1 = never seen
+
+    int left = 0, bestLen = 0, bestStart = 0;
+    for (int right = 0; right &lt; static_cast&lt;int&gt;(s.size()); ++right) {
+        const auto c = static_cast&lt;unsigned char&gt;(s[right]);
+        if (last[c] &gt;= left) {
+            left = last[c] + 1;
+        }
+        last[c] = right;
+        if (right - left + 1 &gt; bestLen) {      // strict &gt;: keep FIRST best window
+            bestLen = right - left + 1;
+            bestStart = left;
+        }
+    }
+    return s.substr(bestStart, bestLen);
+}</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n)</span>
+          <p>Identical pass, minus the hashing. Typically 2&ndash;4&times; faster in practice on ASCII input.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(&Sigma;) = O(1)</span>
+          <p>A fixed 128- or 256-slot table regardless of input size. The returned substring is O(n) only if you copy it &mdash; Rust returns a borrow.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>Longest substring with at most k distinct characters.</strong> Same window, but the invariant becomes a size bound on a count map, so <code>left</code> advances in a <code>while</code> loop that decrements counts. This is the generalisation &mdash; our problem is the case &ldquo;every count &le; 1&rdquo;.</li>
+        <li><strong>Longest substring with at most k repeats of any character (character replacement).</strong> Window where <code>window_len - max_count &le; k</code>. Worth discussing because the <code>max_count</code> trick means you never have to shrink <code>max_count</code> back down.</li>
+        <li><strong>Shortest substring containing every character of another string (<a href="../minimum_window_substring/">minimum window substring</a>).</strong> Same two-pointer skeleton, inverted objective: grow until valid, then shrink while still valid. Note the direction flips &mdash; here we shrink while <em>invalid</em>, there we shrink while <em>valid</em>.</li>
+        <li><strong>Full Unicode input.</strong> Iterate over code points, not bytes (an ASCII byte table silently mis-slices UTF-8). If graphemes are the unit, segment first with ICU or <code>unicode-segmentation</code> and run the same window over the cluster list.</li>
+        <li><strong>Streaming input, unbounded length.</strong> The window works unchanged since both pointers move forward, but returning the substring requires buffering the last <code>&Sigma;+1</code> characters &mdash; note that the buffer is bounded by the alphabet, not by n.</li>
+        <li><strong>All maximal repeat-free windows, not just the longest.</strong> Emit a window each time <code>left</code> jumps. Output size is O(n) windows.</li>
+        <li><strong>Parallel / chunked.</strong> Split the string into chunks, solve each, then fix up windows that straddle a boundary by re-scanning only <code>&Sigma;</code> characters either side. Map-reduce friendly and worth a sentence for large-scale roles.</li>
+        <li><strong>Why can't we binary-search the answer length?</strong> Because &ldquo;there exists a repeat-free window of length L&rdquo; is monotone in L, you actually can &mdash; check with a fixed-size window scan in O(n) per L, giving O(n log n). Strictly worse than O(n), but a good answer to &ldquo;can you think of another way?&rdquo;</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Confirm substring-not-subsequence, state and discard the O(n&sup2;) baseline, write the window with the <code>prev &ge; left</code> guard correct on the first attempt, trace <code>"abba"</code> yourself, and quantify space as O(min(n, &Sigma;)).</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../two_sum_variants/">&larr; Two Sum variants under memory pressure</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <a class="problem-nav-link next" href="../merge_k_lists/">Merge k sorted lists &rarr;</a>
+    </nav>
   </div>
 </main>
 

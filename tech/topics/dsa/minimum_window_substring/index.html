@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minimum window substring | DSA | Engineering Notes</title>
+  <meta name="description" content="Expand-then-contract sliding window over a multiset of required characters — the scalar `missing` counter is what keeps it linear.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Minimum window substring</p>
+      <p class="eyebrow">DSA · Hard · ~45 min</p>
+      <h1>Minimum window substring</h1>
+      <p class="problem-deck">The sliding window turned inside out: grow until valid, then shrink while still valid. Counting duplicates correctly is the whole problem.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: flat table, O(1) space, no copying</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 45 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–5 min</strong><div><strong>Sections 1–2</strong><p>Multiset vs set semantics, are extra characters allowed, return substring or length. All three change the code.</p></div></div>
+        <div class="stack-step"><strong>5–12 min</strong><div><strong>Section 3</strong><p>Brute force over all start positions. Note that <code>m &le; 10<sup>5</sup></code> makes O(m&sup2;) <em>too slow</em> — the constraint is telling you the answer must be linear.</p></div></div>
+        <div class="stack-step"><strong>12–32 min</strong><div><strong>Section 4</strong><p>Expand-then-contract window with a scalar <code>missing</code> counter. Code it, then trace <code>"ADOBECODEBANC"</code> to show <code>left</code> only moves forward.</p></div></div>
+        <div class="stack-step"><strong>32–45 min</strong><div><strong>Section 5</strong><p>Follow-ups: filtered-index window, minimum window <em>subsequence</em>, many queries against one <code>s</code>, streaming.</p></div></div>
+      </div>
+      <figcaption>Unlike most window problems, here the brute force is <em>not</em> fast enough for the stated limits — say so out loud, it justifies everything that follows.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Given two strings <code>s</code> (length <code>m</code>) and <code>t</code> (length <code>n</code>), return the <strong>shortest substring</strong> of <code>s</code> that contains every character of <code>t</code>, <strong>including duplicates</strong>. If no such substring exists, return the empty string <code>""</code>. The test cases are generated so that the answer is unique.</p>
+      <p>Two words carry all the weight. &ldquo;Substring&rdquo; means <em>contiguous</em>, so the answer is a window <code>[left, right]</code> rather than a scattered selection. &ldquo;Including duplicates&rdquo; means containment is <strong>multiset</strong> containment, not set containment: if <code>t = "AABC"</code> the window needs two separate <code>'A'</code>s, and one <code>'A'</code> is not enough. Candidates who reach for a <code>set</code> here fail on exactly that case.</p>
+      <p>Note what the problem does <em>not</em> say: the window may freely contain characters that are not in <code>t</code> at all, and may contain more copies of a character than <code>t</code> requires. Validity is a lower bound on counts, never an equality. So the condition is: for every character <code>c</code>, <code>count<sub>window</sub>(c) &ge; count<sub>t</sub>(c)</code>.</p>
+      <p>The structural property that makes a linear solution possible is monotonicity of validity in the window width: if <code>[left, right]</code> is valid, then <code>[left, right']</code> is also valid for every <code>right' &gt; right</code> &mdash; widening never removes a character. Equivalently, for each <code>left</code> there is a threshold <code>right</code> at which the window first becomes valid, and that threshold is <strong>non-decreasing</strong> as <code>left</code> advances. That is precisely the condition under which two pointers that only move forward suffice.</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>min_window(s: str, t: str) -&gt; str   # the substring itself, "" when impossible</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  s = "ADOBECODEBANC", t = "ABC"
+Output: "BANC"
+Why:    "BANC" (indices 9..12) holds one 'A', one 'B', one 'C' in 4 characters.
+        "ADOBEC" is also valid but is 6 long; "ODEBANC" is valid but 7 long.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 2 — the whole string is the answer</span><pre><code>Input:  s = "a", t = "a"
+Output: "a"
+Why:    the only substring that works is all of s.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 3 — impossible, and duplicates are why</span><pre><code>Input:  s = "a", t = "aa"
+Output: ""
+Why:    t needs TWO 'a's. s has one. A set-based check would wrongly say
+        "a" is valid — this example exists to catch exactly that bug.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 4 — duplicates in t are counted, not deduped</span><pre><code>Input:  s = "ADOBECODEBANC", t = "ABCC"
+Output: "CODEBANC"
+Why:    now TWO 'C's are needed, so the window must span C at index 5
+        through C at index 12. The answer for t = "ABC" ("BANC") is invalid here.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 5 — the window may carry surplus characters</span><pre><code>Input:  s = "aabbcc", t = "abc"
+Output: "abbc"
+Why:    indices 1..4. It contains an EXTRA 'b' that t never asked for.
+        That is legal: validity is count(window) &ge; count(t), not equality.</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 6 — case is significant</span><pre><code>Input:  s = "aAbB", t = "Ab"
+Output: "Ab"
+Why:    indices 1..2. 'a' does not satisfy 'A'. Both cases are in the alphabet,
+        so the character table needs room for all 52 letters (128 is simpler).</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 7 — why the problem guarantees uniqueness</span><pre><code>Input:  s = "ABAACBAB", t = "AABC"
+        Minimum length is 4, and THREE different windows achieve it:
+          indices 1..4 -&gt; "BAAC"
+          indices 2..5 -&gt; "AACB"
+          indices 3..6 -&gt; "ACBA"
+This input violates the "answer is unique" promise, so it will not be tested —
+but you should still know what your code does. The solutions below use a
+strict &lt; when updating the best window, so they return the LEFTMOST: "BAAC".</code></pre></div>
+      <div class="tech-code"><span class="code-lang">example 8 — degenerate inputs</span><pre><code>Input:  s = "xyz",  t = "a"    -&gt; ""      (character absent entirely)
+Input:  s = "ab",   t = "b"    -&gt; "b"     (answer is a suffix)
+Input:  s = "abc",  t = "cba"  -&gt; "abc"   (order in t is irrelevant)
+Input:  s = "aa",   t = "aa"   -&gt; "aa"
+Input:  n &gt; m                  -&gt; ""      (cannot fit; answer immediately)</code></pre></div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>m == s.length</code>, <code>n == t.length</code>, <code>1 &le; m, n &le; 10^5</code> &mdash; both strings are non-empty, so no empty-input special case is strictly required, though a guard costs nothing.</li>
+        <li><strong>These limits rule out the brute force.</strong> At <code>m = 10^5</code>, an O(m&sup2;) scan is ~10<sup>10</sup> character operations. The linear solution is not a nice-to-have here; it is the only thing that runs.</li>
+        <li><code>s</code> and <code>t</code> consist of uppercase and lowercase English letters &mdash; so &Sigma; = 52 and a fixed 128-slot table covers it. The space term is therefore O(1), not O(n).</li>
+        <li>The answer is guaranteed unique, so no tie-breaking rule is needed. State what your code does anyway (see example 7).</li>
+        <li><code>t</code> may be longer than <code>s</code>, and <code>t</code> may contain characters absent from <code>s</code>. Both simply yield <code>""</code>.</li>
+        <li>Return the substring itself. Internally it is cheaper to track <code>(best_start, best_len)</code> and slice once at the very end &mdash; never build strings inside the loop.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>Substring or subsequence?</strong> The single most important question. Contiguous gives the O(m) window below; a subsequence gives a completely different O(m&middot;n) dynamic-programming problem (see section 5). Do not guess.</li>
+        <li><strong>Do duplicates in <code>t</code> count separately?</strong> Confirm multiset semantics explicitly: &ldquo;for <code>t = "AABC"</code> I need two <code>'A'</code>s in the window, correct?&rdquo; This is the difference between a <code>Counter</code> and a <code>set</code>.</li>
+        <li><strong>May the window contain characters not in <code>t</code>?</strong> Yes &mdash; but say it out loud, because it establishes that the test is <code>&ge;</code> on counts rather than equality.</li>
+        <li><strong>Case-sensitive?</strong> Is <code>"Ab"</code> satisfied by <code>"ab"</code>? Given the stated alphabet, no &mdash; but confirming it fixes your table size at 52/128 rather than 26.</li>
+        <li><strong>What is the alphabet?</strong> English letters &rarr; fixed array, O(1) space. Full Unicode &rarr; hash map, and the space term becomes O(min(n, &Sigma;)).</li>
+        <li><strong>Return the substring, its length, or its indices?</strong> Returning indices avoids an O(m) copy, which matters if the caller only needs the bounds.</li>
+        <li><strong>Ties &mdash; leftmost, rightmost, or any?</strong> The problem promises uniqueness, so this is free to ask and shows you noticed the promise rather than relied on it.</li>
+        <li><strong>Is <code>s</code> fully in memory, or streamed?</strong> The window only ever moves forward, so a stream works, but you cannot return a slice of a stream without buffering.</li>
+        <li><strong>One <code>t</code> or many?</strong> If many different <code>t</code> are queried against one fixed <code>s</code>, per-character index lists become worth precomputing &mdash; a genuinely different design.</li>
+        <li><strong>Expected sizes?</strong> If <code>t</code> is tiny and <code>s</code> is enormous, the filtered-index variant in section 5 is a real win. If both are large, the plain window is already optimal.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not open with &ldquo;this is a sliding window problem&rdquo;.</strong> That is pattern recognition, not reasoning, and interviewers discount it heavily. Earn it: state that validity is monotone in width, therefore the first-valid <code>right</code> is non-decreasing in <code>left</code>, therefore two forward-only pointers suffice. Now the window is a conclusion rather than a guess.</li>
+        <li><strong>Do not present the optimal solution first.</strong> Spend two minutes on the brute force. Here it pays a specific dividend: it exposes that moving from start <code>i</code> to <code>i+1</code> only <em>removes one character</em>, which is exactly the insight the real solution is built on.</li>
+        <li><strong>Use the constraints as evidence.</strong> Saying &ldquo;<code>m</code> is 10<sup>5</sup>, so O(m&sup2;) is 10<sup>10</sup> and cannot pass &mdash; I need linear&rdquo; shows you read the limits. Most candidates never mention them.</li>
+        <li><strong>Nail down multiset semantics before writing any code.</strong> Reaching for a <code>set</code> and discovering the <code>t = "aa"</code> case ten minutes later reads as carelessness. One clarifying sentence prevents it.</li>
+        <li><strong>Track a scalar, not a map comparison.</strong> The natural-but-slow instinct is to compare the whole count map against <code>t</code>&rsquo;s at each step: that is O(&Sigma;) per character and drags you to O(m&middot;&Sigma;). Maintaining one integer <code>missing</code> is the difference between a good and a mediocre answer &mdash; call it out as a deliberate choice.</li>
+        <li><strong>Say the two-phase discipline out loud as you code it.</strong> &ldquo;Expand <code>right</code> until valid; then contract <code>left</code> while still valid, recording the best.&rdquo; Then keep to it. Mixing expansion and contraction logic is where off-by-ones breed.</li>
+        <li><strong>Record the best window at the right moment.</strong> Inside the contraction loop, <em>before</em> evicting, the window is valid. Recording after the eviction is a real and common bug that silently returns a window one character too short.</li>
+        <li><strong>Explain why counts are allowed to go negative.</strong> A negative <code>need[c]</code> means surplus, and surplus is exactly the signal that the leftmost character is evictable. Interviewers watch for whether you understand this or merely copied it.</li>
+        <li><strong>Trace <code>"ADOBECODEBANC"</code> / <code>"ABC"</code> yourself after writing the code.</strong> Show that <code>left</code> never moves backwards and that the best window is replaced three times. Finding your own bug is a strong signal; having it found for you is not.</li>
+        <li><strong>Quantify space precisely.</strong> &ldquo;O(&Sigma;), bounded by 128 for this alphabet, so effectively O(1)&rdquo; is far better than a hand-waved &ldquo;O(n) for the map&rdquo;.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>Fix every start index <code>i</code> and extend rightwards until the window first becomes valid. Because validity is monotone in width, the <em>first</em> valid <code>j</code> is the shortest window for that particular start &mdash; so we can stop scanning that start immediately and move on.</p>
+      <ol class="step-list">
+        <li>Build <code>need</code> = character counts of <code>t</code>.</li>
+        <li>For each start <code>i</code>: copy <code>need</code> into <code>remaining</code>, and set <code>missing = n</code>.</li>
+        <li>Walk <code>j = i, i+1, &hellip;</code>. For <code>c = s[j]</code>: if <code>remaining[c] &gt; 0</code> this character satisfies a real requirement, so decrement <code>missing</code>. Then decrement <code>remaining[c]</code> regardless.</li>
+        <li>When <code>missing == 0</code> the window <code>[i, j]</code> is valid and minimal for this <code>i</code> &mdash; record its length if it beats the best, then <code>break</code>.</li>
+        <li>Return the best window found, or <code>""</code> if none ever became valid.</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">Say this while writing it</span>
+        <p>The fully naive version is O(m&sup3;): enumerate all O(m&sup2;) substrings and re-count each one in O(m + n). Counting incrementally as <code>j</code> advances, plus the monotonicity <code>break</code>, already brings that down to O(m&sup2;). Mention both so the interviewer sees you optimising deliberately rather than landing on something by luck.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">start i = 0<br><small>scan to first valid j</small></span><b>&rarr;</b>
+          <span class="node">start i = 1<br><small>rescan nearly the same span</small></span><b>&rarr;</b>
+          <span class="node accent">start i = 2<br><small>rescan again&hellip;</small></span>
+        </div>
+        <figcaption>Advancing the start by one only removes <code>s[i]</code> from the window &mdash; yet this version throws away the counts and rebuilds them from scratch. Recovering that one removal in O(1) is the entire optimisation.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mw-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mw-bf-py" data-lang="python"><pre><code class="language-python">from collections import Counter
+
+
+def min_window_brute(s: str, t: str) -&gt; str:
+    """Every start index, extended until the window first becomes valid.
+
+    Validity is monotone in width, so the FIRST valid j is the shortest
+    window for that start -- hence the `break`.
+    """
+    m, n = len(s), len(t)
+    if m == 0 or n == 0 or n &gt; m:
+        return ""                          # cannot possibly fit
+
+    need = Counter(t)
+    best_len = m + 1                       # sentinel: "no window found"
+    best_start = 0
+
+    for i in range(m):
+        remaining = need.copy()            # rebuilt per start: the wasteful part
+        missing = n                        # required chars not yet covered
+
+        for j in range(i, m):
+            ch = s[j]
+            if remaining[ch] &gt; 0:          # this char satisfies a REAL need
+                missing -= 1
+            remaining[ch] -= 1             # may go negative: surplus
+
+            if missing == 0:               # first valid window from i
+                if j - i + 1 &lt; best_len:   # strict &lt;: keep the LEFTMOST best
+                    best_len = j - i + 1
+                    best_start = i
+                break                      # no shorter window starts at i
+
+    if best_len == m + 1:
+        return ""
+    return s[best_start:best_start + best_len]</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+/// Every start index, extended until the window first becomes valid.
+///
+/// Operates on bytes: the constraints say English letters, so every
+/// character is one ASCII byte and byte slicing is safe.
+pub fn min_window_brute(s: &amp;str, t: &amp;str) -&gt; String {
+    let sb = s.as_bytes();
+    let tb = t.as_bytes();
+    let (m, n) = (sb.len(), tb.len());
+    if m == 0 || n == 0 || n &gt; m {
+        return String::new();              // cannot possibly fit
+    }
+
+    let mut need: HashMap&lt;u8, i32&gt; = HashMap::new();
+    for &amp;b in tb {
+        *need.entry(b).or_insert(0) += 1;
+    }
+
+    let mut best_len = m + 1;              // sentinel: "no window found"
+    let mut best_start = 0usize;
+
+    for i in 0..m {
+        let mut remaining = need.clone();  // rebuilt per start: the wasteful part
+        let mut missing = n as i32;
+
+        for j in i..m {
+            let slot = remaining.entry(sb[j]).or_insert(0);
+            if *slot &gt; 0 {                 // satisfies a REAL need
+                missing -= 1;
+            }
+            *slot -= 1;                    // may go negative: surplus
+
+            if missing == 0 {
+                if j - i + 1 &lt; best_len {  // strict &lt;: keep the LEFTMOST best
+                    best_len = j - i + 1;
+                    best_start = i;
+                }
+                break;                     // no shorter window starts at i
+            }
+        }
+    }
+
+    if best_len == m + 1 {
+        String::new()
+    } else {
+        s[best_start..best_start + best_len].to_string()
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashMap;
+import java.util.Map;
+
+class Solution {
+
+    /**
+     * Every start index, extended until the window first becomes valid.
+     * Validity is monotone in width, so the first valid j is the shortest
+     * window for that start -- hence the break.
+     */
+    public String minWindowBrute(String s, String t) {
+        final int m = s.length(), n = t.length();
+        if (m == 0 || n == 0 || n &gt; m) {
+            return "";                             // cannot possibly fit
+        }
+
+        Map&lt;Character, Integer&gt; need = new HashMap&lt;&gt;();
+        for (char c : t.toCharArray()) {
+            need.merge(c, 1, Integer::sum);
+        }
+
+        int bestLen = m + 1;                       // sentinel: none found
+        int bestStart = 0;
+
+        for (int i = 0; i &lt; m; i++) {
+            // Rebuilt per start: the wasteful part.
+            Map&lt;Character, Integer&gt; remaining = new HashMap&lt;&gt;(need);
+            int missing = n;
+
+            for (int j = i; j &lt; m; j++) {
+                char c = s.charAt(j);
+                int have = remaining.getOrDefault(c, 0);
+                if (have &gt; 0) {                    // satisfies a REAL need
+                    missing--;
+                }
+                remaining.put(c, have - 1);        // may go negative: surplus
+
+                if (missing == 0) {
+                    if (j - i + 1 &lt; bestLen) {     // strict &lt;: LEFTMOST best
+                        bestLen = j - i + 1;
+                        bestStart = i;
+                    }
+                    break;                         // nothing shorter starts at i
+                }
+            }
+        }
+
+        return bestLen == m + 1 ? "" : s.substring(bestStart, bestStart + bestLen);
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;array&gt;
+#include &lt;string&gt;
+
+// Every start index, extended until the window first becomes valid.
+// A flat 128-slot table is used instead of a hash map: the alphabet is
+// ASCII letters, so copying it per start is a fixed 512-byte memcpy.
+std::string minWindowBrute(const std::string&amp; s, const std::string&amp; t) {
+    const int m = static_cast&lt;int&gt;(s.size());
+    const int n = static_cast&lt;int&gt;(t.size());
+    if (m == 0 || n == 0 || n &gt; m) {
+        return {};                                 // cannot possibly fit
+    }
+
+    std::array&lt;int, 128&gt; need{};                    // zero-initialised
+    for (char c : t) {
+        ++need[static_cast&lt;unsigned char&gt;(c)];
+    }
+
+    int bestLen = m + 1;                           // sentinel: none found
+    int bestStart = 0;
+
+    for (int i = 0; i &lt; m; ++i) {
+        std::array&lt;int, 128&gt; remaining = need;      // rebuilt per start
+        int missing = n;
+
+        for (int j = i; j &lt; m; ++j) {
+            const auto c = static_cast&lt;unsigned char&gt;(s[j]);
+            if (remaining[c] &gt; 0) {                // satisfies a REAL need
+                --missing;
+            }
+            --remaining[c];                        // may go negative: surplus
+
+            if (missing == 0) {
+                if (j - i + 1 &lt; bestLen) {         // strict &lt;: LEFTMOST best
+                    bestLen = j - i + 1;
+                    bestStart = i;
+                }
+                break;                             // nothing shorter starts at i
+            }
+        }
+    }
+
+    return bestLen == m + 1 ? std::string{} : s.substr(bestStart, bestLen);
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(m&sup2; + m&middot;&Sigma;)</span>
+          <p>Each of <code>m</code> starts scans up to <code>m</code> characters at O(1) each, plus an O(&Sigma;) table copy per start. At <code>m = 10^5</code> that is around 10<sup>10</sup> operations &mdash; comfortably too slow, which is the point.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(&Sigma;)</span>
+          <p>Two count tables of at most 128 slots, independent of <code>m</code> and <code>n</code>. The brute force is not wasteful in memory &mdash; only in time.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>When the window from start <code>i</code> first becomes valid at <code>j</code>, moving to start <code>i+1</code> discards <code>remaining</code> and rescans <code>[i+1, j]</code> from scratch &mdash; but the only actual difference between the two windows is that <code>s[i]</code> left. Incrementing one counter recovers that in O(1). Do that instead of rebuilding, and <code>left</code> and <code>right</code> each traverse <code>s</code> exactly once.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> maintain one window plus two pieces of bookkeeping. <code>need[c]</code> is how many further copies of <code>c</code> the window still requires &mdash; it goes <em>negative</em> when the window holds a surplus. <code>missing</code> is a single integer: the total number of required copies not yet covered. The window is valid exactly when <code>missing == 0</code>, which is an O(1) test rather than an O(&Sigma;) map comparison.</p>
+      <p>The loop is then two alternating phases. Expand <code>right</code> one character at a time until the window becomes valid. Once valid, contract from the left as far as validity allows, recording the best window before each eviction. When contraction breaks validity, resume expanding. Neither pointer ever moves backwards.</p>
+      <ol class="step-list">
+        <li>If <code>n &gt; m</code>, return <code>""</code> immediately &mdash; nothing can fit.</li>
+        <li><code>need</code> = character counts of <code>t</code>; <code>missing = n</code>; <code>left = 0</code>; <code>best_len = &infin;</code>.</li>
+        <li><strong>Expand.</strong> For <code>right = 0 &hellip; m-1</code> with <code>c = s[right]</code>: if <code>need[c] &gt; 0</code>, this copy satisfies a real requirement, so <code>missing -= 1</code>. Then <code>need[c] -= 1</code> unconditionally.</li>
+        <li><strong>Contract.</strong> While <code>missing == 0</code>: record <code>[left, right]</code> if it beats <code>best_len</code>; then evict <code>lc = s[left]</code> by <code>need[lc] += 1</code>, and if <code>need[lc] &gt; 0</code> we just gave back a genuinely needed character, so <code>missing += 1</code>; advance <code>left</code>.</li>
+        <li>Return <code>s[best_start : best_start + best_len]</code>, or <code>""</code> if <code>best_len</code> was never set.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariants to say out loud</span>
+        <p><strong>(a)</strong> <code>need[c]</code> = <code>count<sub>t</sub>(c) - count<sub>window</sub>(c)</code>, for every character, at all times. <strong>(b)</strong> <code>missing</code> = the sum of <code>need[c]</code> over only those <code>c</code> where it is still positive &mdash; so <code>missing == 0</code> if and only if the window is valid. <strong>(c)</strong> When the contraction loop exits, <code>[left, right]</code> is the shortest valid window ending at <code>right</code>, if one exists. Since the answer is some window ending at some <code>right</code>, taking the minimum over all <code>right</code> is exhaustive. <strong>(d)</strong> <code>left</code> is non-decreasing, so the two pointers together perform at most <code>2m</code> steps.</p>
+      </div>
+      <div class="callout warn">
+        <span class="tag">The two subtleties interviewers probe</span>
+        <p><strong>Why the <code>need[c] &gt; 0</code> guard before decrementing?</strong> Because only a character the window still <em>needs</em> represents progress. Without the guard, a surplus <code>'A'</code> would also decrement <code>missing</code> and the window would be declared valid too early.</p>
+        <p><strong>Why let counts go negative?</strong> The sign is the eviction test. <code>need[lc] &lt; 0</code> before eviction means the window holds a surplus of <code>lc</code>, so removing it keeps the window valid; the count rises to 0 and <code>missing</code> is untouched. Only when the count rises <em>above</em> 0 have we removed something required, and validity genuinely breaks. That single comparison replaces re-checking the whole map.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">expand to r=5</span><p>window [0,5] <code>"ADOBEC"</code> becomes valid &rarr; <strong>best = "ADOBEC" (6)</strong>. Contracting fails at once: <code>'A'</code> at index 0 is required, not surplus.</p></div>
+          <div class="seq-row"><span class="actor">expand to r=10</span><p><code>'A'</code> arrives at index 10, so the window is valid again from left=1: <code>"DOBECODEBA"</code> (10). Now contraction runs: indices 1,2,3,4 are all surplus and get evicted, down to [5,10] <code>"CODEBA"</code> (6). Not shorter than 6, so best is unchanged.</p></div>
+          <div class="seq-row"><span class="actor">expand to r=12</span><p><code>'C'</code> arrives at index 12. Valid from left=6: <code>"ODEBANC"</code> (7). Contraction evicts indices 6, 7, 8 in turn &mdash; <code>"DEBANC"</code> (6), then <strong>"EBANC" (5)</strong>, then <strong>"BANC" (4)</strong>.</p></div>
+          <div class="seq-row"><span class="actor">stop</span><p>Evicting <code>'B'</code> at index 9 would break validity, so contraction halts and <code>right</code> has run out. Answer: <code>"BANC"</code>.</p></div>
+        </div>
+        <figcaption>s = "ADOBECODEBANC", t = "ABC". The best window is replaced three times, and <code>left</code> advances 0&rarr;1&rarr;5&rarr;6&rarr;9 &mdash; never backwards. Every character is added once and evicted at most once.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mw-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mw-op-py" data-lang="python"><pre><code class="language-python">from collections import Counter
+
+
+def min_window(s: str, t: str) -&gt; str:
+    """Expand-then-contract window over a multiset of required characters.
+
+    Invariants:
+      need[c] == count_t(c) - count_window(c)        (negative == surplus)
+      missing == sum of need[c] over c where need[c] &gt; 0
+                 so `missing == 0` &lt;=&gt; the window is valid
+      left is non-decreasing
+    """
+    m, n = len(s), len(t)
+    if m == 0 or n == 0 or n &gt; m:
+        return ""                              # cannot possibly fit
+
+    need = Counter(t)                          # char -&gt; copies still required
+    missing = n                                # required copies not yet covered
+    left = 0
+    best_len = m + 1                           # sentinel: "no window found"
+    best_start = 0
+
+    for right, ch in enumerate(s):
+        # ---- expand: absorb s[right] ----
+        if need[ch] &gt; 0:                       # satisfies a REAL requirement
+            missing -= 1
+        need[ch] -= 1                          # may go negative: surplus
+
+        # ---- contract: while still valid, shrink from the left ----
+        while missing == 0:
+            # The window is valid HERE, so record before evicting anything.
+            if right - left + 1 &lt; best_len:    # strict &lt;: keep LEFTMOST best
+                best_len = right - left + 1
+                best_start = left
+
+            lc = s[left]
+            need[lc] += 1
+            if need[lc] &gt; 0:                   # gave back a REQUIRED char
+                missing += 1                   # ... so validity just broke
+            left += 1
+
+    if best_len == m + 1:
+        return ""
+    return s[best_start:best_start + best_len]</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashMap;
+
+/// Expand-then-contract window over a multiset of required characters.
+///
+/// Invariants:
+///   need[c] == count_t(c) - count_window(c)      (negative == surplus)
+///   missing == sum of need[c] over c where need[c] &gt; 0
+///              so `missing == 0` &lt;=&gt; the window is valid
+///   left is non-decreasing
+pub fn min_window(s: &amp;str, t: &amp;str) -&gt; String {
+    let sb = s.as_bytes();
+    let tb = t.as_bytes();
+    let (m, n) = (sb.len(), tb.len());
+    if m == 0 || n == 0 || n &gt; m {
+        return String::new();                  // cannot possibly fit
+    }
+
+    let mut need: HashMap&lt;u8, i32&gt; = HashMap::new();
+    for &amp;b in tb {
+        *need.entry(b).or_insert(0) += 1;
+    }
+
+    let mut missing = n as i32;                // required copies not covered
+    let mut left = 0usize;
+    let mut best_len = m + 1;                  // sentinel: none found
+    let mut best_start = 0usize;
+
+    for right in 0..m {
+        // ---- expand: absorb sb[right] ----
+        let slot = need.entry(sb[right]).or_insert(0);
+        if *slot &gt; 0 {                         // satisfies a REAL requirement
+            missing -= 1;
+        }
+        *slot -= 1;                            // may go negative: surplus
+
+        // ---- contract: while still valid, shrink from the left ----
+        while missing == 0 {
+            // The window is valid HERE, so record before evicting anything.
+            if right - left + 1 &lt; best_len {   // strict &lt;: keep LEFTMOST best
+                best_len = right - left + 1;
+                best_start = left;
+            }
+
+            let lc = sb[left];
+            let lslot = need.entry(lc).or_insert(0);
+            *lslot += 1;
+            if *lslot &gt; 0 {                    // gave back a REQUIRED char
+                missing += 1;                  // ... so validity just broke
+            }
+            left += 1;
+        }
+    }
+
+    if best_len == m + 1 {
+        String::new()
+    } else {
+        s[best_start..best_start + best_len].to_string()
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.HashMap;
+import java.util.Map;
+
+class Solution {
+
+    /**
+     * Expand-then-contract window over a multiset of required characters.
+     *
+     * Invariants:
+     *   need[c] == countT(c) - countWindow(c)      (negative == surplus)
+     *   missing == sum of need[c] over c where need[c] &gt; 0
+     *              so missing == 0  &lt;=&gt;  the window is valid
+     *   left is non-decreasing
+     */
+    public String minWindow(String s, String t) {
+        final int m = s.length(), n = t.length();
+        if (m == 0 || n == 0 || n &gt; m) {
+            return "";                                 // cannot possibly fit
+        }
+
+        Map&lt;Character, Integer&gt; need = new HashMap&lt;&gt;();
+        for (char c : t.toCharArray()) {
+            need.merge(c, 1, Integer::sum);
+        }
+
+        int missing = n;                               // copies not yet covered
+        int left = 0;
+        int bestLen = m + 1;                           // sentinel: none found
+        int bestStart = 0;
+
+        for (int right = 0; right &lt; m; right++) {
+            // ---- expand: absorb s[right] ----
+            char c = s.charAt(right);
+            int have = need.getOrDefault(c, 0);
+            if (have &gt; 0) {                            // satisfies a REAL need
+                missing--;
+            }
+            need.put(c, have - 1);                     // may go negative
+
+            // ---- contract: while still valid, shrink from the left ----
+            while (missing == 0) {
+                // Valid HERE, so record before evicting anything.
+                if (right - left + 1 &lt; bestLen) {      // strict &lt;: LEFTMOST
+                    bestLen = right - left + 1;
+                    bestStart = left;
+                }
+
+                char lc = s.charAt(left);
+                int back = need.getOrDefault(lc, 0) + 1;
+                need.put(lc, back);
+                if (back &gt; 0) {                        // gave back a REQUIRED char
+                    missing++;                         // ... validity just broke
+                }
+                left++;
+            }
+        }
+
+        return bestLen == m + 1 ? "" : s.substring(bestStart, bestStart + bestLen);
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;array&gt;
+#include &lt;string&gt;
+
+// Expand-then-contract window over a multiset of required characters.
+//
+// Invariants:
+//   need[c] == count_t(c) - count_window(c)      (negative == surplus)
+//   missing == sum of need[c] over c where need[c] &gt; 0
+//              so missing == 0  &lt;=&gt;  the window is valid
+//   left is non-decreasing
+//
+// A flat table beats unordered_map here: no hashing, no allocation, and
+// indexing through unsigned char keeps a signed char from going negative.
+std::string minWindow(const std::string&amp; s, const std::string&amp; t) {
+    const int m = static_cast&lt;int&gt;(s.size());
+    const int n = static_cast&lt;int&gt;(t.size());
+    if (m == 0 || n == 0 || n &gt; m) {
+        return {};                                     // cannot possibly fit
+    }
+
+    std::array&lt;int, 128&gt; need{};                        // zero-initialised
+    for (char c : t) {
+        ++need[static_cast&lt;unsigned char&gt;(c)];
+    }
+
+    int missing = n;                                   // copies not yet covered
+    int left = 0;
+    int bestLen = m + 1;                               // sentinel: none found
+    int bestStart = 0;
+
+    for (int right = 0; right &lt; m; ++right) {
+        // ---- expand: absorb s[right] ----
+        const auto c = static_cast&lt;unsigned char&gt;(s[right]);
+        if (need[c] &gt; 0) {                             // satisfies a REAL need
+            --missing;
+        }
+        --need[c];                                     // may go negative
+
+        // ---- contract: while still valid, shrink from the left ----
+        while (missing == 0) {
+            // Valid HERE, so record before evicting anything.
+            if (right - left + 1 &lt; bestLen) {          // strict &lt;: LEFTMOST
+                bestLen = right - left + 1;
+                bestStart = left;
+            }
+
+            const auto lc = static_cast&lt;unsigned char&gt;(s[left]);
+            if (++need[lc] &gt; 0) {                      // gave back a REQUIRED char
+                ++missing;                             // ... validity just broke
+            }
+            ++left;
+        }
+    }
+
+    return bestLen == m + 1 ? std::string{} : s.substr(bestStart, bestLen);
+}</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(m + n)</span>
+          <p>Every character is absorbed by <code>right</code> exactly once and evicted by <code>left</code> at most once, so the pointers perform at most <code>2m</code> steps, each O(1). Building <code>need</code> costs O(n). The nested <code>while</code> does <em>not</em> make this quadratic &mdash; <code>left</code> never resets, which is the amortised argument to state explicitly.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(&Sigma;) = O(1)</span>
+          <p>One count table. Bounded by 128 for the stated alphabet, so constant; with a hash map it is O(min(n, &Sigma;)). The output slice is O(answer length) and only allocated once, after the loop.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p><code>n &gt; m</code> &rarr; <code>""</code> from the guard. <code>t</code> containing a character absent from <code>s</code> &rarr; <code>missing</code> never reaches 0 &rarr; <code>""</code>. <code>t = "aa"</code> against <code>s = "a"</code> &rarr; <code>""</code>, because <code>missing</code> starts at 2. Surplus characters &rarr; evicted by the contraction loop. <code>s == t</code> &rarr; the whole string. Ties &rarr; leftmost, via the strict <code>&lt;</code>.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: flat table, O(1) space, no copying</h3>
+      <p>Two upgrades the interviewer often asks for next. First, replace the hash map with a flat array indexed by character code: the alphabet is bounded, so this is strictly O(1) space and materially faster &mdash; no hashing, no allocation, no pointer chasing. Second, return the <em>bounds</em> <code>[start, end)</code> instead of a new string, so the caller decides whether to pay for a copy at all. The C++ version returns a <code>std::string_view</code> and the Rust version returns a borrowed <code>&amp;str</code>, both genuinely zero-copy.</p>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="mw-var-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-var-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-var-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="mw-var-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="mw-var-py" data-lang="python"><pre><code class="language-python">from typing import Tuple
+
+ALPHABET = 128                                 # ASCII covers both letter cases
+
+
+def min_window_bounds(s: str, t: str) -&gt; Tuple[int, int]:
+    """Same window on a flat table; returns [start, end) instead of a copy.
+
+    Returns (0, 0) when no valid window exists -- an empty half-open range.
+    Precondition: every character satisfies ord(ch) &lt; ALPHABET.
+    """
+    m, n = len(s), len(t)
+    if m == 0 or n == 0 or n &gt; m:
+        return (0, 0)
+
+    need = [0] * ALPHABET                      # code point -&gt; copies required
+    for ch in t:
+        need[ord(ch)] += 1
+
+    missing = n
+    left = 0
+    best_len = m + 1
+    best_start = 0
+
+    for right in range(m):
+        c = ord(s[right])
+        if need[c] &gt; 0:
+            missing -= 1
+        need[c] -= 1
+
+        while missing == 0:
+            if right - left + 1 &lt; best_len:
+                best_len = right - left + 1
+                best_start = left
+
+            lc = ord(s[left])
+            need[lc] += 1
+            if need[lc] &gt; 0:
+                missing += 1
+            left += 1
+
+    if best_len == m + 1:
+        return (0, 0)
+    return (best_start, best_start + best_len)</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-var-rs" data-lang="rust" hidden><pre><code class="language-rust">/// Same window on a flat 128-slot table, returning a BORROWED slice.
+///
+/// `None` means no valid window exists, which is more honest than an
+/// empty string: `Some("")` would be ambiguous if t were ever empty.
+/// Byte-indexed, so this is correct for the stated ASCII alphabet.
+pub fn min_window_view&lt;'a&gt;(s: &amp;'a str, t: &amp;str) -&gt; Option&lt;&amp;'a str&gt; {
+    let sb = s.as_bytes();
+    let tb = t.as_bytes();
+    let (m, n) = (sb.len(), tb.len());
+    if m == 0 || n == 0 || n &gt; m {
+        return None;
+    }
+
+    let mut need = [0i32; 128];                // byte value -&gt; copies required
+    for &amp;b in tb {
+        need[b as usize] += 1;
+    }
+
+    let mut missing = n as i32;
+    let mut left = 0usize;
+    let mut best_len = m + 1;
+    let mut best_start = 0usize;
+
+    for right in 0..m {
+        let c = sb[right] as usize;
+        if need[c] &gt; 0 {
+            missing -= 1;
+        }
+        need[c] -= 1;
+
+        while missing == 0 {
+            if right - left + 1 &lt; best_len {
+                best_len = right - left + 1;
+                best_start = left;
+            }
+
+            let lc = sb[left] as usize;
+            need[lc] += 1;
+            if need[lc] &gt; 0 {
+                missing += 1;
+            }
+            left += 1;
+        }
+    }
+
+    if best_len == m + 1 {
+        None
+    } else {
+        Some(&amp;s[best_start..best_start + best_len])
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-var-java" data-lang="java" hidden><pre><code class="language-java">class Solution {
+
+    private static final int ALPHABET = 128;   // covers both letter cases
+
+    /**
+     * Same window on a flat table, returning bounds {start, end} rather
+     * than a copy. Returns {0, 0} -- an empty range -- when none exists.
+     * Precondition: every char is below ALPHABET.
+     */
+    public int[] minWindowBounds(String s, String t) {
+        final int m = s.length(), n = t.length();
+        if (m == 0 || n == 0 || n &gt; m) {
+            return new int[] {0, 0};
+        }
+
+        int[] need = new int[ALPHABET];        // code point -&gt; copies required
+        for (int i = 0; i &lt; n; i++) {
+            need[t.charAt(i)]++;
+        }
+
+        int missing = n;
+        int left = 0;
+        int bestLen = m + 1;
+        int bestStart = 0;
+
+        for (int right = 0; right &lt; m; right++) {
+            int c = s.charAt(right);
+            if (need[c] &gt; 0) {
+                missing--;
+            }
+            need[c]--;
+
+            while (missing == 0) {
+                if (right - left + 1 &lt; bestLen) {
+                    bestLen = right - left + 1;
+                    bestStart = left;
+                }
+
+                int lc = s.charAt(left);
+                if (++need[lc] &gt; 0) {
+                    missing++;
+                }
+                left++;
+            }
+        }
+
+        return bestLen == m + 1
+                ? new int[] {0, 0}
+                : new int[] {bestStart, bestStart + bestLen};
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="mw-var-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;array&gt;
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+
+// Same window on a flat table, returning a NON-OWNING view -- no copy.
+//
+// Caveat worth stating: the view borrows from `s`, so it dangles if `s`
+// is a temporary. Taking string_view parameters makes that explicit.
+std::string_view minWindowView(std::string_view s, std::string_view t) {
+    const int m = static_cast&lt;int&gt;(s.size());
+    const int n = static_cast&lt;int&gt;(t.size());
+    if (m == 0 || n == 0 || n &gt; m) {
+        return {};                                     // empty view
+    }
+
+    std::array&lt;int, 128&gt; need{};
+    for (char c : t) {
+        ++need[static_cast&lt;unsigned char&gt;(c)];
+    }
+
+    int missing = n;
+    int left = 0;
+    int bestLen = m + 1;
+    int bestStart = 0;
+
+    for (int right = 0; right &lt; m; ++right) {
+        const auto c = static_cast&lt;unsigned char&gt;(s[right]);
+        if (need[c] &gt; 0) {
+            --missing;
+        }
+        --need[c];
+
+        while (missing == 0) {
+            if (right - left + 1 &lt; bestLen) {
+                bestLen = right - left + 1;
+                bestStart = left;
+            }
+
+            const auto lc = static_cast&lt;unsigned char&gt;(s[left]);
+            if (++need[lc] &gt; 0) {
+                ++missing;
+            }
+            ++left;
+        }
+    }
+
+    return bestLen == m + 1
+            ? std::string_view{}
+            : s.substr(bestStart, bestLen);
+}</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(m + n)</span>
+          <p>Identical pass, minus the hashing and the per-character allocation. Typically 2&ndash;4&times; faster in practice on ASCII input.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(&Sigma;) = O(1)</span>
+          <p>A fixed 128-slot table regardless of input size, and <strong>zero</strong> output allocation &mdash; Rust and C++ return borrows, Python and Java return indices.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>&ldquo;<code>s</code> is 10<sup>6</sup> characters but <code>t</code> is only 3. Can you do better?&rdquo;</strong> Yes &mdash; the window wastes almost all its steps on irrelevant characters. Pre-filter <code>s</code> into a list of <code>(index, char)</code> pairs keeping only characters that appear in <code>t</code>, then slide over that list and compute widths from the stored original indices. Cost becomes O(m) for the filter plus O(k) for the window, where <code>k</code> is the number of relevant characters. Same asymptotics, but a large constant-factor win, and it is the natural answer to &ldquo;what if <code>t</code> is tiny?&rdquo;</li>
+        <li><strong>Minimum window <em>subsequence</em>.</strong> Drop contiguity of the match (the window is still contiguous, but <code>t</code> must appear inside it in order, not merely by count) and the sliding window collapses &mdash; counts are no longer sufficient because order matters. It becomes an O(m&middot;n) dynamic program, or a two-pointer forward/backward sweep. A good contrast to show you know <em>why</em> the window works here rather than just that it does.</li>
+        <li><strong>Many queries against one fixed <code>s</code>.</strong> Precompute, for each character, the sorted list of its positions in <code>s</code>. Each query then works over only the relevant positions, which is a large win when the queried <code>t</code> use rare characters. Worth mentioning that this trades preprocessing memory O(m) for per-query speed.</li>
+        <li><strong>Longest substring with at most k distinct characters</strong> / <strong>at most k replacements</strong>. The same two-pointer skeleton with a different predicate. Useful to name because it shows the pattern is a family: this problem is &ldquo;shrink while valid&rdquo;, those are &ldquo;shrink while invalid&rdquo;. Getting that direction backwards is the classic error.</li>
+        <li><strong>Streaming <code>s</code> of unbounded length.</strong> The pointers only move forward, so the algorithm runs unchanged &mdash; but returning the substring requires retaining the current window, which is unbounded in the worst case. If only the length is needed, memory stays O(&Sigma;).</li>
+        <li><strong>Full Unicode input.</strong> Iterate over code points rather than bytes; a byte-indexed table silently mis-slices UTF-8. The table becomes a hash map and space rises to O(min(n, &Sigma;)). If graphemes are the unit of comparison, segment first and run the same window over the cluster list.</li>
+        <li><strong>Return every minimum-length window, not just one.</strong> Collect all windows achieving <code>best_len</code> rather than replacing on strict <code>&lt;</code> (see example 7, which has three). Output is O(m) windows in the worst case, so ask whether they want them materialised or streamed.</li>
+        <li><strong>Why can we not binary-search the answer length?</strong> Actually we can: &ldquo;there exists a valid window of width <code>w</code>&rdquo; is monotone in <code>w</code>, so a fixed-width scan per candidate <code>w</code> gives O(m log m). Strictly worse than O(m), but it is the right answer to &ldquo;can you think of another approach?&rdquo; and it demonstrates you spotted the monotonicity.</li>
+        <li><strong>Weighted variant.</strong> If each character carries a cost and you must minimise total window cost rather than width, monotonicity breaks &mdash; a wider window can be cheaper &mdash; and the two-pointer argument fails entirely. Good probe for whether you know which property you were relying on.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Confirm substring-not-subsequence and multiset-not-set, notice that <code>m = 10^5</code> forbids the quadratic baseline, state and discard the brute force, write the window with the <code>need[c] &gt; 0</code> guard and the record-before-evict ordering both correct on the first attempt, give the amortised O(m + n) argument for why the nested loop is not quadratic, and quantify space as O(&Sigma;) = O(1).</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../trapping_rain_water/">&larr; Trapping rain water</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <span class="problem-nav-link next muted">End of topic &rarr;</span>
+    </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>
