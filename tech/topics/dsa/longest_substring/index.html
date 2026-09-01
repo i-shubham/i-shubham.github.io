@@ -72,25 +72,42 @@
       <div class="tech-code"><span class="code-lang">contract</span><pre><code>length_of_longest_substring(s: str) -&gt; int   # length only, not the substring</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  s = "abcabcbb"
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the standard case</span>
+          <pre><code>Input:  s = "abcabcbb"
 Output: 3
-Why:    "abc" (and "bca", "cab") — every longer window repeats a character.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — all identical</span><pre><code>Input:  s = "bbbbb"
+Why:    "abc" (and "bca", "cab") — every longer window repeats a character.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — all identical</span>
+          <pre><code>Input:  s = "bbbbb"
 Output: 1
-Why:    every window of length 2 already repeats. Answer is a single 'b'.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — the answer is not a prefix</span><pre><code>Input:  s = "pwwkew"
+Why:    every window of length 2 already repeats. Answer is a single 'b'.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — the answer is not a prefix</span>
+          <pre><code>Input:  s = "pwwkew"
 Output: 3
 Why:    "wke" — not "pwke", which is a subsequence, not a substring.
-        This example exists precisely to catch subsequence answers.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 4 — the left-pointer trap</span><pre><code>Input:  s = "abba"
+        This example exists precisely to catch subsequence answers.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 4 — the left-pointer trap</span>
+          <pre><code>Input:  s = "abba"
 Output: 2
 Why:    at right = 3 ('a'), the previous 'a' sits at index 0, which is
         ALREADY BEHIND the window (left = 2). Jumping left back to 1 would
-        report "bba" = 3. Wrong. left must never decrease.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 5 — degenerate inputs</span><pre><code>Input:  s = ""     -&gt; Output: 0
+        report "bba" = 3. Wrong. left must never decrease.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 5 — degenerate inputs</span>
+          <pre><code>Input:  s = ""     -&gt; Output: 0
 Input:  s = " "    -&gt; Output: 1     (space is a character)
 Input:  s = "au"   -&gt; Output: 2
-Input:  s = "dvdf" -&gt; Output: 3     ("vdf", again a non-prefix answer)</code></pre></div>
+Input:  s = "dvdf" -&gt; Output: 3     ("vdf", again a non-prefix answer)</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

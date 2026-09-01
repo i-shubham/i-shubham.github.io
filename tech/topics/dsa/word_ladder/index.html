@@ -75,25 +75,36 @@
 # or 0 when no sequence exists.</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  beginWord = "hit", endWord = "cog",
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the standard case</span>
+          <pre><code>Input:  beginWord = "hit", endWord = "cog",
         wordList  = ["hot","dot","dog","lot","log","cog"]
 Output: 5
 Why:    "hit" -&gt; "hot" -&gt; "dot" -&gt; "dog" -&gt; "cog"
         That is 5 WORDS and 4 EDGES. The answer counts words.
 Note:   "hit" -&gt; "hot" -&gt; "lot" -&gt; "log" -&gt; "cog" is an equally short
-        alternative -- the shortest length is unique, the path is not.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — unreachable target</span><pre><code>Input:  beginWord = "hit", endWord = "cog",
+        alternative -- the shortest length is unique, the path is not.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — unreachable target</span>
+          <pre><code>Input:  beginWord = "hit", endWord = "cog",
         wordList  = ["hot","dot","dog","lot","log"]     # no "cog"
 Output: 0
 Why:    endWord is not in wordList, so it can never be a legal step.
-        Check this FIRST -- it is a one-line early exit.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — the ones that catch people</span><pre><code>begin="a", end="c", list=["a","b","c"]        -&gt; 2    ("a" -&gt; "c" directly)
+        Check this FIRST -- it is a one-line early exit.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — the ones that catch people</span>
+          <pre><code>begin="a", end="c", list=["a","b","c"]        -&gt; 2    ("a" -&gt; "c" directly)
 begin="hot", end="dog", list=["hot","dog"]    -&gt; 0    (2 letters differ)
 begin="hit", end="hot", list=["hot"]          -&gt; 2    (beginWord need NOT
                                                        be in wordList)
 begin="talk", end="tail", list=["talk","tons","fall","tail","gale","hall","negs"]
                                               -&gt; 0    (no single-letter bridge
-                                                       from "talk" to "tail")</code></pre></div>
+                                                       from "talk" to "tail")</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

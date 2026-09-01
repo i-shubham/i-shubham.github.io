@@ -77,23 +77,37 @@ can_finish(num_courses: int, prerequisites: List[List[int]]) -&gt; bool
 find_order(num_courses: int, prerequisites: List[List[int]]) -&gt; List[int]</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — simple chain</span><pre><code>Input:  numCourses = 2, prerequisites = [[1,0]]
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — simple chain</span>
+          <pre><code>Input:  numCourses = 2, prerequisites = [[1,0]]
         # "to take 1, first take 0"  =&gt;  edge 0 -&gt; 1
-Output: canFinish = true,  findOrder = [0,1]</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — the cycle</span><pre><code>Input:  numCourses = 2, prerequisites = [[1,0],[0,1]]
+Output: canFinish = true,  findOrder = [0,1]</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — the cycle</span>
+          <pre><code>Input:  numCourses = 2, prerequisites = [[1,0],[0,1]]
         # 0 -&gt; 1 and 1 -&gt; 0
 Output: canFinish = false, findOrder = []
-Why:    each course waits on the other; neither can ever start.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — diamond, multiple valid answers</span><pre><code>Input:  numCourses = 4, prerequisites = [[1,0],[2,0],[3,1],[3,2]]
+Why:    each course waits on the other; neither can ever start.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — diamond, multiple valid answers</span>
+          <pre><code>Input:  numCourses = 4, prerequisites = [[1,0],[2,0],[3,1],[3,2]]
         # 0 -&gt; 1, 0 -&gt; 2, 1 -&gt; 3, 2 -&gt; 3
 Output: canFinish = true
         findOrder = [0,1,2,3]  OR  [0,2,1,3]   -- both correct
-Why:    the answer is not unique. Confirm "any valid order" is acceptable.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 4 — the ones people forget</span><pre><code>numCourses = 1, prerequisites = []       -&gt; true,  [0]
+Why:    the answer is not unique. Confirm "any valid order" is acceptable.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 4 — the ones people forget</span>
+          <pre><code>numCourses = 1, prerequisites = []       -&gt; true,  [0]
 numCourses = 3, prerequisites = []       -&gt; true,  [0,1,2]   (no edges at all)
 numCourses = 1, prerequisites = [[0,0]]  -&gt; false, []        (SELF-LOOP)
 numCourses = 5, prerequisites = [[1,0],[4,3]] -&gt; true, [0,3,1,4]
-                                                # two disconnected components</code></pre></div>
+                                                # two disconnected components</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

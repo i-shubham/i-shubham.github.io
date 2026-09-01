@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>
+    if (/\/index\.html$/i.test(location.pathname)) {
+      location.replace(location.pathname.replace(/\/index\.html$/i, '/') + location.search + location.hash);
+    }
+  </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remove invalid parentheses | DSA | Engineering Notes</title>
+  <meta name="description" content="Minimum deletions to make a parentheses string valid — BFS by removal count so the first valid layer is optimal, then DFS with a precomputed budget.">
+  <link rel="icon" href="../../../../assets/img/profile-img.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="../../../css/tech.css" rel="stylesheet">
+  <script src="../../../../assets/js/navigation.js"></script>
+</head>
+<body>
+<main>
+  <header class="problem-hero">
+    <div class="container">
+      <p class="breadcrumbs"><a href="../../../tech-index.html">Engineering Notes</a> / <a href="../">DSA</a> / Remove invalid parentheses</p>
+      <p class="eyebrow">DSA · Hard · ~45 min</p>
+      <h1>Remove invalid parentheses</h1>
+      <p class="problem-deck">Not &ldquo;is it valid?&rdquo; and not &ldquo;delete until it works.&rdquo; Return every distinct string you can get by deleting as few parentheses as possible.</p>
+    </div>
+  </header>
+
+  <div class="container problem-detail">
+
+    <nav class="problem-toc" aria-label="On this page">
+      <strong>Discussion structure</strong>
+      <ol>
+        <li><a href="#s1">1. Problem statement &amp; explanation</a></li>
+        <li class="sub"><a href="#s1-1">1.1 Input / output</a></li>
+        <li><a href="#s2">2. Open questions &amp; clarifications</a></li>
+        <li class="sub"><a href="#s2-1">2.1 Suggestions to the candidate</a></li>
+        <li><a href="#s3">3. Brute-force approach</a></li>
+        <li class="sub"><a href="#s3-1">3.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s3-2">3.2 Complexity</a></li>
+        <li><a href="#s4">4. Optimised approach</a></li>
+        <li class="sub"><a href="#s4-1">4.1 Code — Python, Rust, Java, C++</a></li>
+        <li class="sub"><a href="#s4-2">4.2 Complexity</a></li>
+        <li class="sub"><a href="#s4-3">4.3 Variant: DFS with a precomputed removal budget</a></li>
+        <li><a href="#s5">5. Follow-up discussion if time permits</a></li>
+      </ol>
+    </nav>
+
+    <figure class="diagram dark" aria-label="How the 45 minutes break down">
+      <div class="stack-flow">
+        <div class="stack-step"><strong>0–5 min</strong><div><strong>Sections 1–2</strong><p>What &ldquo;valid&rdquo; means with letters mixed in, whether letters may be deleted, unique vs all, empty string as a legal answer.</p></div></div>
+        <div class="stack-step"><strong>5–12 min</strong><div><strong>Section 3</strong><p>Enumerate which parentheses to drop. The constraint (at most 20 parentheses) is why this even compiles in time.</p></div></div>
+        <div class="stack-step"><strong>12–32 min</strong><div><strong>Section 4</strong><p>BFS by number of deletions: the first layer that contains a valid string is the minimum. Dedup with a seen set.</p></div></div>
+        <div class="stack-step"><strong>32–45 min</strong><div><strong>Section 5</strong><p>Follow-ups: return any one string, only the deletion count, other bracket types, why a stack of indices is not enough.</p></div></div>
+      </div>
+      <figcaption>The hard part is not validity &mdash; it is generating every distinct minimum-edit string without exploding into 2<sup>n</sup> duplicates.</figcaption>
+    </figure>
+
+    <!-- ===================== 1 ===================== -->
+    <section class="problem-section" id="s1">
+      <h2><span class="num">1.</span> Problem statement &amp; explanation</h2>
+      <p>Given a string <code>s</code> of lowercase letters and the two characters <code>'('</code> and <code>')'</code>, delete the <strong>fewest</strong> parentheses you can so that what remains is a valid parentheses string. Return <strong>all distinct</strong> results. Order does not matter.</p>
+      <p>A string is valid when two things hold at once. Reading left to right, a running balance (plus one for <code>'('</code>, minus one for <code>')'</code>, letters ignored) never goes negative. At the end, that balance is exactly zero. Letters are payload: they never affect the balance, and because deleting a letter cannot fix an imbalance, a minimum-deletion answer always keeps every letter.</p>
+      <p>Minimum is essential. For <code>"()())()"</code> the empty string is valid, as is <code>"()"</code>, but both delete more than necessary. The only length-preserving-enough answers are <code>"(())()"</code> and <code>"()()()"</code> &mdash; each deletes a single extra <code>')'</code>. The problem is therefore a shortest-edit search whose alphabet of edits is &ldquo;delete this parenthesis.&rdquo;</p>
+
+      <h3 id="s1-1"><span class="num">1.1</span> Input / output</h3>
+      <h4>Signature</h4>
+      <div class="tech-code"><span class="code-lang">contract</span><pre><code>remove_invalid_parentheses(s: str) -&gt; list[str]   # unique valid strings, any order</code></pre></div>
+
+      <h4>Worked examples</h4>
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — two ways to drop one extra ')'</span>
+          <pre><code>Input:  s = "()())()"
+Output: ["(())()", "()()()"]
+Why:    balance goes negative at the third ')'. Deleting the ')' at
+        index 1 yields "(())()"; deleting the one at index 3 (or 4)
+        yields "()()()". Deleting any other single paren leaves it invalid.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — letters are cargo, they stay</span>
+          <pre><code>Input:  s = "(a)())()"
+Output: ["(a())()", "(a)()()"]
+Why:    same shape as example 1 with an 'a' glued inside the first pair.
+        'a' is never a candidate for deletion.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — nothing salvageable</span>
+          <pre><code>Input:  s = ")("
+Output: [""]
+Why:    the prefix ')' is already illegal, and the leftover '(' is an
+        unmatched opener. Both must go. The empty string is valid:
+        balance never moves and ends at 0.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 4 — already valid</span>
+          <pre><code>Input:  s = "(a)()"
+Output: ["(a)()"]
+Why:    zero deletions. Returning a proper subset like "()" would be
+        valid but not minimum. The already-valid input is the unique answer.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 5 — only letters, or only junk</span>
+          <pre><code>Input:  s = "abc"   -&gt;  ["abc"]     (no parentheses: vacuously valid)
+Input:  s = "(("    -&gt;  [""]        (two unmatched openers)
+Input:  s = "(()"   -&gt;  ["()"]      (drop either '(' ; both yield the same string)
+Input:  s = ")(f"   -&gt;  ["f"]       (drop both parens, keep the letter)</code></pre>
+        </div>
+      </div>
+
+      <h4>Constraints to state back</h4>
+      <ul class="spec-list">
+        <li><code>1 &le; s.length &le; 25</code> &mdash; tiny as strings go, which is why exponential search is on the table.</li>
+        <li><code>s</code> is lowercase English letters plus <code>'('</code> and <code>')'</code> only. No other brackets, no whitespace.</li>
+        <li>At most 20 parentheses. That is the real branching limit: 2<sup>20</sup> &asymp; 10<sup>6</sup> subsets of parens, not 2<sup>25</sup>.</li>
+        <li>Return unique strings, any order. Duplicate generation is a correctness bug even if the judge later uniques them.</li>
+        <li>The empty string is a legal answer (example 3). Do not special-case it away.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section class="problem-section" id="s2">
+      <h2><span class="num">2.</span> Open questions &amp; clarifications</h2>
+      <ul class="ask-list">
+        <li><strong>May letters be deleted?</strong> The title says parentheses, and a minimum answer never needs to drop a letter. Confirm: &ldquo;I will only ever delete <code>'('</code> or <code>')'</code>.&rdquo;</li>
+        <li><strong>What does valid mean once letters are in the mix?</strong> Restate the balance rule with letters ignored. <code>"(a)"</code> is valid; <code>"a)("</code> is not; <code>"abc"</code> is.</li>
+        <li><strong>All minimum strings, or any one?</strong> The prompt asks for the full unique list. A greedy stack that deletes the first extra <code>')'</code> it sees returns one valid string, not all of them, and is the wrong algorithm.</li>
+        <li><strong>Is the empty string allowed?</strong> Yes. <code>")("</code> must return <code>[""]</code>, not an empty list.</li>
+        <li><strong>Does order of the output list matter?</strong> No. Dedup does.</li>
+        <li><strong>Are there other bracket types?</strong> Not in this prompt. If <code>'['</code> / <code>'{'</code> appear later, a single integer balance is no longer enough.</li>
+        <li><strong>Can I mutate <code>s</code> in place?</strong> You will generate many candidates; treat <code>s</code> as immutable and allocate new strings.</li>
+        <li><strong>Expected n?</strong> 25 with 20 parens is the whole story. If n were 10<sup>4</sup>, returning all strings would be the wrong problem.</li>
+      </ul>
+
+      <h3 id="s2-1"><span class="num">2.1</span> Suggestions to the candidate</h3>
+      <ul class="tip-list">
+        <li><strong>Do not jump to a stack.</strong> A stack (or a balance counter) decides <em>whether</em> a string is valid. It does not enumerate every way to make it valid. Validity is a primitive you will call; it is not the solution.</li>
+        <li><strong>Do not present the BFS first.</strong> Start from &ldquo;every subset of parentheses can be kept or dropped.&rdquo; Once that is on the board, BFS is the observation that strings with k deletions are exactly the neighbours of strings with k&minus;1 deletions, so the first valid layer is optimal.</li>
+        <li><strong>Write <code>is_valid</code> as its own function and test it out loud</strong> on <code>"()"</code>, <code>")("</code>, <code>"(a)"</code>, <code>"abc"</code>. If that helper is wrong, every search built on it is theatre.</li>
+        <li><strong>State the search graph.</strong> Vertices are strings. An edge is &ldquo;delete one parenthesis.&rdquo; You want every vertex at minimum distance from <code>s</code> that is valid. That sentence is the BFS.</li>
+        <li><strong>Dedup as you generate, not afterwards.</strong> Deleting index 3 then 5 is the same string as deleting 5 then 3. A <code>seen</code> set on the generated string is the cheapest correctness fix in the problem.</li>
+        <li><strong>Stop expanding once a valid string appears at the current distance.</strong> Further deletions cannot be minimum. Forgetting this still returns correct strings if you filter by length later, but it wastes the entire next 2<sup>n</sup> layer.</li>
+        <li><strong>Do not delete letters in the neighbour loop.</strong> It is wasted branching and, worse, it can look like you did not understand the objective.</li>
+        <li><strong>Trace <code>"()())()"</code> after you code.</strong> Show the first layer is the original (invalid), the second layer contains both answers, and you halt. Finding that yourself is the signal; having the interviewer find a missing string is not.</li>
+      </ul>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section class="problem-section" id="s3">
+      <h2><span class="num">3.</span> Brute-force approach</h2>
+      <p>There are at most 20 parentheses. Each may be kept or deleted, independently. Letters are always kept. That is at most 2<sup>20</sup> candidate strings. For each candidate, run the O(n) balance check; among the valid ones, keep those with the fewest deletions.</p>
+      <ol class="step-list">
+        <li>Collect the indices of every <code>'('</code> and <code>')'</code>.</li>
+        <li>Iterate <code>mask</code> from <code>0</code> to <code>2<sup>p</sup> &minus; 1</code>, where bit <code>b</code> means &ldquo;delete the parenthesis at <code>idxs[b]</code>.&rdquo;</li>
+        <li>If this mask deletes more than the best already found, skip it.</li>
+        <li>Build the candidate, test validity, and replace or extend the answer set when the deletion count is better or equal.</li>
+      </ol>
+      <div class="callout warn">
+        <span class="tag">Say this while writing it</span>
+        <p>Bitmasking the whole string (including letters) is 2<sup>25</sup> &asymp; 33 million and still technically in, but it is the wrong search space: half of those masks delete a letter and cannot be minimum. Restricting the bits to parentheses is the first real optimisation, and it is still brute force.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="flow-row">
+          <span class="node">p paren indices<br><small>each bit = delete?</small></span><b>&rarr;</b>
+          <span class="node">build candidate<br><small>letters always kept</small></span><b>&rarr;</b>
+          <span class="node accent">valid and min deletions?<br><small>keep in a set</small></span>
+        </div>
+        <figcaption>Correct, complete, and indifferent to the fact that most masks are longer than the minimum. BFS will visit masks in increasing deletion count instead.</figcaption>
+      </figure>
+
+      <h3 id="s3-1"><span class="num">3.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="rip-bf-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-bf-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-bf-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-bf-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="rip-bf-py" data-lang="python"><pre><code class="language-python">from typing import List
+
+
+def is_valid(s: str) -&gt; bool:
+    """Balance never negative, ends at zero. Letters are ignored."""
+    bal = 0
+    for ch in s:
+        if ch == '(':
+            bal += 1
+        elif ch == ')':
+            bal -= 1
+            if bal &lt; 0:
+                return False
+    return bal == 0
+
+
+def remove_invalid_brute(s: str) -&gt; List[str]:
+    """Every subset of parentheses deleted; keep the valid, fewest-deleted ones."""
+    idxs = [i for i, ch in enumerate(s) if ch in '()']
+    p = len(idxs)
+    best = p + 1
+    found = set()
+
+    for mask in range(1 &lt;&lt; p):
+        deleted = bin(mask).count('1')
+        if deleted &gt; best:                 # already have a cheaper valid string
+            continue
+
+        drop = {idxs[b] for b in range(p) if mask &amp; (1 &lt;&lt; b)}
+        cand = ''.join(ch for i, ch in enumerate(s) if i not in drop)
+
+        if not is_valid(cand):
+            continue
+        if deleted &lt; best:
+            best = deleted
+            found = {cand}                 # cheaper: throw away the previous layer
+        else:
+            found.add(cand)
+
+    return list(found)</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-bf-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashSet;
+
+fn is_valid(s: &amp;str) -&gt; bool {
+    let mut bal: i32 = 0;
+    for ch in s.chars() {
+        match ch {
+            '(' =&gt; bal += 1,
+            ')' =&gt; {
+                bal -= 1;
+                if bal &lt; 0 {
+                    return false;
+                }
+            }
+            _ =&gt; {}
+        }
+    }
+    bal == 0
+}
+
+/// Every subset of parentheses deleted; keep the valid, fewest-deleted ones.
+pub fn remove_invalid_brute(s: &amp;str) -&gt; Vec&lt;String&gt; {
+    let chars: Vec&lt;char&gt; = s.chars().collect();
+    let idxs: Vec&lt;usize&gt; = chars
+        .iter()
+        .enumerate()
+        .filter(|(_, ch)| **ch == '(' || **ch == ')')
+        .map(|(i, _)| i)
+        .collect();
+    let p = idxs.len();
+    let mut best = p + 1;
+    let mut found: HashSet&lt;String&gt; = HashSet::new();
+
+    for mask in 0..(1usize &lt;&lt; p) {
+        let deleted = mask.count_ones() as usize;
+        if deleted &gt; best {
+            continue;
+        }
+        let cand: String = chars
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (0..p).all(|b| mask &amp; (1 &lt;&lt; b) == 0 || idxs[b] != *i))
+            .map(|(_, ch)| *ch)
+            .collect();
+        if !is_valid(&amp;cand) {
+            continue;
+        }
+        if deleted &lt; best {
+            best = deleted;
+            found.clear();
+        }
+        found.insert(cand);
+    }
+    found.into_iter().collect()
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-bf-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+class Solution {
+
+    private boolean isValid(String s) {
+        int bal = 0;
+        for (int i = 0; i &lt; s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') {
+                bal++;
+            } else if (c == ')') {
+                if (--bal &lt; 0) {
+                    return false;
+                }
+            }
+        }
+        return bal == 0;
+    }
+
+    /** Every subset of parentheses deleted; keep the valid, fewest-deleted ones. */
+    public List&lt;String&gt; removeInvalidParenthesesBrute(String s) {
+        List&lt;Integer&gt; idxs = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(' || c == ')') {
+                idxs.add(i);
+            }
+        }
+        int p = idxs.size();
+        int best = p + 1;
+        Set&lt;String&gt; found = new HashSet&lt;&gt;();
+
+        for (int mask = 0; mask &lt; (1 &lt;&lt; p); mask++) {
+            int deleted = Integer.bitCount(mask);
+            if (deleted &gt; best) {
+                continue;
+            }
+            StringBuilder cand = new StringBuilder();
+            for (int i = 0, b = 0; i &lt; s.length(); i++) {
+                if (b &lt; p &amp;&amp; idxs.get(b) == i) {
+                    boolean drop = (mask &amp; (1 &lt;&lt; b)) != 0;
+                    b++;
+                    if (drop) {
+                        continue;
+                    }
+                }
+                cand.append(s.charAt(i));
+            }
+            String str = cand.toString();
+            if (!isValid(str)) {
+                continue;
+            }
+            if (deleted &lt; best) {
+                best = deleted;
+                found.clear();
+            }
+            found.add(str);
+        }
+        return new ArrayList&lt;&gt;(found);
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-bf-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;bit&gt;
+#include &lt;string&gt;
+#include &lt;unordered_set&gt;
+#include &lt;vector&gt;
+
+bool isValid(const std::string&amp; s) {
+    int bal = 0;
+    for (char c : s) {
+        if (c == '(') {
+            ++bal;
+        } else if (c == ')') {
+            if (--bal &lt; 0) {
+                return false;
+            }
+        }
+    }
+    return bal == 0;
+}
+
+// Every subset of parentheses deleted; keep the valid, fewest-deleted ones.
+std::vector&lt;std::string&gt; removeInvalidParenthesesBrute(const std::string&amp; s) {
+    std::vector&lt;int&gt; idxs;
+    for (int i = 0; i &lt; static_cast&lt;int&gt;(s.size()); ++i) {
+        if (s[i] == '(' || s[i] == ')') {
+            idxs.push_back(i);
+        }
+    }
+    const int p = static_cast&lt;int&gt;(idxs.size());
+    int best = p + 1;
+    std::unordered_set&lt;std::string&gt; found;
+
+    for (int mask = 0; mask &lt; (1 &lt;&lt; p); ++mask) {
+        const int deleted = std::popcount(static_cast&lt;unsigned&gt;(mask));
+        if (deleted &gt; best) {
+            continue;
+        }
+        std::string cand;
+        cand.reserve(s.size());
+        for (int i = 0, b = 0; i &lt; static_cast&lt;int&gt;(s.size()); ++i) {
+            if (b &lt; p &amp;&amp; idxs[b] == i) {
+                const bool drop = (mask &amp; (1 &lt;&lt; b)) != 0;
+                ++b;
+                if (drop) {
+                    continue;
+                }
+            }
+            cand.push_back(s[i]);
+        }
+        if (!isValid(cand)) {
+            continue;
+        }
+        if (deleted &lt; best) {
+            best = deleted;
+            found.clear();
+        }
+        found.insert(std::move(cand));
+    }
+    return {found.begin(), found.end()};
+}</code></pre></div>
+      </div>
+
+      <h3 id="s3-2"><span class="num">3.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n &middot; 2<sup>p</sup>)</span>
+          <p>p &le; 20 parenthesis positions, n &le; 25. Each mask builds and checks a string in O(n). About 25 million character operations in the worst case &mdash; acceptable under these limits, pointless if n grew.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n &middot; k)</span>
+          <p>k is the number of distinct minimum answers (plus O(n) to build the current candidate). The search itself is O(1) extra besides the output set.</p>
+        </div>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Why this is not the final answer</span>
+        <p>Almost every mask deletes too many parentheses. You already know a cheaper valid string exists, yet you still generate the rest. Searching in increasing deletion count &mdash; BFS on &ldquo;delete one more parenthesis&rdquo; &mdash; stops at the first valid layer and never builds those masks.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section class="problem-section" id="s4">
+      <h2><span class="num">4.</span> Optimised approach</h2>
+      <p><strong>Key insight:</strong> treat strings as vertices of an unweighted graph. From a string, the neighbours are every string obtained by deleting exactly one parenthesis. Distance from <code>s</code> is the number of deletions. Unweighted shortest paths are BFS, so the first layer that contains a valid string is exactly the set of minimum-deletion answers.</p>
+      <ol class="step-list">
+        <li>Queue the original string. Mark it seen.</li>
+        <li>While the queue is not empty, process one whole layer (every string of the current deletion count).</li>
+        <li>If a string in this layer is valid, collect it. Do not generate its children &mdash; they have more deletions.</li>
+        <li>If this layer produced any valid string, stop after draining the layer. Remaining queued children belong to a strictly worse distance.</li>
+        <li>Otherwise, for each string, delete each parenthesis once, skip letters, skip already-seen results, enqueue the rest.</li>
+      </ol>
+      <div class="callout">
+        <span class="tag">The invariants to say out loud</span>
+        <p><strong>(a)</strong> Every string in the queue at the start of a layer has the same number of deletions. <strong>(b)</strong> <code>seen</code> contains every string that has ever been enqueued, so each distinct string is expanded at most once and at its shortest distance. <strong>(c)</strong> Letters are never deleted, so every generated string still contains every original letter in order. <strong>(d)</strong> The first layer with a valid string is complete: BFS would have found a cheaper valid string earlier if one existed.</p>
+      </div>
+      <div class="callout warn">
+        <span class="tag">The two bugs this BFS is famous for</span>
+        <p><strong>Not processing by layer.</strong> If you expand neighbours of an invalid string and then later discover a valid string at the same distance, those neighbours are already in the queue at distance + 1. Use a <code>for _ in range(len(queue))</code> loop (or stop enqueueing once <code>found</code> is true <em>and</em> leave the outer loop when the layer ends).</p>
+        <p><strong>No <code>seen</code> set.</strong> Deleting index i then j produces the same string as j then i. Without <code>seen</code>, the queue explodes even at n = 12. Hash the string, not the deletion sequence.</p>
+      </div>
+      <figure class="diagram dark">
+        <div class="seq">
+          <div class="seq-row"><span class="actor">d = 0</span><p><code>"()())()"</code> &mdash; balance goes negative. Layer has no valid string, so expand.</p></div>
+          <div class="seq-row"><span class="actor">d = 1</span><p>Delete one paren. Among the distinct neighbours: <code>"(())()"</code> and <code>"()()()"</code> are valid. Collect both. Do not expand further.</p></div>
+          <div class="seq-row"><span class="actor">stop</span><p>Anything at d = 2 deletes more than the minimum. The seen set already collapsed deletions that produced the same neighbour (the two extra <code>')'</code>s in the middle both yield <code>"()()()"</code>).</p></div>
+        </div>
+        <figcaption>s = "()())()". BFS finds both answers at distance 1 and halts. The bitmask brute force would still generate the 2<sup>6</sup> &minus; 7 remaining subsets.</figcaption>
+      </figure>
+
+      <h3 id="s4-1"><span class="num">4.1</span> Code &mdash; Python, Rust, Java, C++</h3>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="rip-op-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-op-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-op-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-op-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="rip-op-py" data-lang="python"><pre><code class="language-python">from collections import deque
+from typing import List
+
+
+def is_valid(s: str) -&gt; bool:
+    bal = 0
+    for ch in s:
+        if ch == '(':
+            bal += 1
+        elif ch == ')':
+            bal -= 1
+            if bal &lt; 0:
+                return False
+    return bal == 0
+
+
+def remove_invalid_parentheses(s: str) -&gt; List[str]:
+    """BFS by deletion count. The first valid layer is the answer.
+
+    Graph: edge = delete one parenthesis. Distance = deletions.
+    """
+    queue = deque([s])
+    seen = {s}
+    answers: List[str] = []
+
+    while queue:
+        found = False
+        for _ in range(len(queue)):        # one distance class
+            cur = queue.popleft()
+            if is_valid(cur):
+                answers.append(cur)
+                found = True
+                continue                   # valid: children are NOT minimum
+            if found:
+                continue                   # drain the rest of this layer only
+            for i, ch in enumerate(cur):
+                if ch not in '()':
+                    continue               # letters are never deleted
+                nxt = cur[:i] + cur[i + 1:]
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append(nxt)
+        if found:
+            break                          # next layer would delete more
+
+    return answers</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-op-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::{HashSet, VecDeque};
+
+fn is_valid(s: &amp;str) -&gt; bool {
+    let mut bal: i32 = 0;
+    for ch in s.chars() {
+        match ch {
+            '(' =&gt; bal += 1,
+            ')' =&gt; {
+                bal -= 1;
+                if bal &lt; 0 {
+                    return false;
+                }
+            }
+            _ =&gt; {}
+        }
+    }
+    bal == 0
+}
+
+/// BFS by deletion count. The first valid layer is the answer.
+pub fn remove_invalid_parentheses(s: &amp;str) -&gt; Vec&lt;String&gt; {
+    let mut queue = VecDeque::from([s.to_string()]);
+    let mut seen = HashSet::from([s.to_string()]);
+    let mut answers = Vec::new();
+
+    while !queue.is_empty() {
+        let mut found = false;
+        for _ in 0..queue.len() {          // one distance class
+            let cur = queue.pop_front().unwrap();
+            if is_valid(&amp;cur) {
+                answers.push(cur);
+                found = true;
+                continue;                  // valid: children are NOT minimum
+            }
+            if found {
+                continue;                  // drain the rest of this layer only
+            }
+            for (i, ch) in cur.char_indices() {
+                if ch != '(' &amp;&amp; ch != ')' {
+                    continue;              // letters are never deleted
+                }
+                let mut nxt = String::with_capacity(cur.len() - 1);
+                nxt.push_str(&amp;cur[..i]);
+                nxt.push_str(&amp;cur[i + ch.len_utf8()..]);
+                if seen.insert(nxt.clone()) {
+                    queue.push_back(nxt);
+                }
+            }
+        }
+        if found {
+            break;                         // next layer would delete more
+        }
+    }
+    answers
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-op-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+class Solution {
+
+    private boolean isValid(String s) {
+        int bal = 0;
+        for (int i = 0; i &lt; s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') {
+                bal++;
+            } else if (c == ')') {
+                if (--bal &lt; 0) {
+                    return false;
+                }
+            }
+        }
+        return bal == 0;
+    }
+
+    /**
+     * BFS by deletion count. The first valid layer is the answer.
+     * Graph: edge = delete one parenthesis. Distance = deletions.
+     */
+    public List&lt;String&gt; removeInvalidParentheses(String s) {
+        Deque&lt;String&gt; queue = new ArrayDeque&lt;&gt;();
+        Set&lt;String&gt; seen = new HashSet&lt;&gt;();
+        queue.add(s);
+        seen.add(s);
+        List&lt;String&gt; answers = new ArrayList&lt;&gt;();
+
+        while (!queue.isEmpty()) {
+            boolean found = false;
+            int size = queue.size();       // one distance class
+            for (int q = 0; q &lt; size; q++) {
+                String cur = queue.poll();
+                if (isValid(cur)) {
+                    answers.add(cur);
+                    found = true;
+                    continue;              // valid: children are NOT minimum
+                }
+                if (found) {
+                    continue;              // drain the rest of this layer only
+                }
+                for (int i = 0; i &lt; cur.length(); i++) {
+                    char c = cur.charAt(i);
+                    if (c != '(' &amp;&amp; c != ')') {
+                        continue;          // letters are never deleted
+                    }
+                    String nxt = cur.substring(0, i) + cur.substring(i + 1);
+                    if (seen.add(nxt)) {
+                        queue.add(nxt);
+                    }
+                }
+            }
+            if (found) {
+                break;                     // next layer would delete more
+            }
+        }
+        return answers;
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-op-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;queue&gt;
+#include &lt;string&gt;
+#include &lt;unordered_set&gt;
+#include &lt;vector&gt;
+
+bool isValid(const std::string&amp; s) {
+    int bal = 0;
+    for (char c : s) {
+        if (c == '(') {
+            ++bal;
+        } else if (c == ')') {
+            if (--bal &lt; 0) {
+                return false;
+            }
+        }
+    }
+    return bal == 0;
+}
+
+// BFS by deletion count. The first valid layer is the answer.
+std::vector&lt;std::string&gt; removeInvalidParentheses(const std::string&amp; s) {
+    std::queue&lt;std::string&gt; queue;
+    std::unordered_set&lt;std::string&gt; seen;
+    queue.push(s);
+    seen.insert(s);
+    std::vector&lt;std::string&gt; answers;
+
+    while (!queue.empty()) {
+        bool found = false;
+        const int size = static_cast&lt;int&gt;(queue.size());  // one distance class
+        for (int q = 0; q &lt; size; ++q) {
+            std::string cur = std::move(queue.front());
+            queue.pop();
+            if (isValid(cur)) {
+                answers.push_back(cur);
+                found = true;
+                continue;                  // valid: children are NOT minimum
+            }
+            if (found) {
+                continue;                  // drain the rest of this layer only
+            }
+            for (int i = 0; i &lt; static_cast&lt;int&gt;(cur.size()); ++i) {
+                if (cur[i] != '(' &amp;&amp; cur[i] != ')') {
+                    continue;              // letters are never deleted
+                }
+                std::string nxt = cur.substr(0, i) + cur.substr(i + 1);
+                if (seen.insert(nxt).second) {
+                    queue.push(std::move(nxt));
+                }
+            }
+        }
+        if (found) {
+            break;                         // next layer would delete more
+        }
+    }
+    return answers;
+}</code></pre></div>
+      </div>
+
+      <h3 id="s4-2"><span class="num">4.2</span> Complexity</h3>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(n &middot; 2<sup>p</sup>)</span>
+          <p>Same worst-case family as brute force: each distinct subsequence of the parentheses can appear as a vertex, and building a neighbour is O(n). In practice it is far smaller because the search stops at distance k (the minimum deletions) instead of walking all 2<sup>p</sup> masks. Consecutive identical parens also collapse in the <code>seen</code> set.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n &middot; 2<sup>p</sup>)</span>
+          <p>The seen set and queue can hold every distinct neighbour of the current layer. Under the given limits that is still around a million short strings; it is the price of BFS.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag">Edge cases this version already handles</span>
+        <p>Already valid &rarr; layer 0 succeeds, returns <code>[s]</code>. <code>")("</code> &rarr; layer 0 and 1 fail, layer 2 yields <code>""</code>. Letters-only &rarr; valid immediately. Consecutive extra <code>')'</code>s produce the same neighbour and are collapsed by <code>seen</code>. The empty result is a one-element list, not an empty list.</p>
+      </div>
+
+      <h3 id="s4-3"><span class="num">4.3</span> Variant: DFS with a precomputed removal budget</h3>
+      <p>BFS spends memory on a whole layer of strings. You can compute the exact number of <code>'('</code> and <code>')'</code> that <em>must</em> be deleted with one linear scan, then DFS with those two budgets. The scan: every unmatched <code>')'</code> increments <code>right_rem</code>; leftover unmatched <code>'('</code> at the end is <code>left_rem</code>. Any valid minimum string deletes exactly those counts, nothing else.</p>
+      <p>The DFS then has four numbers at each index: remaining left-deletes, remaining right-deletes, current balance, and the path. You may delete a <code>'('</code> only if <code>left_rem &gt; 0</code>, delete a <code>')'</code> only if <code>right_rem &gt; 0</code>, and keep a <code>')'</code> only if <code>balance &gt; 0</code>. Letters are always kept. A result set still uniques paths that deleted different indices of the same character run.</p>
+      <div class="code-tabs" data-code-tabs>
+        <div class="code-tablist" role="tablist" aria-label="Language">
+          <button type="button" class="code-tab is-active" role="tab" aria-selected="true" data-tab="rip-var-py">Python</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-var-rs">Rust</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-var-java">Java</button>
+          <button type="button" class="code-tab" role="tab" aria-selected="false" data-tab="rip-var-cpp">C++</button>
+          <button type="button" class="code-copy" data-code-copy>Copy</button>
+        </div>
+        <div class="code-panel is-active" role="tabpanel" data-panel="rip-var-py" data-lang="python"><pre><code class="language-python">from typing import List, Set
+
+
+def min_removals(s: str) -&gt; tuple[int, int]:
+    """How many '(' and ')' *must* be deleted. One left-to-right scan."""
+    left = right = 0
+    for ch in s:
+        if ch == '(':
+            left += 1
+        elif ch == ')':
+            if left:
+                left -= 1                  # this ')' closes a live '('
+            else:
+                right += 1                 # unmatched closer: must delete
+    return left, right                     # leftover left = unmatched openers
+
+
+def remove_invalid_dfs(s: str) -&gt; List[str]:
+    """Backtrack with an exact deletion budget. Balance never goes negative."""
+    left_rem, right_rem = min_removals(s)
+    found: Set[str] = set()
+
+    def dfs(i: int, left: int, right: int, bal: int, path: list) -&gt; None:
+        if left &lt; 0 or right &lt; 0 or bal &lt; 0:
+            return
+        if i == len(s):
+            if left == 0 and right == 0 and bal == 0:
+                found.add(''.join(path))
+            return
+
+        ch = s[i]
+        if ch == '(' or ch == ')':
+            # delete this parenthesis (consumes the matching budget)
+            dfs(i + 1,
+                left - (ch == '('),
+                right - (ch == ')'),
+                bal,
+                path)
+
+        # keep it (letters always take this branch only)
+        path.append(ch)
+        if ch == '(':
+            dfs(i + 1, left, right, bal + 1, path)
+        elif ch == ')':
+            dfs(i + 1, left, right, bal - 1, path)
+        else:
+            dfs(i + 1, left, right, bal, path)
+        path.pop()
+
+    dfs(0, left_rem, right_rem, 0, [])
+    return list(found)</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-var-rs" data-lang="rust" hidden><pre><code class="language-rust">use std::collections::HashSet;
+
+/// How many '(' and ')' must be deleted. One left-to-right scan.
+fn min_removals(s: &amp;str) -&gt; (i32, i32) {
+    let mut left = 0i32;
+    let mut right = 0i32;
+    for ch in s.chars() {
+        if ch == '(' {
+            left += 1;
+        } else if ch == ')' {
+            if left &gt; 0 {
+                left -= 1;
+            } else {
+                right += 1;
+            }
+        }
+    }
+    (left, right)
+}
+
+/// Backtrack with an exact deletion budget. Balance never goes negative.
+pub fn remove_invalid_dfs(s: &amp;str) -&gt; Vec&lt;String&gt; {
+    let chars: Vec&lt;char&gt; = s.chars().collect();
+    let (left_rem, right_rem) = min_removals(s);
+    let mut found: HashSet&lt;String&gt; = HashSet::new();
+    let mut path = String::new();
+
+    fn dfs(
+        i: usize,
+        left: i32,
+        right: i32,
+        bal: i32,
+        chars: &amp;[char],
+        path: &amp;mut String,
+        found: &amp;mut HashSet&lt;String&gt;,
+    ) {
+        if left &lt; 0 || right &lt; 0 || bal &lt; 0 {
+            return;
+        }
+        if i == chars.len() {
+            if left == 0 &amp;&amp; right == 0 &amp;&amp; bal == 0 {
+                found.insert(path.clone());
+            }
+            return;
+        }
+        let ch = chars[i];
+        if ch == '(' || ch == ')' {
+            dfs(
+                i + 1,
+                left - i32::from(ch == '('),
+                right - i32::from(ch == ')'),
+                bal,
+                chars,
+                path,
+                found,
+            );
+        }
+        path.push(ch);
+        let next_bal = match ch {
+            '(' =&gt; bal + 1,
+            ')' =&gt; bal - 1,
+            _ =&gt; bal,
+        };
+        dfs(i + 1, left, right, next_bal, chars, path, found);
+        path.pop();
+    }
+
+    dfs(0, left_rem, right_rem, 0, &amp;chars, &amp;mut path, &amp;mut found);
+    found.into_iter().collect()
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-var-java" data-lang="java" hidden><pre><code class="language-java">import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+class Solution {
+
+    /** How many '(' and ')' must be deleted. One left-to-right scan. */
+    private int[] minRemovals(String s) {
+        int left = 0, right = 0;
+        for (int i = 0; i &lt; s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') {
+                left++;
+            } else if (c == ')') {
+                if (left &gt; 0) {
+                    left--;
+                } else {
+                    right++;
+                }
+            }
+        }
+        return new int[] {left, right};
+    }
+
+    /** Backtrack with an exact deletion budget. Balance never goes negative. */
+    public List&lt;String&gt; removeInvalidParenthesesDfs(String s) {
+        int[] rem = minRemovals(s);
+        Set&lt;String&gt; found = new HashSet&lt;&gt;();
+        dfs(s, 0, rem[0], rem[1], 0, new StringBuilder(), found);
+        return new ArrayList&lt;&gt;(found);
+    }
+
+    private void dfs(String s, int i, int left, int right, int bal,
+                     StringBuilder path, Set&lt;String&gt; found) {
+        if (left &lt; 0 || right &lt; 0 || bal &lt; 0) {
+            return;
+        }
+        if (i == s.length()) {
+            if (left == 0 &amp;&amp; right == 0 &amp;&amp; bal == 0) {
+                found.add(path.toString());
+            }
+            return;
+        }
+        char c = s.charAt(i);
+        if (c == '(' || c == ')') {
+            dfs(s, i + 1, left - (c == '(' ? 1 : 0), right - (c == ')' ? 1 : 0),
+                    bal, path, found);
+        }
+        path.append(c);
+        int nextBal = (c == '(') ? bal + 1 : (c == ')') ? bal - 1 : bal;
+        dfs(s, i + 1, left, right, nextBal, path, found);
+        path.deleteCharAt(path.length() - 1);
+    }
+}</code></pre></div>
+        <div class="code-panel" role="tabpanel" data-panel="rip-var-cpp" data-lang="cpp" hidden><pre><code class="language-cpp">#include &lt;string&gt;
+#include &lt;unordered_set&gt;
+#include &lt;utility&gt;
+#include &lt;vector&gt;
+
+// How many '(' and ')' must be deleted. One left-to-right scan.
+std::pair&lt;int, int&gt; minRemovals(const std::string&amp; s) {
+    int left = 0, right = 0;
+    for (char c : s) {
+        if (c == '(') {
+            ++left;
+        } else if (c == ')') {
+            if (left &gt; 0) {
+                --left;
+            } else {
+                ++right;
+            }
+        }
+    }
+    return {left, right};
+}
+
+static void dfs(const std::string&amp; s, int i, int left, int right, int bal,
+                std::string&amp; path, std::unordered_set&lt;std::string&gt;&amp; found) {
+    if (left &lt; 0 || right &lt; 0 || bal &lt; 0) {
+        return;
+    }
+    if (i == static_cast&lt;int&gt;(s.size())) {
+        if (left == 0 &amp;&amp; right == 0 &amp;&amp; bal == 0) {
+            found.insert(path);
+        }
+        return;
+    }
+    const char c = s[i];
+    if (c == '(' || c == ')') {
+        dfs(s, i + 1, left - (c == '('), right - (c == ')'), bal, path, found);
+    }
+    path.push_back(c);
+    const int nextBal = (c == '(') ? bal + 1 : (c == ')') ? bal - 1 : bal;
+    dfs(s, i + 1, left, right, nextBal, path, found);
+    path.pop_back();
+}
+
+// Backtrack with an exact deletion budget. Balance never goes negative.
+std::vector&lt;std::string&gt; removeInvalidParenthesesDfs(const std::string&amp; s) {
+    auto [leftRem, rightRem] = minRemovals(s);
+    std::unordered_set&lt;std::string&gt; found;
+    std::string path;
+    path.reserve(s.size());
+    dfs(s, 0, leftRem, rightRem, 0, path, found);
+    return {found.begin(), found.end()};
+}</code></pre></div>
+      </div>
+      <div class="verdict">
+        <div>
+          <strong>Time</strong>
+          <span class="big">O(2<sup>p</sup>)</span>
+          <p>Still exponential in the number of parentheses, but every path that would over-delete or go negative is cut immediately. Peak recursion depth is n &le; 25, so the call stack is not a concern.</p>
+        </div>
+        <div>
+          <strong>Space</strong>
+          <span class="big">O(n + k)</span>
+          <p>O(n) for the path and the stack, plus the output set of k answers. No layer of strings lives in a queue. This is the version to write if the interviewer asks about memory.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section class="problem-section" id="s5">
+      <h2><span class="num">5.</span> Follow-up discussion if time permits</h2>
+      <ul class="ask-list">
+        <li><strong>Return any one valid string, not all of them.</strong> Then you do not need search at all: scan and delete every <code>')'</code> that would drive the balance negative, then scan right-to-left and delete leftover <code>'('</code>. O(n) time, one string. Mentioning this without being asked looks like you misread the problem; mentioning it as a follow-up looks like you know the family.</li>
+        <li><strong>Return only the minimum number of deletions.</strong> That is exactly <code>left_rem + right_rem</code> from the linear scan in 4.3. No search.</li>
+        <li><strong>Skip consecutive duplicate deletions.</strong> When two identical parens sit next to each other, deleting either produces the same neighbour. In BFS you can <code>continue</code> when <code>s[i] == s[i-1]</code> for a parenthesis; in DFS, skip a run with a while-loop. The <code>seen</code> / result set already makes this a speed tweak, not a correctness one.</li>
+        <li><strong>Multiple bracket types.</strong> A single integer balance is no longer enough: <code>"([)]"</code> is invalid even though counts match. Neighbour generation is the same, but <code>is_valid</code> needs a stack (or a typed balance). The DFS budget scan also has to track types separately.</li>
+        <li><strong>Why not binary-search the deletion count?</strong> &ldquo;There exists a valid string with at most k deletions&rdquo; is monotone, so you can binary-search k and DFS at each mid. That is O(log n) times a search you already run once at the true k. Strictly extra work; a fair answer to &ldquo;any other approach?&rdquo;</li>
+        <li><strong>Very long n, return all answers.</strong> The output size itself can be exponential. If n is 10<sup>4</sup> the problem statement is wrong; push back and ask whether they want one string or the count.</li>
+        <li><strong>Must the original relative order of letters and kept parens be preserved?</strong> Yes &mdash; we only delete, we never reorder. If permutations were allowed the problem would be &ldquo;rearrange plus delete,&rdquo; which is different.</li>
+        <li><strong>What does &ldquo;good enough&rdquo; look like here?</strong> Confirm letters stay and empty string is legal, write a correct <code>is_valid</code>, enumerate subsets as the baseline, upgrade to layer-by-layer BFS with a seen set and an early stop, trace <code>"()())()"</code> yourself, and know the linear scan that yields the exact deletion budget if memory comes up.</li>
+      </ul>
+    </section>
+
+    <nav class="problem-nav" aria-label="Problem navigation">
+      <a class="problem-nav-link prev" href="../minimum_window_substring/">&larr; Minimum window substring</a>
+      <a class="problem-nav-link back" href="../">All DSA problems</a>
+      <span class="problem-nav-link next muted">End of topic &rarr;</span>
+    </nav>
+  </div>
+</main>
+
+
+  <footer class="tech-footer">
+    <div class="container footer-inner">
+      <p>© <span id="current-year"></span> Shubham Mallick</p>
+      <p>Built from experience, not generated from hype.</p>
+      <div>
+        <a href="../../../tech-index.html">All notes</a>
+        <a href="../../../../index.html">Portfolio</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>document.getElementById('current-year').textContent = new Date().getFullYear();</script>
+  <script src="../../../js/diagram-anim.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="../../../js/code-tabs.js" defer></script>
+</body>
+</html>

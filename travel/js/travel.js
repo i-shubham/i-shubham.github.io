@@ -55,11 +55,15 @@
     });
   }
 
+  const regionMenus = [...document.querySelectorAll(".nav-region")];
   const countryMenus = [...document.querySelectorAll(".nav-dropdown")];
   const closeCountryMenus = () => {
     countryMenus.forEach((countryMenu) => countryMenu.removeAttribute("open"));
   };
 
+  regionMenus.forEach((regionMenu) => {
+    if (!regionMenu.hasAttribute("open")) regionMenu.setAttribute("open", "");
+  });
   countryMenus.forEach((countryMenu) => {
     countryMenu.addEventListener("toggle", () => {
       if (!countryMenu.open) return;
@@ -77,7 +81,8 @@
 
   // On pointer devices a flyout should only stay open while the pointer is still over
   // the sidebar (or the flyout itself, which is a descendant of it). The short delay
-  // covers the pointer travelling across the gap between the two.
+  // covers the pointer travelling across the gap between the two. Continent accordions
+  // stay as the user left them.
   const sidebar = document.querySelector(".site-header");
   if (sidebar && window.matchMedia("(hover: hover)").matches) {
     let closeTimer = null;

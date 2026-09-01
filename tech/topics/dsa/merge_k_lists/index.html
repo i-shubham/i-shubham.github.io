@@ -77,18 +77,29 @@
 merge_k_lists(lists: List[Optional[ListNode]]) -&gt; Optional[ListNode]</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  lists = [[1,4,5], [1,3,4], [2,6]]
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the standard case</span>
+          <pre><code>Input:  lists = [[1,4,5], [1,3,4], [2,6]]
 Output: [1,1,2,3,4,4,5,6]
 Why:    duplicates across lists are kept (both 1s, both 4s) — this is a
-        merge, not a set union.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — degenerate inputs</span><pre><code>Input:  lists = []        -&gt; Output: []      (k = 0, no lists at all)
+        merge, not a set union.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — degenerate inputs</span>
+          <pre><code>Input:  lists = []        -&gt; Output: []      (k = 0, no lists at all)
 Input:  lists = [[]]      -&gt; Output: []      (k = 1, one EMPTY list)
 Input:  lists = [[], [1]] -&gt; Output: [1]     (empty lists must be skipped)
-Input:  lists = [[2],[1]] -&gt; Output: [1,2]   (input order is not sorted order)</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — the skew case that kills pairwise merging</span><pre><code>Input:  lists = [[1..500], [], [], ..., []]   # one long list, k-1 empty
+Input:  lists = [[2],[1]] -&gt; Output: [1,2]   (input order is not sorted order)</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — the skew case that kills pairwise merging</span>
+          <pre><code>Input:  lists = [[1..500], [], [], ..., []]   # one long list, k-1 empty
 Output: [1..500]
 Why:    a naive "merge list 0 with list 1, then with list 2, ..." walks the
-        long accumulator k times: O(N*k). The heap does not care.</code></pre></div>
+        long accumulator k times: O(N*k). The heap does not care.</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

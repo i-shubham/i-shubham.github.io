@@ -82,7 +82,10 @@ deserialize(data: str) -&gt; Optional[TreeNode]
 #     structurally_equal(deserialize(serialize(T)), T) == True</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Tree:            1
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the standard case</span>
+          <pre><code>Tree:            1
                 / \
                2   3
                   / \
@@ -92,8 +95,11 @@ serialize(root) = "1,2,#,#,3,4,#,#,5,#,#"     (preorder, '#' = absent child)
 Token count     = 11 = 2n + 1 for n = 5 nodes.
 
 Read it as: 1, then left subtree (2 with two absent children),
-then right subtree (3, its left 4 with two absent, its right 5 with two absent).</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — why markers are mandatory</span><pre><code>Tree A:   1        Tree B:   1
+then right subtree (3, its left 4 with two absent, its right 5 with two absent).</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — why markers are mandatory</span>
+          <pre><code>Tree A:   1        Tree B:   1
          /                     \
         2                       2
 
@@ -102,12 +108,17 @@ With markers:  A -&gt; "1,2,#,#,#"      B -&gt; "1,#,2,#,#"
                      ^ 2 is the LEFT child      ^ 2 is the RIGHT child
 
 Without markers the two trees are indistinguishable. This example is the
-whole reason the problem is not trivial.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — degenerate inputs</span><pre><code>root = None            -&gt; "#"              -&gt; None
+whole reason the problem is not trivial.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — degenerate inputs</span>
+          <pre><code>root = None            -&gt; "#"              -&gt; None
 root = [1]             -&gt; "1,#,#"          -&gt; single node
 root = [1,2,null,3]    -&gt; "1,2,3,#,#,#,#"  -&gt; left-skewed chain of 3
 root = [-1000]         -&gt; "-1000,#,#"      -&gt; negatives need a sign, so '-'
-                                              must not be the delimiter</code></pre></div>
+                                              must not be the delimiter</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

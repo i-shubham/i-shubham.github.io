@@ -79,24 +79,35 @@
     def add_num(self, num: int) -&gt; None: ...
     def find_median(self) -&gt; float: ...      # float, even for integer input</code></pre></div>
 
-      <h4>Worked example</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the canonical trace</span><pre><code>mf = MedianFinder()
+      <h4>Worked examples</h4>
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the canonical trace</span>
+          <pre><code>mf = MedianFinder()
 mf.add_num(1)        # data = [1]
 mf.find_median()     # -&gt; 1.0     (odd count: the middle element)
 mf.add_num(2)        # data = [1, 2]
 mf.find_median()     # -&gt; 1.5     (even count: MEAN of the two middles)
 mf.add_num(3)        # data = [1, 2, 3]
-mf.find_median()     # -&gt; 2.0</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — order of arrival is arbitrary</span><pre><code>add 5, 15, 1, 3      # sorted view: [1, 3, 5, 15]
+mf.find_median()     # -&gt; 2.0</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — order of arrival is arbitrary</span>
+          <pre><code>add 5, 15, 1, 3      # sorted view: [1, 3, 5, 15]
 find_median()        # -&gt; 4.0     ((3 + 5) / 2)
 add 8                # sorted view: [1, 3, 5, 8, 15]
 find_median()        # -&gt; 5.0
-Note: values arrive unsorted; every median must be correct at the time asked.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — the cases that break naive code</span><pre><code>add 2; find_median()             -&gt; 2.0      (single element)
+Note: values arrive unsorted; every median must be correct at the time asked.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — the cases that break naive code</span>
+          <pre><code>add 2; find_median()             -&gt; 2.0      (single element)
 add 1; add 1; find_median()      -&gt; 1.0      (duplicates are kept, not deduped)
 add -5; add 5; find_median()     -&gt; 0.0      (negatives, and a zero result)
 add 100000; add 100000           -&gt; 100000.0 (sum of two middles can exceed
-                                              int range -- widen before adding)</code></pre></div>
+                                              int range -- widen before adding)</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

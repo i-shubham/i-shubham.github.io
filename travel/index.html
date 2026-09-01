@@ -77,25 +77,42 @@
       <button class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">☰</button>
       <nav class="site-nav" aria-label="Primary">
         <a href="./" aria-current="page">Home</a>
-        <details class="nav-dropdown">
-          <summary>France</summary>
-          <div class="dropdown-menu">
-                        <a href="pages/france/paris/">Paris</a>
-            <a href="pages/france/palace_of_versailles/">Versailles</a>
-            <a href="pages/france/montmartre/">Montmartre</a>
-            <a href="pages/france/notre_dame/">Notre-Dame</a>
+        <details class="nav-region" open>
+          <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🌍</span>Europe</span></summary>
+          <div class="region-list">
+            <details class="nav-dropdown">
+              <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🇫🇷</span>France</span></summary>
+              <div class="dropdown-menu">
+                <a href="pages/france/paris/"><span class="nav-icon" aria-hidden="true">🗼</span>Paris</a>
+                <a href="pages/france/palace_of_versailles/"><span class="nav-icon" aria-hidden="true">🏰</span>Versailles</a>
+                <a href="pages/france/montmartre/"><span class="nav-icon" aria-hidden="true">⛪</span>Montmartre</a>
+                <a href="pages/france/notre_dame/"><span class="nav-icon" aria-hidden="true">🕍</span>Notre-Dame</a>
+              </div>
+            </details>
+            <details class="nav-dropdown">
+              <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🇮🇹</span>Italy</span></summary>
+              <div class="dropdown-menu">
+                <a href="pages/italy/venice/"><span class="nav-icon" aria-hidden="true">🛶</span>Venice</a>
+              </div>
+            </details>
+            <details class="nav-dropdown">
+              <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🇨🇭</span>Switzerland</span></summary>
+              <div class="dropdown-menu">
+                <a href="pages/switzerland/lucerne/"><span class="nav-icon" aria-hidden="true">🏞️</span>Lucerne</a>
+              </div>
+            </details>
           </div>
         </details>
-        <details class="nav-dropdown">
-          <summary>Switzerland</summary>
-          <div class="dropdown-menu">
-                        <a href="pages/switzerland/lucerne/">Lucerne</a>
+        <details class="nav-region" open>
+          <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🇮🇳</span>India</span></summary>
+          <div class="region-list">
+            <span class="nav-soon">Journals coming soon</span>
           </div>
         </details>
-        <details class="nav-dropdown">
-          <summary>Italy</summary>
-          <div class="dropdown-menu">
-                        <a href="pages/italy/venice/">Venice</a>
+        <details class="nav-region" open>
+          <summary><span class="nav-label"><span class="nav-icon" aria-hidden="true">🗽</span>America</span></summary>
+          <div class="region-list">
+            <span class="nav-soon">Journals coming soon</span>
           </div>
         </details>
         <div class="translate-wrap">

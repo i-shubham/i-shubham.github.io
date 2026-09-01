@@ -801,6 +801,33 @@ a.problem-card:hover .problem-body p { color: var(--muted); }
 }
 .tech-code code { font: inherit; color: inherit; background: none; padding: 0; }
 
+/* Worked examples — every example of a problem shares one panel, LeetCode style:
+   black text on a light grey surface, examples separated by rules rather than
+   by nested boxes. */
+.examples {
+  margin: .75rem 0 1.1rem;
+  border: 1px solid #d3d6da;
+  border-radius: .75rem;
+  background: #eff1f3;
+  overflow: hidden;
+}
+.examples .example { padding: 1rem 1.15rem; }
+.examples .example + .example { border-top: 1px solid #dcdfe3; }
+.examples .example-label {
+  display: block;
+  margin-bottom: .45rem;
+  color: #000;
+  font: 600 .84rem/1.4 var(--sans);
+}
+.examples pre {
+  margin: 0;
+  overflow-x: auto;
+  color: #000;
+  font: 400 .82rem/1.6 var(--mono);
+  background: transparent;
+}
+.examples code { font: inherit; color: inherit; background: none; padding: 0; }
+
 /* Multi-language code tabs */
 .code-tabs {
   margin: .75rem 0 1.1rem;

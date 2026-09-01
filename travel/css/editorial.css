@@ -63,16 +63,42 @@ button { cursor: pointer; }
 .site-nav a[aria-current="page"], .site-nav a:hover { color: #f4cf7a; }
 .site-nav > a { padding: .7rem .8rem; border-radius: .55rem; }
 .site-nav > a[aria-current="page"] { background: rgba(244,207,122,.12); }
-.nav-dropdown { position: relative; }
+.nav-region > summary,
 .nav-dropdown summary {
-  display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .7rem .8rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .1rem .5rem;
   color: #fff; font-size: .88rem; font-weight: 650; list-style: none; cursor: pointer;
 }
+.nav-region > summary::-webkit-details-marker,
 .nav-dropdown summary::-webkit-details-marker { display: none; }
-.nav-dropdown summary::after { content: "›"; color: #f4cf7a; font-size: 1.25rem; line-height: 1; transition: transform .2s ease; }
-.nav-dropdown[open] summary::after { transform: translateX(.18rem); }
-.nav-dropdown:has(a[aria-current="page"]) summary { color: #f4cf7a; }
-.dropdown-menu {
+.nav-region > summary::after,
+.nav-dropdown summary::after {
+  content: "›";
+  display: inline-block;
+  color: #f4cf7a;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform .2s ease;
+}
+.nav-region[open] > summary::after { transform: rotate(90deg); }
+.nav-dropdown[open] > summary::after { transform: translateX(.18rem); }
+.nav-region:has(a[aria-current="page"]) > summary,
+.nav-dropdown:has(a[aria-current="page"]) > summary { color: #f4cf7a; }
+.region-list { display: grid; padding: 0 0 .25rem; }
+.region-list .nav-dropdown { position: relative; }
+.region-list .nav-dropdown > summary {
+  padding-left: 25%;
+  color: #9ec9b8;
+  font-size: .84rem;
+  font-weight: 600;
+}
+.region-list > .nav-soon {
+  padding-left: 25%;
+  font-weight: 400;
+}
+.region-list .nav-dropdown > summary:hover,
+.region-list .nav-dropdown:has(a[aria-current="page"]) > summary { color: #f4cf7a; }
+.nav-dropdown .dropdown-menu {
   position: absolute; top: 0; left: calc(100% + 1.3rem); z-index: 70;
   display: grid; width: 240px; padding: .65rem;
   border: 1px solid rgba(255,255,255,.14); border-radius: .85rem;
@@ -80,11 +106,21 @@ button { cursor: pointer; }
 }
 /* Invisible bridge across the gap, so moving the pointer from the country name to its
    flyout never counts as leaving the sidebar. */
-.dropdown-menu::before {
+.nav-dropdown .dropdown-menu::before {
   content: ""; position: absolute; top: 0; bottom: 0; right: 100%; width: 1.3rem;
 }
-.dropdown-menu a { padding: .6rem .75rem; border-radius: .5rem; white-space: nowrap; }
+.dropdown-menu a, .dropdown-menu .nav-soon, .region-list > .nav-soon {
+  padding: .6rem .75rem; border-radius: .5rem; white-space: nowrap;
+}
+.dropdown-menu a { display: flex; align-items: center; }
+/* Fixed-width icon slot so labels stay on one vertical line whatever the glyph width. */
+.nav-label { display: inline-flex; align-items: center; }
+.nav-icon {
+  flex: none; width: 1.5rem;
+  font-size: 1rem; font-style: normal; line-height: 1; text-align: left;
+}
 .dropdown-menu a:hover, .dropdown-menu a[aria-current="page"] { color: #102c25; background: #f4cf7a; }
+.nav-soon { display: block; color: rgba(255,255,255,.45); font-size: .82rem; font-weight: 400; font-style: italic; }
 
 .translate-wrap {
   min-width: 165px; margin-top: auto; padding: 1.1rem .8rem 1rem;
@@ -262,15 +298,14 @@ body > main, body > .site-footer { margin-left: var(--sidebar-width); }
   }
   .site-nav.is-open { display: flex; }
   .site-nav > a { padding: .65rem .7rem; }
-  .nav-dropdown summary { justify-content: space-between; }
-  .nav-dropdown summary::after { content: "⌄"; font-size: .9rem; }
-  .nav-dropdown[open] summary::after { transform: rotate(180deg); }
-  .dropdown-menu {
+  .nav-region > summary, .nav-dropdown summary { justify-content: space-between; }
+  .nav-dropdown[open] > summary::after { transform: rotate(90deg); }
+  .nav-dropdown .dropdown-menu {
     position: static; width: auto; margin: 0 0 .4rem .8rem; padding: .25rem 0 .25rem 1rem;
     border: 0; border-left: 1px solid rgba(255,255,255,.25); border-radius: 0;
     background: transparent; box-shadow: none;
   }
-  .dropdown-menu a { padding: .55rem .7rem; }
+  .dropdown-menu a, .dropdown-menu .nav-soon, .region-list > .nav-soon { padding: .55rem .7rem; }
   .translate-wrap { margin-top: .5rem; }
   body > main, body > .site-footer { margin-left: 0; }
   .section-head, .about-grid { grid-template-columns: 1fr; }

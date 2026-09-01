@@ -72,19 +72,33 @@
       <div class="tech-code"><span class="code-lang">contract</span><pre><code>two_sum(nums: List[int], target: int) -&gt; List[int]   # exactly two indices, ascending</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — answer at the front</span><pre><code>Input:  nums = [2, 7, 11, 15], target = 9
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — answer at the front</span>
+          <pre><code>Input:  nums = [2, 7, 11, 15], target = 9
 Output: [0, 1]
-Why:    nums[0] + nums[1] = 2 + 7 = 9</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — repeated value</span><pre><code>Input:  nums = [3, 2, 4], target = 6
+Why:    nums[0] + nums[1] = 2 + 7 = 9</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — repeated value</span>
+          <pre><code>Input:  nums = [3, 2, 4], target = 6
 Output: [1, 2]
 Why:    3 + 3 = 6 would need index 0 twice, which is forbidden.
-        2 + 4 = 6 uses two distinct indices.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — duplicates are legal</span><pre><code>Input:  nums = [3, 3], target = 6
+        2 + 4 = 6 uses two distinct indices.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — duplicates are legal</span>
+          <pre><code>Input:  nums = [3, 3], target = 6
 Output: [0, 1]
-Why:    the same *value* twice is fine as long as the *indices* differ.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 4 — negatives</span><pre><code>Input:  nums = [-1, -2, -3, -4, -5], target = -8
+Why:    the same *value* twice is fine as long as the *indices* differ.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 4 — negatives</span>
+          <pre><code>Input:  nums = [-1, -2, -3, -4, -5], target = -8
 Output: [2, 4]
-Why:    -3 + -5 = -8. No assumption of positivity anywhere in the algorithm.</code></pre></div>
+Why:    -3 + -5 = -8. No assumption of positivity anywhere in the algorithm.</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

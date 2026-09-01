@@ -76,7 +76,10 @@ total = sum of water[i] for all i</code></pre></div>
       <div class="tech-code"><span class="code-lang">contract</span><pre><code>trap(height: List[int]) -&gt; int      # total trapped units of water</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the canonical case</span><pre><code>Input:  height = [0,1,0,2,1,0,1,3,2,1,2,1]
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the canonical case</span>
+          <pre><code>Input:  height = [0,1,0,2,1,0,1,3,2,1,2,1]
 Output: 6
 
 index :  0  1  2  3  4  5  6  7  8  9 10 11
@@ -84,8 +87,11 @@ height:  0  1  0  2  1  0  1  3  2  1  2  1
 water :  0  0  1  0  1  2  1  0  0  1  0  0   -&gt; sum = 6
 
 Check index 5: tallest to its left (incl.) = 2, tallest to its right = 3.
-min(2, 3) = 2, minus height[5] = 0, so 2 units sit above index 5.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — a deep single basin</span><pre><code>Input:  height = [4,2,0,3,2,5]
+min(2, 3) = 2, minus height[5] = 0, so 2 units sit above index 5.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — a deep single basin</span>
+          <pre><code>Input:  height = [4,2,0,3,2,5]
 Output: 9
 
 index :  0  1  2  3  4  5
@@ -93,14 +99,19 @@ height:  4  2  0  3  2  5
 water :  0  2  4  1  2  0   -&gt; sum = 9
 
 Note index 2: min(left max 4, right max 5) = 4, minus 0 = 4 units.
-The far-away 5 on the right is what makes the left 4 the binding wall.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — everything that traps nothing</span><pre><code>height = []            -&gt; 0    (no bars)
+The far-away 5 on the right is what makes the left 4 the binding wall.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — everything that traps nothing</span>
+          <pre><code>height = []            -&gt; 0    (no bars)
 height = [5]           -&gt; 0    (one bar: nothing to trap against)
 height = [3,3]         -&gt; 0    (no dip between them)
 height = [5,4,3,2,1]   -&gt; 0    (monotonic: water always spills right)
 height = [1,2,3,4,5]   -&gt; 0    (monotonic the other way)
 height = [0,0,0]       -&gt; 0    (flat ground, no walls)
-You need at least THREE bars, with a dip strictly between two taller ones.</code></pre></div>
+You need at least THREE bars, with a dip strictly between two taller ones.</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">

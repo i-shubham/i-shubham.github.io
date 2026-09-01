@@ -73,42 +73,68 @@
       <div class="tech-code"><span class="code-lang">contract</span><pre><code>min_window(s: str, t: str) -&gt; str   # the substring itself, "" when impossible</code></pre></div>
 
       <h4>Worked examples</h4>
-      <div class="tech-code"><span class="code-lang">example 1 — the standard case</span><pre><code>Input:  s = "ADOBECODEBANC", t = "ABC"
+      <div class="examples">
+        <div class="example">
+          <span class="example-label">Example 1 — the standard case</span>
+          <pre><code>Input:  s = "ADOBECODEBANC", t = "ABC"
 Output: "BANC"
 Why:    "BANC" (indices 9..12) holds one 'A', one 'B', one 'C' in 4 characters.
-        "ADOBEC" is also valid but is 6 long; "ODEBANC" is valid but 7 long.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 2 — the whole string is the answer</span><pre><code>Input:  s = "a", t = "a"
+        "ADOBEC" is also valid but is 6 long; "ODEBANC" is valid but 7 long.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 2 — the whole string is the answer</span>
+          <pre><code>Input:  s = "a", t = "a"
 Output: "a"
-Why:    the only substring that works is all of s.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 3 — impossible, and duplicates are why</span><pre><code>Input:  s = "a", t = "aa"
+Why:    the only substring that works is all of s.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 3 — impossible, and duplicates are why</span>
+          <pre><code>Input:  s = "a", t = "aa"
 Output: ""
 Why:    t needs TWO 'a's. s has one. A set-based check would wrongly say
-        "a" is valid — this example exists to catch exactly that bug.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 4 — duplicates in t are counted, not deduped</span><pre><code>Input:  s = "ADOBECODEBANC", t = "ABCC"
+        "a" is valid — this example exists to catch exactly that bug.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 4 — duplicates in t are counted, not deduped</span>
+          <pre><code>Input:  s = "ADOBECODEBANC", t = "ABCC"
 Output: "CODEBANC"
 Why:    now TWO 'C's are needed, so the window must span C at index 5
-        through C at index 12. The answer for t = "ABC" ("BANC") is invalid here.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 5 — the window may carry surplus characters</span><pre><code>Input:  s = "aabbcc", t = "abc"
+        through C at index 12. The answer for t = "ABC" ("BANC") is invalid here.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 5 — the window may carry surplus characters</span>
+          <pre><code>Input:  s = "aabbcc", t = "abc"
 Output: "abbc"
 Why:    indices 1..4. It contains an EXTRA 'b' that t never asked for.
-        That is legal: validity is count(window) &ge; count(t), not equality.</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 6 — case is significant</span><pre><code>Input:  s = "aAbB", t = "Ab"
+        That is legal: validity is count(window) &ge; count(t), not equality.</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 6 — case is significant</span>
+          <pre><code>Input:  s = "aAbB", t = "Ab"
 Output: "Ab"
 Why:    indices 1..2. 'a' does not satisfy 'A'. Both cases are in the alphabet,
-        so the character table needs room for all 52 letters (128 is simpler).</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 7 — why the problem guarantees uniqueness</span><pre><code>Input:  s = "ABAACBAB", t = "AABC"
+        so the character table needs room for all 52 letters (128 is simpler).</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 7 — why the problem guarantees uniqueness</span>
+          <pre><code>Input:  s = "ABAACBAB", t = "AABC"
         Minimum length is 4, and THREE different windows achieve it:
           indices 1..4 -&gt; "BAAC"
           indices 2..5 -&gt; "AACB"
           indices 3..6 -&gt; "ACBA"
 This input violates the "answer is unique" promise, so it will not be tested —
 but you should still know what your code does. The solutions below use a
-strict &lt; when updating the best window, so they return the LEFTMOST: "BAAC".</code></pre></div>
-      <div class="tech-code"><span class="code-lang">example 8 — degenerate inputs</span><pre><code>Input:  s = "xyz",  t = "a"    -&gt; ""      (character absent entirely)
+strict &lt; when updating the best window, so they return the LEFTMOST: "BAAC".</code></pre>
+        </div>
+        <div class="example">
+          <span class="example-label">Example 8 — degenerate inputs</span>
+          <pre><code>Input:  s = "xyz",  t = "a"    -&gt; ""      (character absent entirely)
 Input:  s = "ab",   t = "b"    -&gt; "b"     (answer is a suffix)
 Input:  s = "abc",  t = "cba"  -&gt; "abc"   (order in t is irrelevant)
 Input:  s = "aa",   t = "aa"   -&gt; "aa"
-Input:  n &gt; m                  -&gt; ""      (cannot fit; answer immediately)</code></pre></div>
+Input:  n &gt; m                  -&gt; ""      (cannot fit; answer immediately)</code></pre>
+        </div>
+      </div>
 
       <h4>Constraints to state back</h4>
       <ul class="spec-list">
@@ -905,7 +931,7 @@ std::string_view minWindowView(std::string_view s, std::string_view t) {
     <nav class="problem-nav" aria-label="Problem navigation">
       <a class="problem-nav-link prev" href="../trapping_rain_water/">&larr; Trapping rain water</a>
       <a class="problem-nav-link back" href="../">All DSA problems</a>
-      <span class="problem-nav-link next muted">End of topic &rarr;</span>
+      <a class="problem-nav-link next" href="../remove_invalid_parentheses/">Remove invalid parentheses &rarr;</a>
     </nav>
   </div>
 </main>
