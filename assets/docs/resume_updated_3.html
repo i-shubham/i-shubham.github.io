@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shubham Mallick - Staff Software Engineer, Data Platform</title>
+    <style>
+        /*
+         * One-page A4 resume for print and ATS.
+         * Single column, real headings, native lists, standard fonts.
+         * No tables, images, icons, text boxes, or multi-column skills.
+         * Employer and dates share one heading so parsers keep them together.
+         * Export: Print, Save as PDF, A4, 100%, Margins None, headers/footers off.
+         */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        :root {
+            --ink: #1c2127;
+            --navy: #0e1c2f;
+            --role: #1a3f5c;
+            --muted: #3d4b59;
+            --rule: #0e1c2f;
+            --line: #d5dde4;
+        }
+
+        body {
+            font-family: Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            color: var(--ink);
+            background: #e7eaee;
+            font-size: 10pt;
+            line-height: 1.3;
+            -webkit-font-smoothing: antialiased;
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "clig" 0, "calt" 0;
+            hyphens: none;
+        }
+
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            padding: 10px 16px;
+            background: var(--navy);
+            color: #fff;
+        }
+
+        .toolbar button {
+            background: #1a4d73;
+            color: #fff;
+            border: 1px solid #7facc9;
+            border-radius: 2px;
+            padding: 8px 16px;
+            font: 600 13px Calibri, Arial, sans-serif;
+            cursor: pointer;
+        }
+
+        .toolbar p {
+            font: 12px/1.35 Calibri, Arial, sans-serif;
+            max-width: 720px;
+            color: #d7e2ec;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 16px auto 24px;
+            background: #fff;
+            padding: 8mm 11.5mm 7mm;
+            box-shadow: 0 1px 2px rgba(14, 28, 47, 0.06), 0 10px 28px rgba(14, 28, 47, 0.1);
+        }
+
+        header {
+            padding-bottom: 1.7mm;
+            border-bottom: 1.6px solid var(--rule);
+        }
+
+        h1 {
+            font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+            font-size: 18.5pt;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1;
+            color: var(--navy);
+        }
+
+        .headline {
+            margin-top: 1.2mm;
+            font-size: 9.35pt;
+            font-weight: 700;
+            letter-spacing: 0.1px;
+            color: var(--role);
+            line-height: 1.25;
+        }
+
+        .contact {
+            margin-top: 0.7mm;
+            font-size: 8.7pt;
+            line-height: 1.3;
+            color: var(--muted);
+        }
+
+        .contact a { color: var(--muted); text-decoration: none; }
+        .contact .sep { color: #8b98a5; padding: 0 1px; }
+
+        section { margin-top: 3.7mm; }
+
+        h2 {
+            font-size: 9.15pt;
+            font-weight: 700;
+            letter-spacing: 0.9px;
+            text-transform: uppercase;
+            color: var(--navy);
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 0.7px;
+            margin-bottom: 1.8px;
+        }
+
+        h3 {
+            margin: 0;
+            padding: 0;
+            font-size: inherit;
+            font-weight: inherit;
+            line-height: inherit;
+            color: inherit;
+        }
+
+        .summary {
+            font-size: 9.3pt;
+            line-height: 1.38;
+            color: var(--ink);
+        }
+
+        .skills p {
+            font-size: 9.05pt;
+            line-height: 1.34;
+            margin-bottom: 0.6px;
+            padding-left: 11px;
+            text-indent: -11px;
+            color: var(--ink);
+        }
+
+        .skills strong,
+        .edu strong {
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .job { margin-top: 2.75mm; }
+        .job:first-of-type { margin-top: 0.7mm; }
+
+        .job-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            line-height: 1.12;
+        }
+
+        .company {
+            font-size: 10.2pt;
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .dates {
+            font-size: 8.7pt;
+            font-weight: 600;
+            color: var(--muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .role {
+            font-size: 9.05pt;
+            font-weight: 700;
+            color: var(--role);
+            line-height: 1.22;
+            margin-top: 0.35px;
+        }
+
+        .job ul {
+            margin: 0.7px 0 0 13px;
+            padding: 0;
+        }
+
+        .job li {
+            font-size: 9.05pt;
+            line-height: 1.34;
+            margin-bottom: 0.25px;
+            color: var(--ink);
+            padding-left: 1px;
+        }
+
+        .job li::marker { color: var(--navy); }
+
+        .edu {
+            font-size: 9.05pt;
+            line-height: 1.36;
+            color: var(--ink);
+        }
+
+        @media print {
+            html, body {
+                width: auto;
+                height: auto;
+                margin: 0;
+                padding: 0;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .toolbar { display: none !important; }
+            .page {
+                width: auto;
+                min-height: 0;
+                margin: 0;
+                padding: 8mm 11.5mm 7mm;
+                box-shadow: none;
+            }
+            a { color: inherit !important; text-decoration: none; }
+            h2, h3, .role { break-after: avoid; page-break-after: avoid; }
+            p, li { orphans: 2; widows: 2; }
+        }
+    </style>
+    <script src="../js/url-cleanup.js"></script>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" onclick="window.print()">Print / Save PDF</button>
+        <p>One A4 page: Destination <strong>Save as PDF</strong>, Paper <strong>A4</strong>, Margins <strong>None</strong>, Scale <strong>100%</strong>, <strong>Headers and footers</strong> off.</p>
+    </div>
+
+    <main class="page">
+        <header>
+            <h1>Shubham Mallick</h1>
+            <p class="headline">Staff Software Engineer | Data Platform and Distributed Systems | Technical Leadership</p>
+            <p class="contact">
+                Hyderabad, India
+                <span class="sep">|</span>
+                <a href="tel:+919734389354">+91-9734389354</a>
+                <span class="sep">|</span>
+                <a href="mailto:shubham.kolkata@gmail.com">shubham.kolkata@gmail.com</a>
+                <span class="sep">|</span>
+                <a href="https://www.linkedin.com/in/i-shubham/">linkedin.com/in/i-shubham</a>
+                <span class="sep">|</span>
+                <a href="https://www.i-shubham.in/">i-shubham.in</a>
+                <span class="sep">|</span>
+                US B1/B2 Visa
+            </p>
+        </header>
+
+        <section>
+            <h2>Professional Summary</h2>
+            <p class="summary">
+                Staff Software Engineer with 14+ years designing, building, and operating large-scale distributed data systems, including 8+ years of technical leadership as Staff Engineer and Lead. Architect of production data platforms spanning ETL/ELT, real-time ingestion, orchestration, metrics, data quality, and governance across AWS, Azure, and GCP. Hands-on with Databricks, Apache Spark, Kafka, Airflow, Python, SQL, Terraform, and CI/CD, including GenAI and agentic AI in production. Led teams of up to 12 engineers, mentored 50+ engineers, and partnered with product, data science, and business stakeholders.
+            </p>
+        </section>
+
+        <section class="skills">
+            <h2>Technical Skills</h2>
+            <p><strong>Languages:</strong> Python, SQL, Scala, Java, Go, Rust, Bash</p>
+            <p><strong>Data Platform:</strong> Databricks, Apache Spark, Kafka, Airflow, Snowflake, Hadoop, Hive, Neo4j, ETL/ELT, Lakehouse, data modeling, data ingestion, data pipelines, metrics, data quality, data lineage, data governance, metadata, data APIs</p>
+            <p><strong>Cloud and Infrastructure:</strong> AWS, Azure, GCP, Kubernetes, EKS, Docker, Terraform, Infrastructure as Code (IaC), CI/CD, Jenkins</p>
+            <p><strong>AI and Machine Learning:</strong> GenAI, LLM, RAG, agentic AI, model evaluation, OpenAI, Anthropic Claude, Gemini, TensorFlow, PyTorch</p>
+            <p><strong>Observability:</strong> Grafana, Splunk, Datadog, Prometheus, logging, telemetry, alerting</p>
+            <p><strong>Leadership:</strong> technical leadership, architecture, mentoring, roadmap ownership, cross-functional delivery, Agile</p>
+        </section>
+
+        <section>
+            <h2>Professional Experience</h2>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">Atlassian</span>
+                    <span class="dates">Sep 2025 - Present</span>
+                </h3>
+                <p class="role">Lead Engineer, Data Platform and AI Partner Delivery (POD Lead)</p>
+                <ul>
+                    <li>Lead architecture and delivery for an AI-first data platform with product, sales, data science, and engineering.</li>
+                    <li>Design and operate a Databricks and Spark SQL metrics layer, including Neo4j, for adoption, health, and performance.</li>
+                    <li>Build GenAI and ML evaluation infrastructure with CI/CD, feeding consumer feedback into data quality and the roadmap.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">Salesforce</span>
+                    <span class="dates">Jul 2022 - Aug 2025</span>
+                </h3>
+                <p class="role">Staff Engineer, Agentforce and Sales AI (POD Lead)</p>
+                <ul>
+                    <li>Staff technical lead for Sales AI and Agentforce; shipped multi-turn agent workflows, improving performance 25-40%.</li>
+                    <li>Architected a latency-critical AWS platform (Spark, EKS, Kafka) for high-throughput traffic, reducing end-to-end latency 70%.</li>
+                    <li>Delivered Terraform and Jenkins CI/CD that cut deployment time 50%, with Grafana and Splunk telemetry for data quality.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">Apple Inc.</span>
+                    <span class="dates">Jun 2020 - Jul 2022</span>
+                </h3>
+                <p class="role">Technical Lead, Data Platform (Module Owner)</p>
+                <ul>
+                    <li>Led a 12-engineer team owning an AWS data platform (100 GB+ daily, 99.9% SLA) across architecture, operations, and delivery.</li>
+                    <li>Built real-time Kafka ingestion at 1M+ messages/hour with data-quality checks, lineage, and curation for analytics consumers.</li>
+                    <li>Led an on-premises to AWS Data Mesh migration on a multi-tenant platform, reducing cost 30% and improving scalability 200%.</li>
+                    <li>Defined taxonomies, governance, and access standards; shipped data APIs and metadata models for 10+ analytics teams.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">Qualcomm</span>
+                    <span class="dates">Nov 2017 - May 2020</span>
+                </h3>
+                <p class="role">Senior Engineer, Machine Learning and Distributed Systems</p>
+                <ul>
+                    <li>Architected a distributed platform processing 20 TB+ daily (Spark, Hive, Hadoop) for production analytics and machine learning.</li>
+                    <li>Built ML pipelines (92% accuracy) and Airflow orchestration that raised efficiency 35% and cut infrastructure use 25%.</li>
+                    <li>Enabled self-service for 15+ data products; Innovation Maestro and HaQkathon winner, presented to CxO leadership.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">IBM</span>
+                    <span class="dates">Dec 2016 - Nov 2017</span>
+                </h3>
+                <p class="role">Advisory Analyst, Azure Cloud SME</p>
+                <ul>
+                    <li>Led 6 engineers on Azure Data Factory and Service Bus; migrated 500 GB+ at 99.9% integrity with IaC and compliance controls.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">PwC</span>
+                    <span class="dates">Oct 2014 - Dec 2016</span>
+                </h3>
+                <p class="role">Senior Developer and Consultant</p>
+                <ul>
+                    <li>Architected a BI platform querying a billion+ rows in 2-5 seconds; ETL of 50M+ rows daily improved consistency 40%.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <h3 class="job-top">
+                    <span class="company">Cognizant</span>
+                    <span class="dates">Apr 2012 - Oct 2014</span>
+                </h3>
+                <p class="role">Application Developer</p>
+                <ul>
+                    <li>Owned 24x7 reliability for MetLife backend processing and automated 5+ applications, reducing manual effort 60%.</li>
+                </ul>
+            </article>
+        </section>
+
+        <section>
+            <h2>Education and Certifications</h2>
+            <p class="edu"><strong>Master of Technology, Data Science and Engineering</strong>, BITS Pilani (Distinction)</p>
+            <p class="edu"><strong>Bachelor of Technology, Computer Science and Engineering</strong>, West Bengal University of Technology (Distinction)</p>
+            <p class="edu"><strong>Certifications:</strong> Microsoft Certified Professional; IBM Certified Professional</p>
+            <p class="edu"><strong>Awards:</strong> Atlassian Spot Award; Salesforce Hackathon Winner; Apple Supply-Chain Recognition; Qualcomm Innovation Maestro; HaQkathon Winner; PwC STAR Performer</p>
+        </section>
+    </main>
+</body>
+</html>
