@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Resume of Shubham Mallick - Staff Software Engineer and Technical Lead with 14+ years in data platform, distributed systems, and AI infrastructure.">
+    <title>Shubham Mallick - Staff Software Engineer, Data Platform and Distributed Systems</title>
+    <style>
+        /*
+         * ATS-safe: single column, semantic headings, system fonts, no images,
+         * no tables, no columns, no floated dates (floats detach dates in PDF text).
+         * Styling is colour/spacing only, so the extracted text order equals the DOM order.
+         * Export with Print → Save as PDF so the file stays selectable text.
+         * Vertical rhythm is tuned to land the whole document on one A4 page.
+         */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @page {
+            size: A4;
+            /* Keep CSS page margin at 0. Visible inset is .page padding so it
+               still appears when the print dialog is set to Margins: None. */
+            margin: 0;
+        }
+
+        :root {
+            --ink: #16191f;
+            --ink-soft: #343a45;
+            --muted: #5c6472;
+            --navy: #0f2f4f;
+            --accent: #1d5c96;
+            --accent-soft: #eaf1f8;
+            --rule: #c9d3de;
+            --hairline: #e3e9f0;
+        }
+
+        body {
+            font-family: "Segoe UI", Calibri, Carlito, Helvetica, Arial, sans-serif;
+            color: var(--ink);
+            background: #eef0f3;
+            font-size: 10pt;
+            line-height: 1.25;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 10px 16px;
+            background: var(--navy);
+            color: #fff;
+        }
+
+        .toolbar button {
+            background: var(--accent);
+            color: #fff;
+            border: 0;
+            border-radius: 4px;
+            padding: 8px 18px;
+            font: 600 13px "Segoe UI", Calibri, Arial, sans-serif;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+        }
+
+        .toolbar p {
+            font: 12px/1.3 "Segoe UI", Calibri, Arial, sans-serif;
+            max-width: 640px;
+            opacity: 0.85;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 16px auto;
+            background: #fff;
+            padding: 7mm 11mm 6mm;
+            border-top: 4.5px solid var(--accent);
+            box-sizing: border-box;
+            box-shadow: 0 0 24px rgba(0,0,0,0.12);
+        }
+
+        header {
+            text-align: center;
+            padding-bottom: 1.8mm;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        h1 {
+            /* Serif wordmark against the sans-serif body; no text-transform and
+               no tracking so the parsed text is exactly the casing in the markup. */
+            font-family: Georgia, "Times New Roman", "Segoe UI", serif;
+            font-size: 21.5pt;
+            font-weight: 700;
+            text-transform: none;
+            letter-spacing: 0;
+            line-height: 1.06;
+            color: var(--navy);
+        }
+
+        .headline {
+            font-size: 9.4pt;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0.3px;
+            color: var(--accent);
+            margin: 1.3mm 0;
+        }
+
+        .contact {
+            font-size: 8.5pt;
+            color: var(--muted);
+            line-height: 1.35;
+        }
+
+        .contact a {
+            color: var(--muted);
+            text-decoration: none;
+        }
+
+        .contact .sep {
+            color: var(--rule);
+            padding: 0 4px;
+        }
+
+        section {
+            margin-top: 2.9mm;
+        }
+
+        h2 {
+            font-size: 9.6pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--navy);
+            background: var(--accent-soft);
+            border-left: 3px solid var(--accent);
+            margin: 0 0 1.5mm;
+            padding: 0.7mm 0 0.7mm 2.2mm;
+        }
+
+        .summary {
+            font-size: 9.15pt;
+            line-height: 1.32;
+            color: var(--ink-soft);
+            text-align: justify;
+        }
+
+        .skill-row {
+            font-size: 8.95pt;
+            line-height: 1.3;
+            color: var(--ink-soft);
+            padding: 0.7mm 0;
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .skill-row:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .skill-label {
+            font-weight: 700;
+            color: var(--navy);
+            margin-right: 1.2mm;
+        }
+
+        .job {
+            margin-bottom: 1mm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .job:last-child {
+            margin-bottom: 0;
+        }
+
+        .job-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 10px;
+            font-size: 9.6pt;
+            line-height: 1.22;
+            color: var(--ink);
+        }
+
+        .job-top .job-left {
+            min-width: 0;
+        }
+
+        .job-top .company {
+            font-weight: 700;
+            color: var(--navy);
+            letter-spacing: 0.2px;
+        }
+
+        .job-top .role {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .job-top .dash {
+            color: var(--rule);
+        }
+
+        .job-top .dates {
+            font-weight: 600;
+            font-size: 8.6pt;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            text-align: right;
+            margin-left: auto;
+            color: var(--muted);
+        }
+
+        .job ul {
+            margin: 0.7mm 0 0 4.6mm;
+        }
+
+        .job li {
+            font-size: 8.9pt;
+            line-height: 1.28;
+            margin-bottom: 0.35mm;
+            color: var(--ink-soft);
+            padding-left: 0.6mm;
+        }
+
+        .job li::marker {
+            color: var(--accent);
+            font-size: 7.5pt;
+        }
+
+        .job li strong {
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .edu {
+            font-size: 9pt;
+            line-height: 1.4;
+            color: var(--ink-soft);
+        }
+
+        .edu + .edu {
+            margin-top: 0.4mm;
+        }
+
+        .edu strong {
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .edu .school {
+            color: var(--muted);
+        }
+
+        @media print {
+            html, body {
+                width: auto;
+                height: auto;
+                margin: 0;
+                padding: 0;
+                background: #fff;
+            }
+            .toolbar { display: none !important; }
+            .page {
+                width: auto;
+                min-height: 0;
+                margin: 0;
+                padding: 7mm 11mm 6mm;
+                box-sizing: border-box;
+                box-shadow: none;
+                -webkit-box-decoration-break: clone;
+                box-decoration-break: clone;
+            }
+            a { color: #343a45 !important; text-decoration: none; }
+            h2, .job-top { page-break-after: avoid; break-after: avoid; }
+            p, li { orphans: 2; widows: 2; }
+        }
+    </style>
+    <script src="../js/url-cleanup.js"></script>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+
+    <main class="page">
+        <header>
+            <h1>Shubham Mallick</h1>
+            <p class="headline">Staff Software Engineer &bull; Data Platform &amp; Distributed Systems &bull; AI/ML Infrastructure &bull; Technical Lead</p>
+            <p class="contact">
+                Hyderabad, India <span class="sep">|</span>
+                <a href="tel:+91-9734389354" target="_blank">+91-9734389354</a> <span class="sep">|</span>
+                <a href="mailto:shubham.kolkata@gmail.com" target="_blank">shubham.kolkata@gmail.com</a> <span class="sep">|</span>
+                <a href="https://www.linkedin.com/in/i-shubham/" target="_blank">linkedin.com/in/i-shubham</a> <span class="sep">|</span>
+                <a href="https://www.i-shubham.in/" target="_blank">www.i-shubham.in</a> <span class="sep">|</span>
+                US B1/B2 Visa
+            </p>
+        </header>
+
+        <section>
+            <h2>Professional Summary</h2>
+            <p class="summary">
+                Staff engineer and technical leader with 14+ years building large-scale distributed data systems, including 8+ years leading teams. Architect of production data platforms spanning ETL/ELT, real-time ingestion, orchestration, data quality, and governance on AWS, Azure, and GCP. Hands-on with Databricks, Apache Spark, Kafka, Airflow, Python, SQL, Terraform, and CI/CD. Led 12-engineer teams and mentored 50+ engineers.
+            </p>
+        </section>
+
+        <section class="skills">
+            <h2>Technical Skills</h2>
+            <p class="skill-row"><span class="skill-label">Languages:</span><span class="skill-value">Python, SQL, Scala, Java, Go, Rust, Bash</span></p>
+            <p class="skill-row"><span class="skill-label">Data Platform:</span><span class="skill-value">Databricks, Apache Spark, Kafka, Airflow, Snowflake, Hadoop, Hive, Lakehouse, ETL/ELT, data modeling, real-time ingestion, data pipelines, metrics, data quality, data lineage, data governance, metadata, data APIs</span></p>
+            <p class="skill-row"><span class="skill-label">Cloud &amp; Infrastructure:</span><span class="skill-value">AWS, Azure, GCP, Kubernetes, EKS, Docker, Terraform, Infrastructure as Code (IaC), CI/CD, Jenkins</span></p>
+            <p class="skill-row"><span class="skill-label">AI &amp; Machine Learning:</span><span class="skill-value">GenAI, LLM, RAG, agentic workflows, model evaluation, OpenAI, Anthropic, Gemini, TensorFlow, PyTorch</span></p>
+            <p class="skill-row"><span class="skill-label">Observability &amp; Leadership:</span><span class="skill-value">Grafana, Splunk, Datadog, Prometheus; technical leadership, mentoring, Agile/Scrum</span></p>
+        </section>
+
+        <section>
+            <h2>Professional Experience</h2>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">Atlassian</span> <span class="dash">-</span> <span class="role">Lead Engineer, Data Platform and AI Partner Delivery, POD Lead</span></span>
+                    <span class="dates">Sep 2025 - Present</span>
+                </p>
+                <ul>
+                    <li>Lead architecture and delivery of an AI-first data platform, partnering with product, sales, data science, and engineering to turn use cases into production pipelines.</li>
+                    <li>Designed and operate the Databricks and Apache Spark (SQL) analytics and metrics layer, including Neo4j, to measure adoption, pipeline health, and program performance.</li>
+                    <li>Built cloud infrastructure for GenAI and ML evaluation pipelines with CI/CD, routing consumer feedback into data-quality priorities and the platform roadmap.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">Salesforce</span> <span class="dash">-</span> <span class="role">Staff Engineer, Agentforce and Sales AI, POD Lead</span></span>
+                    <span class="dates">Jul 2022 - Aug 2025</span>
+                </p>
+                <ul>
+                    <li>Staff technical lead for Sales AI and Agentforce; shipped multi-turn agent workflows with product and engineering, improving performance <strong>25-40%</strong>.</li>
+                    <li>Architected a latency-critical, cloud-native data platform on AWS (Apache Spark, EKS, Kafka) for high-throughput production traffic, cutting end-to-end latency <strong>70%</strong>.</li>
+                    <li>Delivered self-service tooling and infrastructure as code (Terraform, Jenkins CI/CD) that reduced deployment time <strong>50%</strong>, with Grafana and Splunk telemetry for production debugging.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">Apple Inc.</span> <span class="dash">-</span> <span class="role">Technical Lead, Data Platform, Module Owner</span></span>
+                    <span class="dates">Jun 2020 - Jul 2022</span>
+                </p>
+                <ul>
+                    <li>Led a <strong>12-engineer</strong> team owning an enterprise data platform on AWS (100 GB+ daily, 99.9% SLA) across architecture, operations, and full lifecycle delivery.</li>
+                    <li>Built real-time ingestion and pipelines on Kafka (<strong>1M+ messages/hour</strong>) with data-quality checks, lineage, and curation for downstream analytics consumers.</li>
+                    <li>Led on-premises to AWS migration on a multi-tenant Data Mesh platform, reducing cost <strong>30%</strong> and improving scalability <strong>200%</strong>.</li>
+                    <li>Defined data taxonomies, governance, and access standards; shipped data APIs and metadata models used by 10+ teams.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">Qualcomm</span> <span class="dash">-</span> <span class="role">Senior Engineer, Machine Learning and Distributed Systems</span></span>
+                    <span class="dates">Nov 2017 - May 2020</span>
+                </p>
+                <ul>
+                    <li>Architected a distributed data platform processing <strong>20 TB+ daily</strong> (Spark, Hive, Hadoop) for analytics and machine learning.</li>
+                    <li>Built ML training and evaluation pipelines (92% accuracy) and Airflow orchestration frameworks that improved pipeline efficiency <strong>35%</strong> and cut infrastructure usage <strong>25%</strong>.</li>
+                    <li>Enabled self-service access to 15+ data products; Innovation Maestro and HaQkathon winner, presented to CxO leadership.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">IBM</span> <span class="dash">-</span> <span class="role">Advisory Analyst, Azure Cloud SME</span></span>
+                    <span class="dates">Dec 2016 - Nov 2017</span>
+                </p>
+                <ul>
+                    <li>Led a 6-engineer team on an Azure data platform (Data Factory, Service Bus); migrated <strong>500 GB+</strong> at 99.9% integrity with IaC and cross-region compliance controls.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">PwC</span> <span class="dash">-</span> <span class="role">Senior Developer / Consultant</span></span>
+                    <span class="dates">Oct 2014 - Dec 2016</span>
+                </p>
+                <ul>
+                    <li>Architected a BI platform with OLTP/OLAP optimizations querying <strong>billion+ rows in 2-5 seconds</strong> and ETL pipelines processing 50M+ rows daily; STAR Performer.</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <p class="job-top">
+                    <span class="job-left"><span class="company">Cognizant</span> <span class="dash">-</span> <span class="role">Application Developer</span></span>
+                    <span class="dates">Apr 2012 - Oct 2014</span>
+                </p>
+                <ul>
+                    <li>Owned 24x7 production reliability for MetLife backend processing; automated 5+ applications, cutting manual effort <strong>60%</strong>.</li>
+                </ul>
+            </article>
+        </section>
+
+        <section>
+            <h2>Education and Certifications</h2>
+            <p class="edu"><strong>Master of Technology</strong> in <strong>Data Science and Engineering</strong>, <span class="school">BITS Pilani - Distinction</span></p>
+            <p class="edu"><strong>Bachelor of Technology</strong> in <strong>Computer Science and Engineering</strong>, <span class="school">West Bengal University of Technology - Distinction</span></p>
+            <p class="edu"><strong>Certifications:</strong> Microsoft Certified Professional, IBM Certified Professional</p>
+            <p class="edu"><strong>Awards:</strong> Atlassian Spot Award, Salesforce Hackathon Winner, Apple Supply-Chain Recognition, Qualcomm Innovation Maestro and HaQkathon Winner, PwC STAR Performer</p>
+        </section>
+    </main>
+</body>
+</html>
