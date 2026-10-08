@@ -505,7 +505,7 @@
             <div class="sidebar-content">
                 <!-- Profile Image -->
                 <div class="profile-image-container">
-                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpg');" role="img" aria-label="Shubham Mallick"></div>
+                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpeg');" role="img" aria-label="Shubham Mallick"></div>
                 </div>
 
                 <!-- Contact Information -->
@@ -821,6 +821,40 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
+        // Crops the element's background image the same way as `background-size: cover;
+        // background-position: center`, rendered at exactly the pixel size html2canvas will draw it.
+        async function renderProfileImage(el, scale) {
+            if (!el) return null;
+            const match = getComputedStyle(el).backgroundImage.match(/url\(["']?(.*?)["']?\)/);
+            if (!match) return null;
+
+            try {
+                const source = new Image();
+                source.src = match[1];
+                await source.decode();
+
+                const boxW = el.clientWidth;
+                const boxH = el.clientHeight;
+                const coverScale = Math.max(boxW / source.naturalWidth, boxH / source.naturalHeight);
+                const cropW = boxW / coverScale;
+                const cropH = boxH / coverScale;
+                const cropX = (source.naturalWidth - cropW) / 2;
+                const cropY = (source.naturalHeight - cropH) / 2;
+
+                const out = document.createElement('canvas');
+                out.width = Math.round(boxW * scale);
+                out.height = Math.round(boxH * scale);
+                const ctx = out.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, out.width, out.height);
+                return out.toDataURL('image/png');
+            } catch (e) {
+                console.warn('Profile image pre-render failed, falling back to background image', e);
+                return null;
+            }
+        }
+
         async function downloadResume() {
             const downloadBtn = document.querySelector('.download-btn');
             downloadBtn.style.display = 'none';
@@ -846,9 +880,15 @@
             try {
                 const a4Width = 210;
                 const a4Height = 297;
+                const renderScale = 4;
+
+                const profileImageData = await renderProfileImage(
+                    element.querySelector('.profile-image'),
+                    renderScale
+                );
                 
                 const canvas = await html2canvas(element, {
-                    scale: 4,
+                    scale: renderScale,
                     useCORS: true,
                     logging: false,
                     backgroundColor: '#ffffff',
@@ -878,9 +918,17 @@
                         `;
                         clonedDoc.head.appendChild(style);
 
+                        // html2canvas downsamples CSS background images to their CSS pixel size before
+                        // scaling, so swap in a real <img> that is pre-rendered at the output resolution.
                         var profileImg = clonedDoc.querySelector('.profile-image');
-                        if (profileImg) {
-                            profileImg.style.backgroundImage = "url('../img/profile-img-2.png')";
+                        if (profileImg && profileImageData) {
+                            profileImg.style.backgroundImage = 'none';
+                            profileImg.style.overflow = 'hidden';
+                            var img = clonedDoc.createElement('img');
+                            img.src = profileImageData;
+                            img.alt = '';
+                            img.style.cssText = 'display:block;width:100%;height:100%;border-radius:50%;';
+                            profileImg.appendChild(img);
                         }
                     }
                 });
