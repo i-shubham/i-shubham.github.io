@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Resume of Shubham Mallick - Staff Software Engineer and Technical Lead with 14+ years in data platform, distributed systems, and AI infrastructure.">
-    <title>Shubham Mallick - Staff Software Engineer, Data Platform and Distributed Systems</title>
+    <meta name="description" content="Shubham Mallick - Staff Engineer / Engineering Lead. Data platforms, distributed systems, applied AI and LLM agent systems. Spark, Databricks, Kafka, Kubernetes, AWS/Azure/GCP.">
+    <title>Shubham Mallick - Staff Engineer / Engineering Lead, Data Platform & Applied AI</title>
     <style>
         /*
          * ATS-safe: single column, semantic headings, system fonts, no images,
          * no tables, no columns, no floated dates (floats detach dates in PDF text).
          * Styling is colour/spacing only, so the extracted text order equals the DOM order.
-         * Export with Print → Save as PDF so the file stays selectable text.
+         * Export with Print -> Save as PDF so the file stays selectable text.
          * Vertical rhythm is tuned to land the whole document on one A4 page.
          */
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,11 +26,11 @@
             --ink: #16191f;
             --ink-soft: #343a45;
             --muted: #5c6472;
-            --navy: #0f2f4f;
-            --accent: #1d5c96;
-            --accent-soft: #eaf1f8;
-            --rule: #c9d3de;
-            --hairline: #e3e9f0;
+            --deep: #134e4a;          /* dark green: name, headings, labels */
+            --accent: #0f766e;        /* green accent: bars, roles, button */
+            --accent-soft: #e6f4f2;   /* heading band */
+            --rule: #c7d7d4;
+            --hairline: #e1ebe9;
         }
 
         body {
@@ -52,7 +52,7 @@
             justify-content: center;
             gap: 14px;
             padding: 10px 16px;
-            background: var(--navy);
+            background: var(--deep);
             color: #fff;
         }
 
@@ -65,12 +65,6 @@
             font: 600 13px "Segoe UI", Calibri, Arial, sans-serif;
             letter-spacing: 0.3px;
             cursor: pointer;
-        }
-
-        .toolbar p {
-            font: 12px/1.3 "Segoe UI", Calibri, Arial, sans-serif;
-            max-width: 640px;
-            opacity: 0.85;
         }
 
         .page {
@@ -99,11 +93,11 @@
             text-transform: none;
             letter-spacing: 0;
             line-height: 1.06;
-            color: var(--navy);
+            color: var(--deep);
         }
 
         .headline {
-            font-size: 9.4pt;
+            font-size: 9.2pt;
             font-weight: 600;
             text-transform: none;
             letter-spacing: 0.3px;
@@ -112,7 +106,7 @@
         }
 
         .contact {
-            font-size: 8.5pt;
+            font-size: 8.3pt;
             color: var(--muted);
             line-height: 1.35;
         }
@@ -132,29 +126,29 @@
         }
 
         h2 {
-            font-size: 9.6pt;
+            font-size: 9pt;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: var(--navy);
+            color: var(--deep);
             background: var(--accent-soft);
             border-left: 3px solid var(--accent);
-            margin: 0 0 1.5mm;
-            padding: 0.7mm 0 0.7mm 2.2mm;
+            margin: 0 0 1.4mm;
+            padding: 0.6mm 0 0.6mm 2.2mm;
         }
 
         .summary {
-            font-size: 9.15pt;
+            font-size: 8.3pt;
             line-height: 1.32;
             color: var(--ink-soft);
             text-align: justify;
         }
 
         .skill-row {
-            font-size: 8.95pt;
+            font-size: 8.1pt;
             line-height: 1.3;
             color: var(--ink-soft);
-            padding: 0.7mm 0;
+            padding: 0.6mm 0;
             border-bottom: 1px solid var(--hairline);
         }
 
@@ -165,7 +159,7 @@
 
         .skill-label {
             font-weight: 700;
-            color: var(--navy);
+            color: var(--deep);
             margin-right: 1.2mm;
         }
 
@@ -184,7 +178,7 @@
             justify-content: space-between;
             align-items: baseline;
             gap: 10px;
-            font-size: 9.6pt;
+            font-size: 8.8pt;
             line-height: 1.22;
             color: var(--ink);
         }
@@ -195,7 +189,7 @@
 
         .job-top .company {
             font-weight: 700;
-            color: var(--navy);
+            color: var(--deep);
             letter-spacing: 0.2px;
         }
 
@@ -210,7 +204,7 @@
 
         .job-top .dates {
             font-weight: 600;
-            font-size: 8.6pt;
+            font-size: 7.8pt;
             letter-spacing: 0.3px;
             white-space: nowrap;
             flex-shrink: 0;
@@ -220,40 +214,35 @@
         }
 
         .job ul {
-            margin: 0.7mm 0 0 4.6mm;
+            margin: 0.6mm 0 0 4.6mm;
         }
 
         .job li {
-            font-size: 8.9pt;
-            line-height: 1.28;
-            margin-bottom: 0.35mm;
+            font-size: 7.6pt;
+            line-height: 1.36;
+            margin-bottom: 0.3mm;
             color: var(--ink-soft);
             padding-left: 0.6mm;
         }
 
         .job li::marker {
             color: var(--accent);
-            font-size: 7.5pt;
-        }
-
-        .job li strong {
-            font-weight: 700;
-            color: var(--ink);
+            font-size: 7pt;
         }
 
         .edu {
-            font-size: 9pt;
+            font-size: 8.2pt;
             line-height: 1.4;
             color: var(--ink-soft);
         }
 
         .edu + .edu {
-            margin-top: 0.4mm;
+            margin-top: 0.3mm;
         }
 
         .edu strong {
             font-weight: 700;
-            color: var(--navy);
+            color: var(--deep);
         }
 
         .edu .school {
@@ -294,31 +283,32 @@
     <main class="page">
         <header>
             <h1>Shubham Mallick</h1>
-            <p class="headline">Staff Software Engineer &bull; Data Platform &amp; Distributed Systems &bull; AI/ML Infrastructure &bull; Technical Lead</p>
+            <p class="headline">Staff Engineer / Engineering Lead &bull; Data Platform &bull; Distributed Systems &bull; Applied AI &amp; Agents</p>
             <p class="contact">
                 Hyderabad, India <span class="sep">|</span>
                 <a href="tel:+91-9734389354" target="_blank">+91-9734389354</a> <span class="sep">|</span>
                 <a href="mailto:shubham.kolkata@gmail.com" target="_blank">shubham.kolkata@gmail.com</a> <span class="sep">|</span>
                 <a href="https://www.linkedin.com/in/i-shubham/" target="_blank">linkedin.com/in/i-shubham</a> <span class="sep">|</span>
                 <a href="https://www.i-shubham.in/" target="_blank">www.i-shubham.in</a> <span class="sep">|</span>
-                US B1/B2 Visa
+                USA B1/B2 Visa
             </p>
         </header>
 
         <section>
             <h2>Professional Summary</h2>
             <p class="summary">
-                Staff engineer and technical leader with 14+ years building large-scale distributed data systems, including 8+ years leading teams. Architect of production data platforms spanning ETL/ELT, real-time ingestion, orchestration, data quality, and governance on AWS, Azure, and GCP. Hands-on with Databricks, Apache Spark, Kafka, Airflow, Python, SQL, Terraform, and CI/CD. Led 12-engineer teams and mentored 50+ engineers.
+                Staff engineer and engineering lead with 14+ years designing, building and operating large-scale data platforms, distributed systems and applied-AI infrastructure on AWS, Azure and GCP. Led teams of up to 12 engineers, owning architecture end-to-end (data models, API contracts, schema evolution, SLAs), shipping platforms adopted by 10+ internal teams and running them in production with SLOs, on-call, incident management and root-cause analysis. Hands-on with Apache Spark, Databricks, Kafka, Delta Lake/Iceberg lakehouse, Kubernetes and Python/Scala/Java/Go; currently building LLM agent systems - RAG, agent orchestration and evaluation pipelines over traces, metrics and labeled datasets. Lead through written design docs that state alternatives and trade-offs; mentor senior engineers into tech leads.
             </p>
         </section>
 
         <section class="skills">
-            <h2>Technical Skills</h2>
-            <p class="skill-row"><span class="skill-label">Languages:</span><span class="skill-value">Python, SQL, Scala, Java, Go, Rust, Bash</span></p>
-            <p class="skill-row"><span class="skill-label">Data Platform:</span><span class="skill-value">Databricks, Apache Spark, Kafka, Airflow, Snowflake, Hadoop, Hive, Lakehouse, ETL/ELT, data modeling, real-time ingestion, data pipelines, metrics, data quality, data lineage, data governance, metadata, data APIs</span></p>
-            <p class="skill-row"><span class="skill-label">Cloud &amp; Infrastructure:</span><span class="skill-value">AWS, Azure, GCP, Kubernetes, EKS, Docker, Terraform, Infrastructure as Code (IaC), CI/CD, Jenkins</span></p>
-            <p class="skill-row"><span class="skill-label">AI &amp; Machine Learning:</span><span class="skill-value">GenAI, LLM, RAG, agentic workflows, model evaluation, OpenAI, Anthropic, Gemini, TensorFlow, PyTorch</span></p>
-            <p class="skill-row"><span class="skill-label">Observability &amp; Leadership:</span><span class="skill-value">Grafana, Splunk, Datadog, Prometheus; technical leadership, mentoring, Agile/Scrum</span></p>
+            <h2>Core Skills</h2>
+            <p class="skill-row"><span class="skill-label">Data Platform &amp; Big Data:</span><span class="skill-value">Apache Spark, Databricks, Delta Lake, Apache Iceberg, Lakehouse, Kafka, Flink, Hadoop, Hive, Trino/Presto, Airflow, Snowflake, ETL/ELT, Data Modeling, Data Mesh, Data Quality &amp; Lineage, Data Governance, SQL</span></p>
+            <p class="skill-row"><span class="skill-label">AI, ML &amp; Agents:</span><span class="skill-value">LLMs/GenAI, RAG, Agent Orchestration, LangChain, Agentforce, MLflow, PyTorch, TensorFlow, Agent &amp; Model Evaluation, Prompt/Context Engineering, NLP, Responsible AI</span></p>
+            <p class="skill-row"><span class="skill-label">Cloud, Infrastructure &amp; DevOps:</span><span class="skill-value">AWS, Azure, GCP, Kubernetes (EKS), Docker, Terraform, CI/CD (Jenkins), Microservices, REST/GraphQL APIs, Linux</span></p>
+            <p class="skill-row"><span class="skill-label">Observability &amp; Reliability:</span><span class="skill-value">Grafana, Prometheus, Datadog, Splunk, SLOs, On-call, Incident Management, RCA, Performance Monitoring</span></p>
+            <p class="skill-row"><span class="skill-label">Programming:</span><span class="skill-value">Python, Scala, Java, Go, SQL, Rust, C#, Bash/Shell</span></p>
+            <p class="skill-row"><span class="skill-label">Leadership:</span><span class="skill-value">Team Leadership (up to 12), Mentoring (50+), Design Docs &amp; Architecture Reviews, Cross-functional Alignment, Escalations</span></p>
         </section>
 
         <section>
@@ -326,50 +316,54 @@
 
             <article class="job">
                 <p class="job-top">
-                    <span class="job-left"><span class="company">Atlassian</span> <span class="dash">-</span> <span class="role">Lead Engineer, Data Platform and AI Partner Delivery, POD Lead</span></span>
+                    <span class="job-left"><span class="company">Atlassian</span> <span class="dash">-</span> <span class="role">Engineering Lead, AI Partner Delivery &amp; Data Platform (POD Lead)</span></span>
                     <span class="dates">Sep 2025 - Present</span>
                 </p>
                 <ul>
-                    <li>Lead architecture and delivery of an AI-first data platform, partnering with product, sales, data science, and engineering to turn use cases into production pipelines.</li>
-                    <li>Designed and operate the Databricks and Apache Spark (SQL) analytics and metrics layer, including Neo4j, to measure adoption, pipeline health, and program performance.</li>
-                    <li>Built cloud infrastructure for GenAI and ML evaluation pipelines with CI/CD, routing consumer feedback into data-quality priorities and the platform roadmap.</li>
+                    <li>Lead a pod building the partner data &amp; AI layer on Atlassian's central Databricks/Spark lakehouse; own architecture, data models and API contracts</li>
+                    <li>Built AI-ready infra for GenAI/agent delivery: RAG pipelines, LLM &amp; agent evaluation (traces, metrics, labeled test sets) and CI/CD rollout gates</li>
+                    <li>Extended the platform only where partner data required it (SQL semantic models, Neo4j graph); upstream gaps go to platform owners as design asks</li>
+                    <li>Scope highest-value use cases with product, GTM and partner teams; mentor engineers through design reviews</li>
                 </ul>
             </article>
 
             <article class="job">
                 <p class="job-top">
-                    <span class="job-left"><span class="company">Salesforce</span> <span class="dash">-</span> <span class="role">Staff Engineer, Agentforce and Sales AI, POD Lead</span></span>
+                    <span class="job-left"><span class="company">Salesforce</span> <span class="dash">-</span> <span class="role">Staff Engineer, Agentforce &amp; Sales AI Platform (POD Lead)</span></span>
                     <span class="dates">Jul 2022 - Aug 2025</span>
                 </p>
                 <ul>
-                    <li>Staff technical lead for Sales AI and Agentforce; shipped multi-turn agent workflows with product and engineering, improving performance <strong>25-40%</strong>.</li>
-                    <li>Architected a latency-critical, cloud-native data platform on AWS (Apache Spark, EKS, Kafka) for high-throughput production traffic, cutting end-to-end latency <strong>70%</strong>.</li>
-                    <li>Delivered self-service tooling and infrastructure as code (Terraform, Jenkins CI/CD) that reduced deployment time <strong>50%</strong>, with Grafana and Splunk telemetry for production debugging.</li>
+                    <li>Drove GenAI/Agentforce adoption into the Sales AI stack: shipped multi-turn LLM agent workflows (RAG, prompt/context engineering, guardrails) with an offline/online evaluation harness; ~25-40% performance gains</li>
+                    <li>Architected the data platform behind it on AWS (Spark on EKS/Kubernetes, Kafka streaming, Airflow batch); resource tuning cut latency ~70%</li>
+                    <li>Built self-service developer tooling and IaC (Terraform, Jenkins CI/CD) that cut deployment time ~50%; other teams onboard without waiting on us</li>
+                    <li>Owned production reliability: SLOs, alerting, log analysis (Grafana/Splunk/Datadog), on-call, incident RCA, preventive fixes; mentored engineers</li>
                 </ul>
             </article>
 
             <article class="job">
                 <p class="job-top">
-                    <span class="job-left"><span class="company">Apple Inc.</span> <span class="dash">-</span> <span class="role">Technical Lead, Data Platform, Module Owner</span></span>
+                    <span class="job-left"><span class="company">Apple Inc.</span> <span class="dash">-</span> <span class="role">Technical Lead &amp; Module Owner, Supply-Chain Analytics Platform</span></span>
                     <span class="dates">Jun 2020 - Jul 2022</span>
                 </p>
                 <ul>
-                    <li>Led a <strong>12-engineer</strong> team owning an enterprise data platform on AWS (100 GB+ daily, 99.9% SLA) across architecture, operations, and full lifecycle delivery.</li>
-                    <li>Built real-time ingestion and pipelines on Kafka (<strong>1M+ messages/hour</strong>) with data-quality checks, lineage, and curation for downstream analytics consumers.</li>
-                    <li>Led on-premises to AWS migration on a multi-tenant Data Mesh platform, reducing cost <strong>30%</strong> and improving scalability <strong>200%</strong>.</li>
-                    <li>Defined data taxonomies, governance, and access standards; shipped data APIs and metadata models used by 10+ teams.</li>
+                    <li>Led a 12-engineer team building a supply-chain analytics platform on AWS to GA (100GB+/day, 99.9% SLA); owned roadmap, execution, testing, rollout</li>
+                    <li>Built real-time (Kafka, 1M+ msgs/hr) and batch (Spark) pipelines with shared data-quality checks, lineage and curation workflows</li>
+                    <li>Led on-prem to AWS migration to a Data Mesh: domain-owned data, central governance, access control &amp; privacy safeguards; 30% cost cut, 2x scale</li>
+                    <li>Defined schema contracts, versioning and governance standards so data models evolved without breaking 10+ downstream teams using our data APIs</li>
+                    <li>Hired, coached and grew engineers into tech leads; partnered cross-functionally with operations, finance and platform-owner teams</li>
                 </ul>
             </article>
 
             <article class="job">
                 <p class="job-top">
-                    <span class="job-left"><span class="company">Qualcomm</span> <span class="dash">-</span> <span class="role">Senior Engineer, Machine Learning and Distributed Systems</span></span>
+                    <span class="job-left"><span class="company">Qualcomm</span> <span class="dash">-</span> <span class="role">Senior Engineer, ML &amp; Distributed Systems</span></span>
                     <span class="dates">Nov 2017 - May 2020</span>
                 </p>
                 <ul>
-                    <li>Architected a distributed data platform processing <strong>20 TB+ daily</strong> (Spark, Hive, Hadoop) for analytics and machine learning.</li>
-                    <li>Built ML training and evaluation pipelines (92% accuracy) and Airflow orchestration frameworks that improved pipeline efficiency <strong>35%</strong> and cut infrastructure usage <strong>25%</strong>.</li>
-                    <li>Enabled self-service access to 15+ data products; Innovation Maestro and HaQkathon winner, presented to CxO leadership.</li>
+                    <li>Architected a distributed processing platform handling 20TB+/day on a multi-PB Hadoop estate (Spark, Hive, MapR-DB, YARN resource management)</li>
+                    <li>Built ML training and evaluation pipelines (TensorFlow/PyTorch) reaching 92% accuracy; profiled and tuned training workloads, cutting infra usage 25%</li>
+                    <li>Implemented data-quality and monitoring frameworks for reliable training datasets; Airflow orchestration frameworks lifted pipeline efficiency 35%</li>
+                    <li>Enabled self-service access to 15+ data products for engineering and analytics teams; ranked Top-3 ML worldwide, Innovation Maestro winner</li>
                 </ul>
             </article>
 
@@ -379,7 +373,8 @@
                     <span class="dates">Dec 2016 - Nov 2017</span>
                 </p>
                 <ul>
-                    <li>Led a 6-engineer team on an Azure data platform (Data Factory, Service Bus); migrated <strong>500 GB+</strong> at 99.9% integrity with IaC and cross-region compliance controls.</li>
+                    <li>Led a 6-member team shipping a multi-region Azure data platform ahead of schedule; customer-facing cloud SME for escalations and design reviews</li>
+                    <li>Migrated 500GB+ data with 99.9% integrity (Azure Data Factory, Service Bus); established data-quality checks, SLAs, IaC and compliance frameworks</li>
                 </ul>
             </article>
 
@@ -389,7 +384,8 @@
                     <span class="dates">Oct 2014 - Dec 2016</span>
                 </p>
                 <ul>
-                    <li>Architected a BI platform with OLTP/OLAP optimizations querying <strong>billion+ rows in 2-5 seconds</strong> and ETL pipelines processing 50M+ rows daily; STAR Performer.</li>
+                    <li>Architected a BI platform with OLTP/OLAP optimizations querying billion+ rows in ~2-5s; delivered dashboards for Sales and Finance stakeholders</li>
+                    <li>Built ETL pipelines processing 50M+ rows/day; logical data modeling and schema versioning improved data consistency ~40%; STAR Performer award</li>
                 </ul>
             </article>
 
@@ -399,17 +395,17 @@
                     <span class="dates">Apr 2012 - Oct 2014</span>
                 </p>
                 <ul>
-                    <li>Owned 24x7 production reliability for MetLife backend processing; automated 5+ applications, cutting manual effort <strong>60%</strong>.</li>
+                    <li>Owned 24x7 production support and incident management for MetLife backend systems (Unix/Linux, SQL); automation cut manual effort 60%</li>
                 </ul>
             </article>
         </section>
 
         <section>
-            <h2>Education and Certifications</h2>
-            <p class="edu"><strong>Master of Technology</strong> in <strong>Data Science and Engineering</strong>, <span class="school">BITS Pilani - Distinction</span></p>
-            <p class="edu"><strong>Bachelor of Technology</strong> in <strong>Computer Science and Engineering</strong>, <span class="school">West Bengal University of Technology - Distinction</span></p>
-            <p class="edu"><strong>Certifications:</strong> Microsoft Certified Professional, IBM Certified Professional</p>
-            <p class="edu"><strong>Awards:</strong> Atlassian Spot Award, Salesforce Hackathon Winner, Apple Supply-Chain Recognition, Qualcomm Innovation Maestro and HaQkathon Winner, PwC STAR Performer</p>
+            <h2>Education, Certifications &amp; Awards</h2>
+            <p class="edu"><strong>Master's in Data Science &amp; Engineering</strong>, <span class="school">BITS Pilani, India - with Distinction</span></p>
+            <p class="edu"><strong>Bachelor's in Computer Science</strong>, <span class="school">WBUT (MAKAUT), Kolkata, India - with Distinction</span></p>
+            <p class="edu"><strong>Certifications:</strong> Microsoft Certified Professional; IBM Certified Professional</p>
+            <p class="edu"><strong>Awards:</strong> Qualcomm Top 3 ML Worldwide, Innovation Maestro &amp; HaQkathon Winner, Super-Qualstar; Salesforce Hackathon Winner; Apple Supply-Chain Recognition; Atlassian Spot Recognitions; PwC STAR Performer</p>
         </section>
     </main>
 </body>
