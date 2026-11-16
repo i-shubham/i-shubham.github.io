@@ -4,8 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shubham Mallick - Engineering Staff & Tech Lead, Data Platform & Applied AI</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        /* Self-hosted static TTFs: Chrome on macOS embeds system fonts once per font size when
+           printing, while @font-face fonts are embedded once, which keeps the Cmd+P PDF small. */
+        @font-face { font-family: 'Playfair Display'; font-weight: 700; font-display: swap; src: url('../fonts/resume/PlayfairDisplay-700.ttf') format('truetype'); }
+        @font-face { font-family: 'Playfair Display'; font-weight: 800; font-display: swap; src: url('../fonts/resume/PlayfairDisplay-800.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 400; font-display: swap; src: url('../fonts/resume/WorkSans-400.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 500; font-display: swap; src: url('../fonts/resume/WorkSans-500.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 600; font-display: swap; src: url('../fonts/resume/WorkSans-600.ttf') format('truetype'); }
+
         :root {
             --primary-dark: #1a2332;
             --accent-gold: #d4af37;
@@ -470,9 +477,23 @@
             .resume-container {
                 box-shadow: none;
             }
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+            /* Rasterized as a large image in the PDF and splits text into separate font subsets. */
+            .left-sidebar::before {
+                display: none !important;
+            }
             .profile-image {
+                /* Square 500px crop: matches cover/center at 32mm, keeps the PDF small. */
+                background-image: url('../img/profile-img-3-print.jpg') !important;
+                box-shadow: none;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            .company-logo {
+                display: none !important;
             }
             .visa-badge {
                 /* background: linear-gradient(45deg, #8cab99, #85d0a4, #68b4a5, #72c4b3) !important; */
@@ -505,7 +526,7 @@
             <div class="sidebar-content">
                 <!-- Profile Image -->
                 <div class="profile-image-container">
-                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpeg');" role="img" aria-label="Shubham Mallick"></div>
+                    <div class="profile-image" style="background-image: url('../img/profile-img-3.jpg');" role="img" aria-label="Shubham Mallick"></div>
                 </div>
 
                 <!-- Contact Information -->
