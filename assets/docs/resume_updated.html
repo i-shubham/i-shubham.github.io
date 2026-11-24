@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Shubham Mallick - Engineering Staff / Technical Lead. Data platforms, distributed systems, applied AI and LLM agent systems. Spark, Databricks, Kafka, Kubernetes, AWS/Azure/GCP.">
+    <title>Shubham Mallick - Engineering Staff & Tech Lead, Data Platform & Applied AI</title>
+    <style>
+        /*
+         * ATS-safe layout: one column, so the PDF text order is the DOM order (top-to-bottom).
+         * All content is real text (no icons, emoji or text in images); images are decorative only.
+         * Save with Cmd+P -> Save as PDF so the text stays selectable and parseable.
+         */
+        @font-face { font-family: 'Playfair Display'; font-weight: 700; font-display: swap; src: url('../fonts/resume/PlayfairDisplay-700.ttf') format('truetype'); }
+        @font-face { font-family: 'Playfair Display'; font-weight: 800; font-display: swap; src: url('../fonts/resume/PlayfairDisplay-800.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 400; font-display: swap; src: url('../fonts/resume/WorkSans-400.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 500; font-display: swap; src: url('../fonts/resume/WorkSans-500.ttf') format('truetype'); }
+        @font-face { font-family: 'Work Sans'; font-weight: 600; font-display: swap; src: url('../fonts/resume/WorkSans-600.ttf') format('truetype'); }
+
+        :root {
+            --primary-dark: #1a2332;
+            --accent-gold: #d4af37;
+            --accent-blue: #2c5f8d;
+            --text-gray: #4a5568;
+            --border-color: #e2e8f0;
+            --heading-bg: #e6f4f2;
+            --heading-accent: #0f766e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Work Sans', Arial, sans-serif;
+            color: var(--primary-dark);
+            background: #eef0f3;
+            line-height: 1.35;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 16px auto;
+            background: white;
+            padding: 5mm 7mm 4mm;
+            border-top: 2mm solid var(--primary-dark);
+            box-shadow: 0 0 40px rgba(0,0,0,0.1);
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            gap: 4mm;
+            padding-bottom: 1.5mm;
+            border-bottom: 2px solid var(--accent-gold);
+        }
+
+        .profile-image {
+            width: 20mm;
+            height: 20mm;
+            border-radius: 50%;
+            border: 2px solid var(--accent-gold);
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .header-text {
+            min-width: 0;
+        }
+
+        h1 {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 21pt;
+            font-weight: 800;
+            line-height: 1.1;
+            color: var(--primary-dark);
+        }
+
+        .headline {
+            font-size: 9pt;
+            font-weight: 500;
+            color: var(--accent-blue);
+            margin: 0.5mm 0 0.8mm;
+        }
+
+        .contact {
+            font-size: 7.2pt;
+            line-height: 1.4;
+            color: var(--text-gray);
+        }
+
+        .contact a {
+            color: var(--text-gray);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .contact .sep {
+            color: var(--accent-gold);
+            padding: 0 1mm;
+        }
+
+        /* Sections */
+        section {
+            margin-top: 1.8mm;
+        }
+
+        h2 {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 10pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5pt;
+            color: var(--primary-dark);
+            display: block;
+            background: var(--heading-bg);
+            border-left: 2px solid var(--heading-accent);
+            border-bottom: 1px solid #cfe7e3;
+            padding: 0.3mm 1.8mm 0.3mm 1.6mm;
+            margin-bottom: 1mm;
+        }
+
+        .summary {
+            font-size: 7.5pt;
+            line-height: 1.32;
+            color: var(--text-gray);
+        }
+
+        /* Skills */
+        .skill-row {
+            font-size: 7.2pt;
+            line-height: 1.3;
+            color: var(--text-gray);
+            padding: 0.35mm 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .skill-row:last-child {
+            border-bottom: 0;
+        }
+
+        .label {
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        /* Experience */
+        .job {
+            margin-bottom: 1.1mm;
+            break-inside: avoid;
+        }
+
+        .job:last-child {
+            margin-bottom: 0;
+        }
+
+        .job-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 3mm;
+        }
+
+        .company {
+            font-size: 8.5pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        .company-logo {
+            width: 3.8mm;
+            height: 3.8mm;
+            object-fit: contain;
+            vertical-align: -0.7mm;
+            margin-right: 1.2mm;
+        }
+
+        .dates {
+            font-size: 7pt;
+            font-weight: 600;
+            color: var(--text-gray);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .role {
+            font-size: 7.5pt;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .job ul {
+            margin: 0.2mm 0 0 3.5mm;
+        }
+
+        .job li {
+            font-size: 6.7pt;
+            line-height: 1.3;
+            color: var(--text-gray);
+            margin-bottom: 0.1mm;
+        }
+
+        .job li::marker {
+            color: var(--accent-gold);
+        }
+
+        /* Education, certifications, awards, leadership */
+        .info-row {
+            font-size: 7.2pt;
+            line-height: 1.35;
+            color: var(--text-gray);
+        }
+
+        .info-row + .info-row {
+            margin-top: 0.2mm;
+        }
+
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #27ae60, #2ecc71, #16a085);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font: 600 14px 'Work Sans', Arial, sans-serif;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+            z-index: 1000;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+            .print-btn {
+                display: none !important;
+            }
+            .page {
+                margin: 0;
+                box-shadow: none;
+                -webkit-box-decoration-break: clone;
+                box-decoration-break: clone;
+            }
+            h2, .job-top {
+                break-after: avoid;
+            }
+        }
+    </style>
+    <script src="../js/url-cleanup.js"></script>
+</head>
+<body>
+    <button type="button" class="print-btn" onclick="window.print()">Print / Save PDF</button>
+
+    <main class="page">
+        <header>
+            <img class="profile-image" src="../img/profile-img-3-print.jpg" alt="">
+            <div class="header-text">
+                <h1>Shubham Mallick</h1>
+                <p class="headline">Engineering Staff / Technical Lead | Data Platform | Distributed Systems | Applied AI</p>
+                <p class="contact">
+                    Hyderabad, India<span class="sep">|</span><a href="tel:+91-9734389354">+91-9734389354</a><span class="sep">|</span><a href="mailto:shubham.kolkata@gmail.com">shubham.kolkata@gmail.com</a><span class="sep">|</span><a href="https://www.linkedin.com/in/i-shubham/">linkedin.com/in/i-shubham</a><span class="sep">|</span><a href="https://www.i-shubham.in/">www.i-shubham.in</a><span class="sep">|</span>USA B1/B2 Visa
+                </p>
+            </div>
+        </header>
+
+        <section>
+            <h2>Professional Summary</h2>
+            <p class="summary">
+                Staff engineer and engineering lead with 14+ years building large-scale data platforms, distributed systems and applied-AI infrastructure on AWS, Azure and GCP. Led teams of up to 12 engineers - owning architecture end-to-end (data models, API contracts, schema evolution, SLAs), shipping platforms used by 10+ teams and running them in production (SLOs, on-call, RCA). Hands-on with Spark, Databricks, Kafka, Delta/Iceberg, Kubernetes and Python/Scala/Java/Go; now focused on LLM agent systems - RAG, orchestration and evaluation over traces, metrics and labeled datasets. Lead through written design docs; mentor engineers into tech leads.
+            </p>
+        </section>
+
+        <section>
+            <h2>Skills</h2>
+            <p class="skill-row"><span class="label">Data Platform &amp; Big Data:</span> Apache Spark, Databricks, Snowflake, Kafka, Flink, Hadoop, Hive, Delta Lake, Lakehouse, Iceberg, Airflow, Data Governance, Data Modeling, Data Mesh, Data Quality &amp; Lineage, ETL/ELT</p>
+            <p class="skill-row"><span class="label">AI, ML &amp; Agents:</span> LLMs, GenAI, RAG, LangChain, Agentforce, MLflow, PyTorch, TensorFlow, Model Evaluation, Prompt Engineering, NLP, Responsible AI</p>
+            <p class="skill-row"><span class="label">Cloud, Systems &amp; DevOps:</span> AWS, Azure, GCP, Kubernetes (EKS), Docker, Terraform, CI/CD (Jenkins), Microservices, REST &amp; GraphQL APIs, Unix/Linux, Git</p>
+            <p class="skill-row"><span class="label">Observability &amp; Reliability:</span> Splunk, Grafana, Prometheus, Datadog, SLOs &amp; On-call, Incident RCA</p>
+            <p class="skill-row"><span class="label">Programming:</span> Python, Rust, SQL, Go, Scala, Java, C#, Bash/Shell</p>
+            <p class="skill-row"><span class="label">Leadership:</span> 8+ years leading teams of up to 12 engineers; mentored 50+ engineers into tech leads; design docs &amp; trade-offs; built 0-to-1 platforms used by 10+ teams; customer escalations &amp; incident RCA</p>
+        </section>
+
+        <section>
+            <h2>Professional Experience</h2>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/atlassian.png" alt="">Atlassian</p>
+                    <p class="dates">Sep 2025 - Present</p>
+                </div>
+                <p class="role">Engineering Lead, AI Partner Delivery &amp; Data Platform (POD Lead)</p>
+                <ul>
+                    <li>Lead a pod building the partner data &amp; AI layer on Atlassian's central Databricks/Spark lakehouse - own the architecture, data models and API contracts with platform, product and GTM teams</li>
+                    <li>Stood up AI-ready infrastructure for GenAI/agent delivery: RAG pipelines, LLM &amp; agent evaluation (traces, metrics, labeled test sets) and CI/CD rollout gates</li>
+                    <li>Extended the platform only where partner data needed it (SQL semantic models, Neo4j graph for partner relationships); upstream gaps go to platform owners as written design asks</li>
+                    <li>Scope highest-value use cases with partners &amp; data consumers; mentor engineers via design reviews</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/salesforce.jpg" alt="">Salesforce</p>
+                    <p class="dates">Jul 2022 - Aug 2025</p>
+                </div>
+                <p class="role">Staff Engineer, Agentforce &amp; Sales AI Platform (POD Lead)</p>
+                <ul>
+                    <li>Drove GenAI/Agentforce adoption into the Sales AI stack - shipped multi-turn LLM agent workflows (RAG, prompt/context engineering, guardrails) with an offline/online evaluation harness; ~25-40% performance gains</li>
+                    <li>Architected the data platform behind it on AWS - Spark on EKS/Kubernetes, Kafka streaming, Airflow batch - with resource tuning that cut latency ~70%</li>
+                    <li>Built self-service developer tooling and IaC (Terraform, Jenkins CI/CD) that cut deployment time ~50% and let other teams onboard without waiting on us</li>
+                    <li>Owned production reliability: SLOs, alerting and log analysis (Grafana/Splunk/Datadog), on-call, incident RCA and preventive fixes; mentored engineers to senior/lead</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/apple.png" alt="">Apple Inc.</p>
+                    <p class="dates">Jun 2020 - Jul 2022</p>
+                </div>
+                <p class="role">Technical Lead &amp; Module Owner, Supply-Chain Analytics Platform</p>
+                <ul>
+                    <li>Led a 12-engineer team [DC-CPT] building an enterprise supply-chain analytics platform on AWS to GA - 100GB+/day, 99.9% SLA; owned roadmap, execution, testing and rollout plans</li>
+                    <li>Built real-time (Kafka, 1M+ msgs/hr) and batch (Spark) pipelines with shared data-quality &amp; lineage checks</li>
+                    <li>Led on-prem to AWS migration to a Data Mesh - domain-owned data, central governance, access control &amp; privacy safeguards; ~30% cost cut, ~200% scale</li>
+                    <li>Defined schema contracts, versioning and governance standards so data models evolved without breaking 10+ downstream analytics teams served via data APIs and semantic models</li>
+                    <li>Hired, coached and grew engineers into tech leads; partnered cross-functionally with operations, finance and platform-owner teams - gaps went upstream as written asks</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/qualcomm.jpg" alt="">Qualcomm</p>
+                    <p class="dates">Nov 2017 - May 2020</p>
+                </div>
+                <p class="role">Senior Engineer, ML &amp; Distributed Systems</p>
+                <ul>
+                    <li>Architected a distributed processing platform handling 20TB+/day on a multi-PB Hadoop estate (Spark, Hive, MapR-DB, YARN scheduling &amp; resource management)</li>
+                    <li>Built ML training &amp; evaluation pipelines (TensorFlow/PyTorch) reaching 92% model accuracy; profiled and tuned training workloads, cutting infrastructure usage 25%</li>
+                    <li>Implemented data-quality &amp; monitoring frameworks for reliable training datasets; Airflow orchestration &amp; transformation frameworks lifted pipeline efficiency 35%</li>
+                    <li>Enabled self-service access to 15+ data products for engineering &amp; analytics teams; ranked Top-3 ML worldwide</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/ibm.png" alt="">IBM</p>
+                    <p class="dates">Dec 2016 - Nov 2017</p>
+                </div>
+                <p class="role">Advisory Analyst, Azure Cloud SME</p>
+                <ul>
+                    <li>Led 6-member team shipping a multi-region Azure data platform ahead of schedule; customer-facing cloud SME</li>
+                    <li>Migrated 500GB+ data with 99.9% integrity (Azure Data Factory, Service Bus); established data-quality checks, SLAs, IaC automation and compliance frameworks across regions</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/pwc.jpg" alt="">PwC</p>
+                    <p class="dates">Oct 2014 - Dec 2016</p>
+                </div>
+                <p class="role">Senior Developer / Consultant</p>
+                <ul>
+                    <li>Architected a BI platform with OLTP/OLAP optimizations querying billion+ rows in ~2-5s; delivered dashboards &amp; visualizations for Sales and Finance stakeholders</li>
+                    <li>Built ETL pipelines (50M+ rows/day); data modeling &amp; schema versioning improved data consistency ~40%</li>
+                    <li>STAR Performer for data platform excellence; multiple client appreciation awards</li>
+                </ul>
+            </article>
+
+            <article class="job">
+                <div class="job-top">
+                    <p class="company"><img class="company-logo" src="../img/org/resume/cognizant.png" alt="">Cognizant</p>
+                    <p class="dates">Apr 2012 - Oct 2014</p>
+                </div>
+                <p class="role">Application Developer</p>
+                <ul>
+                    <li>24x7 production support &amp; incident RCA for MetLife backend (Unix/Linux, SQL); automation cut manual effort 60%</li>
+                </ul>
+            </article>
+        </section>
+
+        <section>
+            <h2>Education, Certifications &amp; Awards</h2>
+            <p class="info-row"><span class="label">Master's</span> in <span class="label">Data Science &amp; Engineering</span> - <a href="https://www.bits-pilani.ac.in/" style="color: inherit; text-decoration: none;">BITS, Pilani</a>, India - with Distinction</p>
+            <p class="info-row"><span class="label">Bachelor's</span> in <span class="label">Computer Science &amp; Engineering</span> - <a href="https://makautwb.ac.in/" style="color: inherit; text-decoration: none;">W.B.U.T.</a>, Kolkata, India - with Distinction</p>
+            <p class="info-row"><span class="label">Certifications:</span> Microsoft Certified Professional; IBM Certified Professional</p>
+            <p class="info-row"><span class="label">Awards:</span> Atlassian multiple Spot Recognitions; Salesforce Hackathon Winner; Apple Supply-Chain Recognition; Qualcomm Innovation Maestro Winner; Qualcomm Top 3 ML Model Worldwide; Qualcomm HaQkathon Winner; Qualcomm Super-Qualstar &amp; Qualstars; PwC STAR Performer &amp; Spot Awards</p>
+        </section>
+    </main>
+</body>
+</html>
